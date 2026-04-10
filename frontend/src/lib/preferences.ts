@@ -1,5 +1,6 @@
 const ENTER_TO_SEND_KEY = 'gemma-local-studio.enter-to-send';
 const LAST_MODEL_KEY = 'gemma-local-studio.last-model';
+const CUSTOM_INSTRUCTIONS_KEY = 'gemma-local-studio.custom-instructions';
 
 export function loadEnterToSendPreference(): boolean {
   const stored = window.localStorage.getItem(ENTER_TO_SEND_KEY);
@@ -19,4 +20,12 @@ export function loadLastModelKey(): string | null {
 
 export function saveLastModelKey(modelKey: string): void {
   window.localStorage.setItem(LAST_MODEL_KEY, modelKey);
+}
+
+export function loadCustomInstructions(): string {
+  return window.localStorage.getItem(CUSTOM_INSTRUCTIONS_KEY) || '';
+}
+
+export function saveCustomInstructions(value: string): void {
+  window.localStorage.setItem(CUSTOM_INSTRUCTIONS_KEY, value);
 }

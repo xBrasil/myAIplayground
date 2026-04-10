@@ -3,7 +3,7 @@ import { useI18n } from '../lib/i18n';
 import Composer from './Composer';
 import MessageList from './MessageList';
 import Sidebar from './Sidebar';
-import type { Conversation, HealthResponse, ModelKey } from '../types';
+import type { Conversation, HealthResponse } from '../types';
 
 interface ChatLayoutProps {
   busy: boolean;
@@ -25,7 +25,7 @@ interface ChatLayoutProps {
   onSendFile: (text: string, file: File) => Promise<void>;
   onSendFiles: (text: string, files: File[]) => Promise<void>;
   onStop: () => void;
-  onSelectModel: (modelKey: ModelKey) => Promise<void>;
+  onOpenModelSelector: () => void;
   onEditLastMessage?: (newText: string) => void;
   onRegenerate?: () => void;
 }
@@ -50,7 +50,7 @@ export default function ChatLayout({
   onSendFile,
   onSendFiles,
   onStop,
-  onSelectModel,
+  onOpenModelSelector,
   onEditLastMessage,
   onRegenerate,
 }: ChatLayoutProps) {
@@ -129,20 +129,15 @@ export default function ChatLayout({
             <h2>{currentConversation?.title || t('chat.newConversation')}</h2>
           </div>
           <div className="chat-header__controls">
-            <div className="model-select">
-              <select
-                value={health?.active_model_key || 'e4b'}
-                onChange={(e) => void onSelectModel(e.target.value as ModelKey)}
-                disabled={!health || health.model_status === 'loading'}
-                aria-label={t('chat.selectModel')}
-              >
-                {(health?.available_models || []).map((model) => (
-                  <option key={model.key} value={model.key}>
-                    {model.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <button
+              type="button"
+              className="model-select-button model-select-button--compact"
+              onClick={onOpenModelSelector}
+              disabled={!health || health.model_status === 'loading'}
+              aria-label={t('chat.selectModel')}
+            >
+              {health?.available_models?.find((m) => m.key === health.active_model_key)?.label || '...'}
+            </button>
             <span className={`status-badge status-badge--${health?.model_status || 'idle'}`}>
               <span className="status-badge__dot" />
               {statusLabel(health)}

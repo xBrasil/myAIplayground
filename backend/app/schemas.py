@@ -85,6 +85,7 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=1)
     enable_thinking: bool = False
     locale: str = "en-US"
+    custom_instructions: str = ""
 
 
 class ChatResponse(BaseModel):

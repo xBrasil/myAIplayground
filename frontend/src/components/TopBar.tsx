@@ -1,13 +1,13 @@
 import { useI18n } from '../lib/i18n';
-import type { HealthResponse, ModelKey } from '../types';
+import type { HealthResponse } from '../types';
 
 interface TopBarProps {
   health: HealthResponse | null;
   onOpenSettings: () => void;
-  onSelectModel: (modelKey: ModelKey) => Promise<void>;
+  onOpenModelSelector: () => void;
 }
 
-export default function TopBar({ health, onOpenSettings, onSelectModel }: TopBarProps) {
+export default function TopBar({ health, onOpenSettings, onOpenModelSelector }: TopBarProps) {
   const { t } = useI18n();
 
   function modelStatusLabel(h: HealthResponse | null): string {
@@ -18,6 +18,8 @@ export default function TopBar({ health, onOpenSettings, onSelectModel }: TopBar
     return t('topbar.modelIdle');
   }
 
+  const activeModel = health?.available_models?.find((m) => m.key === health.active_model_key);
+
   return (
     <div className="topbar">
       <div className="topbar__brand">
@@ -26,20 +28,17 @@ export default function TopBar({ health, onOpenSettings, onSelectModel }: TopBar
       </div>
 
       <div className="topbar__controls">
-        <label className="model-select">
-          <span>{t('topbar.model')}</span>
-          <select
-            value={health?.active_model_key || 'e4b'}
-            onChange={(event) => void onSelectModel(event.target.value as ModelKey)}
-            disabled={!health || health.model_status === 'loading'}
-          >
-            {(health?.available_models || []).map((model) => (
-              <option key={model.key} value={model.key}>
-                {model.label}: {model.summary}{model.cached ? ` · ${t('topbar.cached')}` : ` · ${t('topbar.downloading')}`}
-              </option>
-            ))}
-          </select>
-        </label>
+        <button
+          type="button"
+          className="model-select-button"
+          onClick={onOpenModelSelector}
+          disabled={!health || health.model_status === 'loading'}
+        >
+          <span className="model-select-button__label">{t('topbar.model')}</span>
+          <span className="model-select-button__value">
+            {activeModel ? `${activeModel.label}: ${activeModel.summary}` : '...'}
+          </span>
+        </button>
 
         <div className={`topbar__status topbar__status--${health?.model_status || 'idle'}`}>
           <strong>{modelStatusLabel(health)}</strong>

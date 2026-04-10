@@ -131,11 +131,12 @@ export async function sendTextMessage(
   conversationId: string | null,
   message: string,
   locale: string = 'en-US',
+  customInstructions: string = '',
 ): Promise<ChatResponse> {
   const response = await fetch(`${API_BASE}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ conversation_id: conversationId, message, locale }),
+    body: JSON.stringify({ conversation_id: conversationId, message, locale, custom_instructions: customInstructions || undefined }),
   });
   if (!response.ok) {
     throw new Error('Falha ao enviar mensagem');
@@ -149,11 +150,12 @@ export async function streamTextMessage(
   onEvent: (event: ChatStreamEvent) => void,
   signal?: AbortSignal,
   locale: string = 'en-US',
+  customInstructions: string = '',
 ): Promise<void> {
   const response = await fetch(`${API_BASE}/chat/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ conversation_id: conversationId, message, locale }),
+    body: JSON.stringify({ conversation_id: conversationId, message, locale, custom_instructions: customInstructions || undefined }),
     signal,
   });
   if (!response.ok || !response.body) {
@@ -193,6 +195,7 @@ export async function sendUploadMessage(
   message: string,
   file: File,
   locale: string = 'en-US',
+  customInstructions: string = '',
 ): Promise<ChatResponse> {
   const formData = new FormData();
   formData.append('message', getUploadMessage(message, file));
@@ -200,6 +203,7 @@ export async function sendUploadMessage(
     formData.append('conversation_id', conversationId);
   }
   formData.append('locale', locale);
+  if (customInstructions) formData.append('custom_instructions', customInstructions);
   formData.append('file', file);
 
   const response = await fetch(`${API_BASE}/chat/upload`, {
@@ -220,6 +224,7 @@ export async function streamUploadMessage(
   onEvent: (event: ChatStreamEvent) => void,
   signal?: AbortSignal,
   locale: string = 'en-US',
+  customInstructions: string = '',
 ): Promise<void> {
   const formData = new FormData();
   formData.append('message', getUploadMessage(message, file));
@@ -227,6 +232,7 @@ export async function streamUploadMessage(
     formData.append('conversation_id', conversationId);
   }
   formData.append('locale', locale);
+  if (customInstructions) formData.append('custom_instructions', customInstructions);
   formData.append('file', file);
 
   const response = await fetch(`${API_BASE}/chat/upload/stream`, {
@@ -274,6 +280,7 @@ export async function streamMultiUploadMessage(
   onEvent: (event: ChatStreamEvent) => void,
   signal?: AbortSignal,
   locale: string = 'en-US',
+  customInstructions: string = '',
 ): Promise<void> {
   const formData = new FormData();
   formData.append('message', message.trim());
@@ -281,6 +288,7 @@ export async function streamMultiUploadMessage(
     formData.append('conversation_id', conversationId);
   }
   formData.append('locale', locale);
+  if (customInstructions) formData.append('custom_instructions', customInstructions);
   for (const file of files) {
     formData.append('files', file);
   }
@@ -353,11 +361,12 @@ export async function streamEditLastMessage(
   onEvent: (event: ChatStreamEvent) => void,
   signal?: AbortSignal,
   locale: string = 'en-US',
+  customInstructions: string = '',
 ): Promise<void> {
   const response = await fetch(`${API_BASE}/chat/${conversationId}/edit-last/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, locale }),
+    body: JSON.stringify({ message, locale, custom_instructions: customInstructions || undefined }),
     signal,
   });
   if (!response.ok || !response.body) {
@@ -387,11 +396,12 @@ export async function streamRegenerate(
   onEvent: (event: ChatStreamEvent) => void,
   signal?: AbortSignal,
   locale: string = 'en-US',
+  customInstructions: string = '',
 ): Promise<void> {
   const response = await fetch(`${API_BASE}/chat/${conversationId}/regenerate/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ locale }),
+    body: JSON.stringify({ locale, custom_instructions: customInstructions || undefined }),
     signal,
   });
   if (!response.ok || !response.body) {
