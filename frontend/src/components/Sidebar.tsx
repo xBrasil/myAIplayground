@@ -31,7 +31,7 @@ export default function Sidebar({
           <img src="/favicon-32x32.png" alt="" className="sidebar-brand__logo" width={24} height={24} />
           <div className="sidebar-brand__text">
             <strong>My AI Playground</strong>
-            <span>{__BUILD_NUMBER__}{__BUILD_TIMESTAMP__ ? ` · ${new Date(__BUILD_TIMESTAMP__).toLocaleDateString(locale, { day: '2-digit', month: '2-digit', year: '2-digit' })} ${new Date(__BUILD_TIMESTAMP__).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}` : ''}</span>
+            <a href="https://rmsaraiva.com/" target="_blank" rel="noopener noreferrer" className="sidebar-brand__author">RMSaraiva.com</a>
           </div>
         </div>
         <button
@@ -115,6 +115,7 @@ export default function Sidebar({
         <button type="button" onClick={onOpenSettings}>{t('settings')}</button>
         <button type="button" onClick={() => onOpenLegal('terms')}>{t('sidebar.terms')}</button>
         <button type="button" onClick={() => onOpenLegal('privacy')}>{t('sidebar.privacy')}</button>
+        <span className="sidebar-footer__version">v{__APP_VERSION__}</span>
       </div>
     </aside>
   );

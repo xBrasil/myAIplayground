@@ -46,6 +46,11 @@ async function computeTermsHash(terms: string[], privacy: string[]): Promise<str
 export default function App() {
   const { t, locale, tList } = useI18n();
   const [legalAccepted, setLegalAccepted] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    document.title = `My AI Playground v${__APP_VERSION__} - RMSaraiva.com`;
+  }, []);
+
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

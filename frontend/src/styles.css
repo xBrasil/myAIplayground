@@ -148,6 +148,17 @@ input {
   color: var(--text-tertiary);
 }
 
+.sidebar-brand__author {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  text-decoration: none;
+  transition: color var(--transition);
+}
+
+.sidebar-brand__author:hover {
+  color: var(--text-secondary);
+}
+
 .sidebar-new-btn {
   display: inline-flex;
   align-items: center;
@@ -302,6 +313,7 @@ input {
 .sidebar-footer {
   flex-shrink: 0;
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   padding: 12px 16px;
   border-top: 1px solid var(--border);
@@ -319,6 +331,14 @@ input {
 
 .sidebar-footer button:hover {
   color: var(--text-secondary);
+}
+
+.sidebar-footer__version {
+  width: 100%;
+  display: block;
+  font-size: 10px;
+  color: var(--text-tertiary);
+  opacity: 0.6;
 }
 
 /* ============================================================
