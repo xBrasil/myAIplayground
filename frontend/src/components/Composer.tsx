@@ -1,4 +1,4 @@
-import type { KeyboardEvent } from 'react';
+import type { ClipboardEvent, KeyboardEvent } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useI18n } from '../lib/i18n';
 import type { ModelKey } from '../types';
@@ -320,6 +320,28 @@ export default function Composer({ busy, enterToSend, activeModelKey, onSendText
     }
   }
 
+  function handlePaste(event: ClipboardEvent<HTMLTextAreaElement>) {
+    const items = event.clipboardData?.items;
+    if (!items) return;
+
+    const imageFiles: File[] = [];
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) {
+          const ext = file.type.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
+          const named = new File([file], `paste-${Date.now()}.${ext}`, { type: file.type });
+          imageFiles.push(named);
+        }
+      }
+    }
+
+    if (imageFiles.length > 0) {
+      event.preventDefault();
+      setSelectedFiles((prev) => [...prev, ...imageFiles]);
+    }
+  }
+
   const isRecording = recordingPhase !== 'idle';
   const hasAudio = recordedAudioFile !== null;
   const canSend = !busy && (text.trim().length > 0 || selectedFiles.length > 0 || hasAudio);
@@ -375,6 +397,14 @@ export default function Composer({ busy, enterToSend, activeModelKey, onSendText
         <div className="composer-file-pills">
           {selectedFiles.map((file, idx) => (
             <span key={`${file.name}-${idx}`} className="composer-file-name" title={file.name}>
+              {file.type.startsWith('image/') && (
+                <img
+                  className="composer-file-name__thumb"
+                  src={URL.createObjectURL(file)}
+                  alt=""
+                  onLoad={(e) => URL.revokeObjectURL((e.target as HTMLImageElement).src)}
+                />
+              )}
               <span className="composer-file-name__text">{file.name}</span>
               <button
                 type="button"
@@ -470,6 +500,7 @@ export default function Composer({ busy, enterToSend, activeModelKey, onSendText
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             placeholder={t('composer.placeholder')}
             rows={1}
           />

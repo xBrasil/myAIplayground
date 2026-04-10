@@ -25,9 +25,10 @@ INCLUDE = [
     "README.md",
     "LICENSE",
     "LICENÇA",
+    "VERSION",
     "backend/",
     "frontend/",
-    "docs/",
+    "scripts/i18n.ps1",
 ]
 
 # Patterns to EXCLUDE (checked against relative path parts)
@@ -40,7 +41,6 @@ EXCLUDE_DIRS = {
     ".vite",
     ".git",
     "releases",
-    "scripts",
     ".mypy_cache",
     ".ruff_cache",
     ".pytest_cache",
@@ -49,6 +49,16 @@ EXCLUDE_DIRS = {
 EXCLUDE_FILES = {
     ".env",
     ".env.local",
+    ".gitignore",
+}
+
+# File extensions / names to exclude (build artifacts, dev-only)
+EXCLUDE_EXTENSIONS = {
+    ".tsbuildinfo",
+}
+
+EXCLUDE_NAMES = {
+    "og-social-preview.png",
 }
 
 
@@ -78,6 +88,10 @@ def should_exclude(rel: Path) -> bool:
         if part in EXCLUDE_DIRS:
             return True
     if rel.name in EXCLUDE_FILES:
+        return True
+    if rel.name in EXCLUDE_NAMES:
+        return True
+    if rel.suffix in EXCLUDE_EXTENSIONS:
         return True
     return False
 

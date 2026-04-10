@@ -8,9 +8,11 @@ interface SettingsPanelProps {
   busy: boolean;
   preferredVoice: string;
   enterToSend: boolean;
+  customInstructions: string;
   onClose: () => void;
   onChangePreferredVoice: (voiceName: string) => void;
   onToggleEnterToSend: (value: boolean) => void;
+  onChangeCustomInstructions: (value: string) => void;
   onDeleteAll: () => Promise<void>;
 }
 
@@ -19,9 +21,11 @@ export default function SettingsPanel({
   busy,
   preferredVoice,
   enterToSend,
+  customInstructions,
   onClose,
   onChangePreferredVoice,
   onToggleEnterToSend,
+  onChangeCustomInstructions,
   onDeleteAll,
 }: SettingsPanelProps) {
   const { t, locale, setLocale } = useI18n();
@@ -78,6 +82,20 @@ export default function SettingsPanel({
             <p className="settings-help">
               {t('settings.enterToSendHelp')}
             </p>
+          </section>
+
+          <section className="settings-section">
+            <h4>{t('settings.customInstructions')}</h4>
+            <p className="settings-help">
+              {t('settings.customInstructionsHelp')}
+            </p>
+            <textarea
+              className="custom-instructions-textarea"
+              value={customInstructions}
+              onChange={(e) => onChangeCustomInstructions(e.target.value)}
+              placeholder={t('settings.customInstructionsPlaceholder')}
+              rows={4}
+            />
           </section>
 
           <section className="settings-section">

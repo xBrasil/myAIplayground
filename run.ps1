@@ -7,6 +7,11 @@ Set-StrictMode -Version Latest
 
 $Host.UI.RawUI.WindowTitle = "My AI Playground"
 
+# --- i18n ---
+$repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $repoRoot "scripts\i18n.ps1")
+Initialize-I18n -RepoRoot $repoRoot
+
 function Write-Step {
     param([string]$Message)
     Write-Host "`n==> $Message" -ForegroundColor Cyan
@@ -23,7 +28,6 @@ function Test-HttpReady {
 }
 
 # --- Paths ---
-$repoRoot   = Split-Path -Parent $MyInvocation.MyCommand.Path
 $frontendDir = Join-Path $repoRoot "frontend"
 $backendDir  = Join-Path $repoRoot "backend"
 $dataDir     = Join-Path $repoRoot "data"
@@ -36,13 +40,13 @@ $frontendUrl = "http://127.0.0.1:5173"
 
 # --- Pre-flight checks ---
 if (-not (Test-Path (Join-Path $frontendDir "package.json"))) {
-    throw "frontend/package.json nao encontrado. Rode a partir da raiz do repositorio."
+    throw (T 'script.run.packageJsonNotFound')
 }
 if (-not (Test-Path $venvPython)) {
-    throw ".venv nao encontrado. Rode install.cmd primeiro."
+    throw (T 'script.run.venvNotFound')
 }
 if (-not (Test-Path (Join-Path $backendDir ".env"))) {
-    throw "backend/.env nao encontrado. Rode install.cmd primeiro."
+    throw (T 'script.run.envNotFound')
 }
 
 if (-not (Test-Path $dataDir)) { New-Item -ItemType Directory -Path $dataDir | Out-Null }
@@ -66,7 +70,7 @@ function Get-ProcessTree {
 function Stop-Children {
     foreach ($p in $script:children) {
         if (-not $p.HasExited) {
-            Write-Host "Encerrando arvore de processos $($p.Id)..." -ForegroundColor Yellow
+            Write-Host (T 'script.run.killingTree' @{id="$($p.Id)"}) -ForegroundColor Yellow
             try {
                 # Kill entire descendant tree (llama-server, node, etc.) bottom-up
                 $tree = Get-ProcessTree -ParentId $p.Id
@@ -85,9 +89,9 @@ Register-EngineEvent PowerShell.Exiting -Action { Stop-Children } | Out-Null
 # --- Start backend ---
 $backendAlreadyRunning = Test-HttpReady -Url $backendUrl
 if ($backendAlreadyRunning) {
-    Write-Step "Backend ja esta em execucao; reutilizando instancia existente"
+    Write-Step (T 'script.run.backendAlreadyRunning')
 } else {
-    Write-Step "Iniciando backend (log: data\backend.log)"
+    Write-Step (T 'script.run.startingBackend')
     $backendProc = Start-Process -FilePath $venvPython `
         -ArgumentList "-m", "uvicorn", "app.main:app", "--reload", "--host", "127.0.0.1", "--port", "8000" `
         -WorkingDirectory $backendDir `
@@ -100,9 +104,9 @@ if ($backendAlreadyRunning) {
 # --- Start frontend ---
 $frontendAlreadyRunning = Test-HttpReady -Url $frontendUrl
 if ($frontendAlreadyRunning) {
-    Write-Step "Frontend ja esta em execucao; reutilizando instancia existente"
+    Write-Step (T 'script.run.frontendAlreadyRunning')
 } else {
-    Write-Step "Iniciando frontend (log: data\frontend.log)"
+    Write-Step (T 'script.run.startingFrontend')
     $frontendProc = Start-Process -FilePath "cmd.exe" `
         -ArgumentList "/c", "npm run dev -- --host=127.0.0.1 --port=5173 --strictPort" `
         -WorkingDirectory $frontendDir `
@@ -113,7 +117,7 @@ if ($frontendAlreadyRunning) {
 }
 
 # --- Wait for readiness ---
-Write-Step "Aguardando servicos..."
+Write-Step (T 'script.run.waitingServices')
 $timeout = 120
 $deadline = (Get-Date).AddSeconds($timeout)
 $backendReady  = $backendAlreadyRunning
@@ -130,7 +134,7 @@ while ((Get-Date) -lt $deadline) {
         if ($p.HasExited -and $p.ExitCode -ne 0) {
             $name = if ($p.Id -eq $backendProc.Id) { "Backend" } else { "Frontend" }
             Stop-Children
-            throw "$name encerrou inesperadamente (exit code $($p.ExitCode)). Verifique os logs em data\"
+            throw (T 'script.run.unexpectedExit' @{name=$name; code="$($p.ExitCode)"})
         }
     }
 
@@ -142,7 +146,7 @@ if (-not $backendReady -or -not $frontendReady) {
     $missing = @()
     if (-not $backendReady)  { $missing += "Backend" }
     if (-not $frontendReady) { $missing += "Frontend" }
-    throw "$($missing -join ' e ') nao ficou pronto em ${timeout}s. Verifique os logs em data\"
+    throw (T 'script.run.serviceNotReady' @{services=($missing -join ' + '); timeout="$timeout"})
 }
 
 Write-Host "`n  Backend:  http://127.0.0.1:8000" -ForegroundColor Green
@@ -150,12 +154,12 @@ Write-Host "  Frontend: $frontendUrl" -ForegroundColor Green
 
 # --- Open browser ---
 if (-not $NoBrowser) {
-    Write-Step "Abrindo navegador"
+    Write-Step (T 'script.run.openingBrowser')
     Start-Process $frontendUrl
 }
 
-Write-Host "`nTudo pronto. Pressione Ctrl+C para encerrar." -ForegroundColor Green
-Write-Host "Logs: data\backend.log, data\frontend.log`n" -ForegroundColor DarkGray
+Write-Host "`n$(T 'script.run.allReady')" -ForegroundColor Green
+Write-Host "$(T 'script.run.logsInfo')`n" -ForegroundColor DarkGray
 
 # --- Keep alive ---
 try {
@@ -163,7 +167,7 @@ try {
         foreach ($p in $script:children) {
             if ($p.HasExited) {
                 $name = if ($backendProc -and $p.Id -eq $backendProc.Id) { "Backend" } else { "Frontend" }
-                Write-Host "`n$name encerrou (exit code $($p.ExitCode))." -ForegroundColor Red
+                Write-Host "`n$(T 'script.run.processExited' @{name=$name; code="$($p.ExitCode)"})" -ForegroundColor Red
                 Stop-Children
                 exit $p.ExitCode
             }
@@ -171,6 +175,6 @@ try {
         Start-Sleep -Seconds 2
     }
 } finally {
-    Write-Host "`nEncerrando..." -ForegroundColor Yellow
+    Write-Host "`n$(T 'script.run.shuttingDown')" -ForegroundColor Yellow
     Stop-Children
 }

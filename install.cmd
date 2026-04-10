@@ -5,11 +5,10 @@ cd /d "%~dp0"
 powershell.exe -ExecutionPolicy Bypass -File "%~dp0install.ps1"
 if errorlevel 1 (
   echo.
-  echo Instalacao falhou. Verifique o log: %~dp0install.log
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ". '%~dp0scripts\i18n.ps1'; Initialize-I18n -RepoRoot '%~dp0.'; Write-Host (T 'script.installCmd.failed' @{path='%~dp0install.log'})"
   pause
   exit /b %errorlevel%
 )
 echo.
-echo Instalacao concluida. Log salvo em: %~dp0install.log
-echo Use run.cmd para iniciar a aplicacao.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ". '%~dp0scripts\i18n.ps1'; Initialize-I18n -RepoRoot '%~dp0.'; Write-Host (T 'script.installCmd.done' @{path='%~dp0install.log'}); Write-Host (T 'script.installCmd.useRunCmd')"
 pause

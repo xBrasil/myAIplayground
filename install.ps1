@@ -5,6 +5,12 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+# ---- i18n ----
+
+$repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $repoRoot "scripts\i18n.ps1")
+Initialize-I18n -RepoRoot $repoRoot
+
 # ---- Helpers ----
 
 function Write-Step {
@@ -31,7 +37,7 @@ function Install-WithWinget {
         [string]$FriendlyName,
         [string]$Override
     )
-    Write-Host "  Instalando $FriendlyName via winget..." -ForegroundColor Yellow
+    Write-Host "  $(T 'script.install.installingViaWinget' @{name=$FriendlyName})" -ForegroundColor Yellow
     $wingetArgs = @("install", "--id", $PackageId, "--accept-source-agreements", "--accept-package-agreements", "-e")
     if ($Override) { $wingetArgs += @("--override", $Override) }
     $proc = Start-Process -FilePath "winget" -ArgumentList $wingetArgs -Wait -PassThru -NoNewWindow
@@ -49,7 +55,6 @@ function Get-PythonBootstrapCommand {
 
 # ---- Variables ----
 
-$repoRoot    = Split-Path -Parent $MyInvocation.MyCommand.Path
 $frontendDir = Join-Path $repoRoot "frontend"
 $backendDir  = Join-Path $repoRoot "backend"
 $venvDir     = Join-Path $repoRoot ".venv"
@@ -62,15 +67,15 @@ $isWindows   = $env:OS -eq "Windows_NT"
 $hasWinget   = (Get-Command winget -ErrorAction SilentlyContinue) -ne $null
 
 Start-Transcript -Path $logFile -Force | Out-Null
-Write-Host "Log desta instalacao: $logFile" -ForegroundColor DarkGray
-Write-Host "Data: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor DarkGray
-if ($isAdmin) { Write-Host "Executando como Administrador" -ForegroundColor Green }
+Write-Host (T 'script.install.logInfo' @{path=$logFile}) -ForegroundColor DarkGray
+Write-Host (T 'script.install.dateInfo' @{date=(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')}) -ForegroundColor DarkGray
+if ($isAdmin) { Write-Host (T 'script.install.runningAsAdmin') -ForegroundColor Green }
 
 try {
 
 # ---- 1. Prerequisites ----
 
-Write-Step "Verificando pre-requisitos"
+Write-Step (T 'script.install.prereqs')
 
 # Python
 $pythonBootstrap = Get-PythonBootstrapCommand
@@ -78,12 +83,12 @@ if (-not $pythonBootstrap) {
     if ($isAdmin -and $hasWinget) {
         Install-WithWinget -PackageId "Python.Python.3.12" -FriendlyName "Python 3.12"
         $pythonBootstrap = Get-PythonBootstrapCommand
-        if (-not $pythonBootstrap) { throw "Python nao encontrado apos instalacao. Reinicie o terminal e rode install.cmd novamente." }
+        if (-not $pythonBootstrap) { throw (T 'script.install.pythonNotFoundAfterInstall') }
     } else {
-        throw "Python nao encontrado. Rode install.cmd como Administrador para instalar automaticamente, ou instale manualmente: https://python.org"
+        throw (T 'script.install.pythonNotFound')
     }
 }
-Write-Host "  Python: OK" -ForegroundColor Green
+Write-Host "  $(T 'script.install.pythonOk')" -ForegroundColor Green
 
 # Node.js / npm
 if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
@@ -91,25 +96,25 @@ if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
         Install-WithWinget -PackageId "OpenJS.NodeJS.LTS" -FriendlyName "Node.js LTS"
         Refresh-Path
         if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
-            throw "npm nao encontrado apos instalacao do Node.js. Reinicie o terminal e rode install.cmd novamente."
+            throw (T 'script.install.npmNotFoundAfterInstall')
         }
     } else {
-        throw "Node.js/npm nao encontrado. Rode install.cmd como Administrador para instalar automaticamente, ou instale manualmente: https://nodejs.org"
+        throw (T 'script.install.nodeNotFound')
     }
 }
-Write-Host "  Node.js/npm: OK" -ForegroundColor Green
+Write-Host "  $(T 'script.install.nodeOk')" -ForegroundColor Green
 
 # GPU detection
 $hasNvidiaGpu = (-not $SkipCudaTorch) -and (Get-Command nvidia-smi -ErrorAction SilentlyContinue)
 if ($hasNvidiaGpu) {
-    Write-Host "  GPU NVIDIA: detectada" -ForegroundColor Green
+    Write-Host "  $(T 'script.install.gpuDetected')" -ForegroundColor Green
 } else {
-    Write-Host "  GPU NVIDIA: nao detectada (llama-server usara CPU)" -ForegroundColor Yellow
+    Write-Host "  $(T 'script.install.gpuNotDetected')" -ForegroundColor Yellow
 }
 
 # ---- 2. Python venv + backend deps ----
 
-Write-Step "Criando ambiente virtual Python, se necessario"
+Write-Step (T 'script.install.creatingVenv')
 if (-not (Test-Path $venvPython)) {
     if ($pythonBootstrap.Length -gt 1) {
         & $pythonBootstrap[0] $pythonBootstrap[1] -m venv $venvDir
@@ -118,15 +123,15 @@ if (-not (Test-Path $venvPython)) {
     }
 }
 
-Write-Step "Atualizando pip"
+Write-Step (T 'script.install.updatingPip')
 & $venvPython -m pip install --upgrade pip
 
-Write-Step "Instalando dependencias do backend"
+Write-Step (T 'script.install.backendDeps')
 & $venvPython -m pip install -r (Join-Path $backendDir "requirements.txt")
 
 # ---- 3. llama.cpp server (pre-built binary) ----
 
-Write-Step "Instalando llama-server (binario pre-compilado)"
+Write-Step (T 'script.install.llamaServer')
 $llamaServerDir = Join-Path $repoRoot "data\llama-server"
 $llamaVersionFile = Join-Path $llamaServerDir "version.txt"
 $llamaInstalled = $false
@@ -149,10 +154,10 @@ if ($isWindows) {
             $assetPattern = "*-bin-win-cuda-12*-x64*"
             $cudaDllPattern = "*cudart*-win-cuda-12*-x64*"
         }
-        Write-Host "  GPU NVIDIA detectada, CUDA driver $cudaMajor.x" -ForegroundColor Green
+        Write-Host "  $(T 'script.install.gpuCudaDriver' @{version="$cudaMajor"})" -ForegroundColor Green
     } else {
         $assetPattern = "*-bin-win-cpu-x64*"
-        Write-Host "  Sem GPU NVIDIA, usando versao CPU" -ForegroundColor Yellow
+        Write-Host "  $(T 'script.install.noCpuFallback')" -ForegroundColor Yellow
     }
 } elseif ($IsMacOS) {
     $assetPattern = "*-bin-macos-arm64*"
@@ -176,12 +181,12 @@ $currentVersion = if (Test-Path $llamaVersionFile) {
 $serverExe = if ($isWindows) { Join-Path $llamaServerDir "llama-server.exe" } else { Join-Path $llamaServerDir "llama-server" }
 
 if ((Test-Path $serverExe) -and $currentVersion) {
-    Write-Host "  llama-server $currentVersion ja instalado." -ForegroundColor Green
+    Write-Host "  $(T 'script.install.llamaAlreadyInstalled' @{version=$currentVersion})" -ForegroundColor Green
     $llamaInstalled = $true
 }
 
 if (-not $llamaInstalled) {
-    Write-Host "  Consultando ultima versao do llama.cpp..." -ForegroundColor Cyan
+    Write-Host "  $(T 'script.install.queryingVersion')" -ForegroundColor Cyan
     try {
         $releaseInfo = Invoke-RestMethod -Uri "https://api.github.com/repos/ggml-org/llama.cpp/releases/latest" `
             -Headers @{ "User-Agent" = "myAIplayground-installer" }
@@ -190,10 +195,10 @@ if (-not $llamaInstalled) {
         # Find matching binary asset
         $binAsset = $releaseInfo.assets | Where-Object { $_.name -like $assetPattern -and $_.name -notlike "*cudart*" } | Select-Object -First 1
         if (-not $binAsset) {
-            throw "Nenhum binario encontrado para o padrao: $assetPattern"
+            throw (T 'script.install.noBinaryFound' @{pattern=$assetPattern})
         }
 
-        Write-Host "  Baixando $($binAsset.name) ($latestTag)..." -ForegroundColor Cyan
+        Write-Host "  $(T 'script.install.downloading' @{name=$binAsset.name; version=$latestTag})" -ForegroundColor Cyan
 
         # Create clean target directory
         if (Test-Path $llamaServerDir) { Remove-Item $llamaServerDir -Recurse -Force }
@@ -209,7 +214,7 @@ if (-not $llamaInstalled) {
         if ($cudaDllPattern) {
             $cudaAsset = $releaseInfo.assets | Where-Object { $_.name -like $cudaDllPattern } | Select-Object -First 1
             if ($cudaAsset) {
-                Write-Host "  Baixando CUDA runtime DLLs ($($cudaAsset.name))..." -ForegroundColor Cyan
+                Write-Host "  $(T 'script.install.downloadingCudaDlls' @{name=$cudaAsset.name})" -ForegroundColor Cyan
                 $cudaZipPath = Join-Path $env:TEMP $cudaAsset.name
                 Invoke-WebRequest -Uri $cudaAsset.browser_download_url -OutFile $cudaZipPath -UseBasicParsing
                 Expand-Archive -Path $cudaZipPath -DestinationPath $llamaServerDir -Force
@@ -236,39 +241,39 @@ if (-not $llamaInstalled) {
         $latestTag | Out-File -FilePath $llamaVersionFile -Encoding UTF8 -NoNewline
         $llamaInstalled = $true
         $variant = if ($cudaDllPattern) { "CUDA" } else { "CPU" }
-        Write-Host "  llama-server $latestTag ($variant) instalado com sucesso." -ForegroundColor Green
+        Write-Host "  $(T 'script.install.llamaInstalledOk' @{version=$latestTag; variant=$variant})" -ForegroundColor Green
     } catch {
-        Write-Host "  ERRO ao baixar llama-server: $_" -ForegroundColor Red
-        Write-Host "  Baixe manualmente: https://github.com/ggml-org/llama.cpp/releases/latest" -ForegroundColor Red
+        Write-Host "  $(T 'script.install.llamaDownloadError' @{error="$_"})" -ForegroundColor Red
+        Write-Host "  $(T 'script.install.llamaManualDownload')" -ForegroundColor Red
     }
 }
 
 # ---- 4. Frontend ----
 
-Write-Step "Instalando dependencias do frontend"
+Write-Step (T 'script.install.frontendDeps')
 Push-Location $frontendDir
 try { & npm install } finally { Pop-Location }
 
 # ---- 5. Data dirs + .env ----
 
-Write-Step "Garantindo diretorios de dados locais"
+Write-Step (T 'script.install.dataDirs')
 New-Item -ItemType Directory -Force -Path (Join-Path $repoRoot "data") | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $repoRoot "data\uploads") | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $repoRoot "data\model-cache") | Out-Null
 
-Write-Step "Preparando backend/.env"
+Write-Step (T 'script.install.preparingEnv')
 if (-not (Test-Path $envFile)) {
     $envContent = Get-Content $envExample -Raw
     $envContent = $envContent -replace "ENABLE_MODEL_LOADING=false", "ENABLE_MODEL_LOADING=true"
     Set-Content -Path $envFile -Value $envContent -Encoding UTF8
-    Write-Host "Arquivo backend/.env criado com ENABLE_MODEL_LOADING=true." -ForegroundColor Yellow
+    Write-Host (T 'script.install.envCreated') -ForegroundColor Yellow
 } else {
-    Write-Host "Arquivo backend/.env ja existe; mantendo configuracao atual." -ForegroundColor DarkYellow
+    Write-Host (T 'script.install.envExists') -ForegroundColor DarkYellow
 }
 
 # ---- 6. Desktop shortcut ----
 
-Write-Step "Criando atalho na area de trabalho"
+Write-Step (T 'script.install.creatingShortcut')
 try {
     $desktopPath = [Environment]::GetFolderPath("Desktop")
     $shortcutPath = Join-Path $desktopPath "My AI Playground.lnk"
@@ -279,20 +284,20 @@ try {
     $shortcut = $shell.CreateShortcut($shortcutPath)
     $shortcut.TargetPath = $targetPath
     $shortcut.WorkingDirectory = $repoRoot
-    $shortcut.Description = "Iniciar My AI Playground"
+    $shortcut.Description = T 'script.install.shortcutDescription'
     if (Test-Path $iconPath) {
         $shortcut.IconLocation = "$iconPath, 0"
     }
     $shortcut.Save()
     [System.Runtime.InteropServices.Marshal]::ReleaseComObject($shell) | Out-Null
-    Write-Host "  Atalho criado: $shortcutPath" -ForegroundColor Green
+    Write-Host "  $(T 'script.install.shortcutCreated' @{path=$shortcutPath})" -ForegroundColor Green
 } catch {
-    Write-Host "  Nao foi possivel criar o atalho: $_" -ForegroundColor Yellow
+    Write-Host "  $(T 'script.install.shortcutFailed' @{error="$_"})" -ForegroundColor Yellow
 }
 
 # ---- 7. Taskbar pin ----
 
-Write-Step "Fixando atalho na barra de tarefas"
+Write-Step (T 'script.install.pinningTaskbar')
 try {
     $taskbarDir = Join-Path $env:APPDATA "Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"
     if (Test-Path $taskbarDir) {
@@ -304,28 +309,28 @@ try {
         $shortcut = $shell.CreateShortcut($taskbarLink)
         $shortcut.TargetPath = $targetPath
         $shortcut.WorkingDirectory = $repoRoot
-        $shortcut.Description = "Iniciar My AI Playground"
+        $shortcut.Description = T 'script.install.shortcutDescription'
         if (Test-Path $iconPath) {
             $shortcut.IconLocation = "$iconPath, 0"
         }
         $shortcut.Save()
         [System.Runtime.InteropServices.Marshal]::ReleaseComObject($shell) | Out-Null
-        Write-Host "  Atalho fixado na barra de tarefas." -ForegroundColor Green
+        Write-Host "  $(T 'script.install.taskbarPinned')" -ForegroundColor Green
     } else {
-        Write-Host "  Pasta de atalhos da barra de tarefas nao encontrada; pulando." -ForegroundColor Yellow
+        Write-Host "  $(T 'script.install.taskbarDirNotFound')" -ForegroundColor Yellow
     }
 } catch {
-    Write-Host "  Nao foi possivel fixar na barra de tarefas: $_" -ForegroundColor Yellow
+    Write-Host "  $(T 'script.install.taskbarFailed' @{error="$_"})" -ForegroundColor Yellow
 }
 
 # ---- Done ----
 
-Write-Step "Instalacao concluida"
+Write-Step (T 'script.install.done')
 if (-not $llamaInstalled) {
-    Write-Host "ATENCAO: llama-server NAO foi instalado. Veja as mensagens acima." -ForegroundColor Red
+    Write-Host (T 'script.install.llamaWarning') -ForegroundColor Red
 }
-Write-Host "Use run.cmd para iniciar backend + frontend e abrir a interface." -ForegroundColor Green
-Write-Host "Log salvo em: $logFile" -ForegroundColor DarkGray
+Write-Host (T 'script.install.useRunCmd') -ForegroundColor Green
+Write-Host (T 'script.install.logSaved' @{path=$logFile}) -ForegroundColor DarkGray
 
 } finally {
     Stop-Transcript | Out-Null

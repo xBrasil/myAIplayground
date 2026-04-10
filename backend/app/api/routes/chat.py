@@ -105,6 +105,7 @@ async def send_text_message(payload: ChatRequest, db: Session = Depends(get_db))
         text=payload.message,
         enable_thinking=payload.enable_thinking,
         locale=payload.locale,
+        custom_instructions=payload.custom_instructions,
     )
     return ChatResponse(conversation=conversation, reply=reply, model_loaded=chat_service.model_loaded)
 
@@ -117,6 +118,7 @@ async def stream_text_message(payload: ChatRequest, db: Session = Depends(get_db
         text=payload.message,
         enable_thinking=payload.enable_thinking,
         locale=payload.locale,
+        custom_instructions=payload.custom_instructions,
     )
 
     def event_stream():
@@ -157,6 +159,7 @@ async def send_upload_message(
     conversation_id: str | None = Form(default=None),
     enable_thinking: bool = Form(default=False),
     locale: str = Form(default="en-US"),
+    custom_instructions: str = Form(default=""),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ) -> ChatResponse:
@@ -177,6 +180,7 @@ async def send_upload_message(
         attachment_summary=normalized.summary,
         enable_thinking=enable_thinking,
         locale=locale,
+        custom_instructions=custom_instructions,
     )
     return ChatResponse(conversation=conversation, reply=reply, model_loaded=chat_service.model_loaded)
 
@@ -187,6 +191,7 @@ async def stream_upload_message(
     conversation_id: str | None = Form(default=None),
     enable_thinking: bool = Form(default=False),
     locale: str = Form(default="en-US"),
+    custom_instructions: str = Form(default=""),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
@@ -207,6 +212,7 @@ async def stream_upload_message(
         attachment_summary=normalized.summary,
         enable_thinking=enable_thinking,
         locale=locale,
+        custom_instructions=custom_instructions,
     )
 
     def event_stream():
@@ -247,6 +253,7 @@ async def stream_multi_upload_message(
     conversation_id: str | None = Form(default=None),
     enable_thinking: bool = Form(default=False),
     locale: str = Form(default="en-US"),
+    custom_instructions: str = Form(default=""),
     files: list[UploadFile] = File(...),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
@@ -288,6 +295,7 @@ async def stream_multi_upload_message(
         attachment_summary=summaries,
         enable_thinking=enable_thinking,
         locale=locale,
+        custom_instructions=custom_instructions,
     )
 
     def event_stream():
@@ -399,6 +407,7 @@ async def reveal_file(payload: FileActionRequest):
 class EditLastRequest(BaseModel):
     message: str
     locale: str = "en-US"
+    custom_instructions: str = ""
 
 
 @router.post("/{conversation_id}/edit-last/stream")
@@ -423,7 +432,7 @@ async def edit_last_message_stream(
     storage_service.update_message_content(db, last_user.id, payload.message)
 
     conversation = storage_service.get_conversation(db, conversation_id)
-    stream = model_service.generate_reply_stream(chat_service._build_messages(conversation, locale=payload.locale), enable_thinking=False)
+    stream = model_service.generate_reply_stream(chat_service._build_messages(conversation, locale=payload.locale, custom_instructions=payload.custom_instructions), enable_thinking=False)
 
     def event_stream():
         yield _event_line({"type": "conversation", "conversation": _serialize_conversation(conversation)})
@@ -448,6 +457,7 @@ async def edit_last_message_stream(
 
 class RegenerateRequest(BaseModel):
     locale: str = "en-US"
+    custom_instructions: str = ""
 
 
 @router.post("/{conversation_id}/regenerate/stream")
@@ -467,7 +477,7 @@ async def regenerate_last_stream(
     storage_service.delete_message(db, last_assistant.id)
 
     conversation = storage_service.get_conversation(db, conversation_id)
-    stream = model_service.generate_reply_stream(chat_service._build_messages(conversation, locale=payload.locale), enable_thinking=False)
+    stream = model_service.generate_reply_stream(chat_service._build_messages(conversation, locale=payload.locale, custom_instructions=payload.custom_instructions), enable_thinking=False)
 
     def event_stream():
         yield _event_line({"type": "conversation", "conversation": _serialize_conversation(conversation)})

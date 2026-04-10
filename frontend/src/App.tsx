@@ -4,6 +4,7 @@ import ApiAccessPanel from './components/ApiAccessPanel';
 import ChatLayout from './components/ChatLayout';
 import LegalGate from './components/LegalGate';
 import LegalModal from './components/LegalModal';
+import ModelSelectorModal from './components/ModelSelectorModal';
 import SettingsPanel from './components/SettingsPanel';
 import { useI18n } from './lib/i18n';
 import {
@@ -22,7 +23,7 @@ import {
   streamUploadMessage,
   streamMultiUploadMessage,
 } from './lib/api';
-import { loadEnterToSendPreference, loadLastModelKey, saveEnterToSendPreference, saveLastModelKey } from './lib/preferences';
+import { loadEnterToSendPreference, loadLastModelKey, loadCustomInstructions, saveEnterToSendPreference, saveLastModelKey, saveCustomInstructions } from './lib/preferences';
 import { loadPreferredVoiceName } from './lib/speech';
 import type { ChatStreamEvent, Conversation, HealthResponse, ModelKey } from './types';
 
@@ -59,7 +60,9 @@ export default function App() {
   const [streamingText, setStreamingText] = useState('');
   const [preferredVoice, setPreferredVoice] = useState(loadPreferredVoiceName());
   const [enterToSend, setEnterToSend] = useState(loadEnterToSendPreference());
+  const [customInstructions, setCustomInstructions] = useState(loadCustomInstructions());
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
   const [apiPanelOpen, setApiPanelOpen] = useState(false);
   const [legalDocument, setLegalDocument] = useState<'terms' | 'privacy' | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -253,7 +256,7 @@ export default function App() {
         setCurrentConversationId(event.conversation.id);
         setStreamingText('');
         streamingTextRef.current = '';
-      }, controller.signal, locale);
+      }, controller.signal, locale, customInstructions);
       await refreshHealth().catch(() => null);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -316,7 +319,7 @@ export default function App() {
         setCurrentConversationId(event.conversation.id);
         setStreamingText('');
         streamingTextRef.current = '';
-      }, controller.signal, locale);
+      }, controller.signal, locale, customInstructions);
       await refreshHealth().catch(() => null);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -377,7 +380,7 @@ export default function App() {
         setCurrentConversationId(event.conversation.id);
         setStreamingText('');
         streamingTextRef.current = '';
-      }, controller.signal, locale);
+      }, controller.signal, locale, customInstructions);
       await refreshHealth().catch(() => null);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -443,7 +446,7 @@ export default function App() {
         upsertConversation(event.conversation);
         setStreamingText('');
         streamingTextRef.current = '';
-      }, controller.signal, locale);
+      }, controller.signal, locale, customInstructions);
       await refreshHealth().catch(() => null);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -504,7 +507,7 @@ export default function App() {
         upsertConversation(event.conversation);
         setStreamingText('');
         streamingTextRef.current = '';
-      }, controller.signal, locale);
+      }, controller.signal, locale, customInstructions);
       await refreshHealth().catch(() => null);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -537,6 +540,11 @@ export default function App() {
   function handleToggleEnterToSend(value: boolean) {
     saveEnterToSendPreference(value);
     setEnterToSend(value);
+  }
+
+  function handleChangeCustomInstructions(value: string) {
+    saveCustomInstructions(value);
+    setCustomInstructions(value);
   }
 
   async function handleSelectModel(modelKey: ModelKey) {
@@ -582,10 +590,19 @@ export default function App() {
         busy={interfaceBusy}
         preferredVoice={preferredVoice}
         enterToSend={enterToSend}
+        customInstructions={customInstructions}
         onClose={() => setSettingsOpen(false)}
         onChangePreferredVoice={setPreferredVoice}
         onToggleEnterToSend={handleToggleEnterToSend}
+        onChangeCustomInstructions={handleChangeCustomInstructions}
         onDeleteAll={handleDeleteAllConversations}
+      />
+      <ModelSelectorModal
+        open={modelSelectorOpen}
+        health={health}
+        onClose={() => setModelSelectorOpen(false)}
+        onSelectModel={handleSelectModel}
+        onRefreshHealth={refreshHealth}
       />
       <ApiAccessPanel open={apiPanelOpen} onClose={() => setApiPanelOpen(false)} />
       <LegalModal document={legalDocument} onClose={() => setLegalDocument(null)} />
@@ -605,11 +622,11 @@ export default function App() {
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenApi={() => setApiPanelOpen(true)}
         onOpenLegal={setLegalDocument}
+        onOpenModelSelector={() => setModelSelectorOpen(true)}
         onSendText={handleSendText}
         onSendFile={handleSendFile}
         onSendFiles={handleSendFiles}
         onStop={handleStop}
-        onSelectModel={handleSelectModel}
         onEditLastMessage={handleEditLastMessage}
         onRegenerate={handleRegenerate}
       />
