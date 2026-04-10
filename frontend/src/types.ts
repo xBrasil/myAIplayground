@@ -1,4 +1,4 @@
-export type InputType = 'text' | 'image' | 'audio' | 'file';
+export type InputType = 'text' | 'image' | 'audio' | 'file' | 'document' | 'multi_file';
 export type ModelKey = 'e2b' | 'e4b' | '26b';
 export type ModelStatus = 'idle' | 'loading' | 'loaded' | 'error';
 

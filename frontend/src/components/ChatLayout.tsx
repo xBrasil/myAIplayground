@@ -23,6 +23,7 @@ interface ChatLayoutProps {
   onOpenLegal: (document: 'terms' | 'privacy') => void;
   onSendText: (text: string) => Promise<void>;
   onSendFile: (text: string, file: File) => Promise<void>;
+  onSendFiles: (text: string, files: File[]) => Promise<void>;
   onStop: () => void;
   onSelectModel: (modelKey: ModelKey) => Promise<void>;
   onEditLastMessage?: (newText: string) => void;
@@ -47,6 +48,7 @@ export default function ChatLayout({
   onOpenLegal,
   onSendText,
   onSendFile,
+  onSendFiles,
   onStop,
   onSelectModel,
   onEditLastMessage,
@@ -185,6 +187,7 @@ export default function ChatLayout({
           activeModelKey={health?.active_model_key}
           onSendText={onSendText}
           onSendFile={onSendFile}
+          onSendFiles={onSendFiles}
           onStop={onStop}
         />
       </section>

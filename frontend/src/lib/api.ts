@@ -39,7 +39,7 @@ function getUploadMessage(message: string, file: File): string {
     return '';
   }
 
-  return 'Analise o arquivo enviado.';
+  return '';
 }
 
 export async function fetchHealth(): Promise<HealthResponse> {
@@ -237,6 +237,62 @@ export async function streamUploadMessage(
   if (!response.ok || !response.body) {
     const payload = await response.json().catch(() => null);
     throw new Error(payload?.detail || 'Falha ao iniciar streaming do arquivo');
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      if (!line.trim()) {
+        continue;
+      }
+      onEvent(JSON.parse(line) as ChatStreamEvent);
+    }
+
+    if (done) {
+      break;
+    }
+  }
+
+  if (buffer.trim()) {
+    onEvent(JSON.parse(buffer) as ChatStreamEvent);
+  }
+}
+
+export async function streamMultiUploadMessage(
+  conversationId: string | null,
+  message: string,
+  files: File[],
+  onEvent: (event: ChatStreamEvent) => void,
+  signal?: AbortSignal,
+  locale: string = 'en-US',
+): Promise<void> {
+  const formData = new FormData();
+  formData.append('message', message.trim());
+  if (conversationId) {
+    formData.append('conversation_id', conversationId);
+  }
+  formData.append('locale', locale);
+  for (const file of files) {
+    formData.append('files', file);
+  }
+
+  const response = await fetch(`${API_BASE}/chat/upload/multi/stream`, {
+    method: 'POST',
+    body: formData,
+    signal,
+  });
+  if (!response.ok || !response.body) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(payload?.detail || 'Falha ao iniciar streaming dos arquivos');
   }
 
   const reader = response.body.getReader();

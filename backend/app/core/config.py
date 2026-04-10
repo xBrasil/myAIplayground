@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     mmproj_file_26b: str = Field(default="mmproj-F16.gguf", alias="MMPROJ_FILE_26B")
 
     # llama.cpp engine settings
-    n_ctx: int = Field(default=32768, alias="N_CTX")
+    n_ctx: int = Field(default=0, alias="N_CTX")
     n_gpu_layers: int = Field(default=-1, alias="N_GPU_LAYERS")
     flash_attn: bool = Field(default=True, alias="FLASH_ATTN")
     llama_server_host: str = Field(default="127.0.0.1", alias="LLAMA_SERVER_HOST")

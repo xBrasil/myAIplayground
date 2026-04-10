@@ -21,9 +21,11 @@
 
 | Categoria | Descrição |
 |---|---|
-| **Chat multimodal** | Texto, imagens, áudio e arquivos (`.txt`, `.md`, `.py`, `.json`, `.csv`, `.log`) em uma única conversa |
+| **Chat multimodal** | Texto, imagens, áudio e arquivos em uma única conversa — envio simultâneo de múltiplos arquivos |
 | **Modelos Gemma** | Gemma 4 E2B, E4B e 26B-A4B via GGUF — troque de modelo a qualquer momento pela interface |
-| **Inferência local** | llama.cpp server com CUDA, flash attention, 32 768 tokens de contexto |
+| **Arquivos de texto** | 60+ extensões de código e dados (`.py`, `.ts`, `.json`, `.csv`, `.xml`, `.yaml`, `.sql`, `.rs`, `.go`…) lidos como texto |
+| **Documentos** | PDF, Word (`.docx`), Excel (`.xlsx`) e PowerPoint (`.pptx`) — extração de texto automática |
+| **Inferência local** | llama.cpp server com CUDA, flash attention, contexto por modelo (128K–256K tokens) |
 | **Streaming** | Respostas exibidas token a token em tempo real |
 | **Auto-continuação** | Respostas longas continuam automaticamente quando o limite de tokens é atingido (até 5 rodadas) |
 | **Gravação de voz** | Gravar, pausar, retomar e parar antes de enviar; áudio convertido para WAV 16 kHz; timer com contagem regressiva |
@@ -33,6 +35,7 @@
 | **Edição de mensagens** | Editar mensagens enviadas e regenerar respostas |
 | **i18n** | Português (Brasil) e English — detecta automaticamente o idioma do navegador |
 | **Tema escuro** | UI minimalista e responsiva com design dark-mode |
+| **Janela deslizante** | Gestão automática de contexto: truncamento de conteúdo longo, descarte de mensagens antigas e retry em estouro |
 | **Privacidade total** | Conversas e arquivos ficam em `data/` no seu disco. Nada é enviado para a nuvem. |
 
 ---
@@ -77,11 +80,11 @@ O launcher:
 
 ## Modelos disponíveis
 
-| Modelo | Arquivo GGUF | Quantização | Uso típico |
-|---|---|---|---|
-| **Gemma 4 E2B** | `gemma-4-E2B-it-Q8_0.gguf` | Q8_0 | Rápido, ideal para testes |
-| **Gemma 4 E4B** | `gemma-4-E4B-it-Q4_K_M.gguf` | Q4_K_M | Equilíbrio entre qualidade e velocidade |
-| **Gemma 4 26B-A4B** | `gemma-4-26B-A4B-it-UD-IQ4_XS.gguf` | IQ4_XS | Maior qualidade, requer mais VRAM |
+| Modelo | Arquivo GGUF | Quantização | Contexto | Uso típico |
+|---|---|---|---|---|
+| **Gemma 4 E2B** | `gemma-4-E2B-it-Q8_0.gguf` | Q8_0 | 128K | Rápido, ideal para testes |
+| **Gemma 4 E4B** | `gemma-4-E4B-it-Q4_K_M.gguf` | Q4_K_M | 128K | Equilíbrio entre qualidade e velocidade |
+| **Gemma 4 26B-A4B** | `gemma-4-26B-A4B-it-UD-IQ4_XS.gguf` | IQ4_XS | 256K | Maior qualidade, requer mais VRAM |
 
 O modelo E4B é o padrão. Todos são executados pelo llama.cpp via GGUF, sem PyTorch em runtime.
 
@@ -101,6 +104,7 @@ O modelo E4B é o padrão. Todos são executados pelo llama.cpp via GGUF, sem Py
 - **faster-whisper** (transcrição de áudio)
 - **huggingface_hub** (download de modelos)
 - **httpx** (comunicação com llama-server)
+- **PyMuPDF** / **python-docx** / **openpyxl** / **python-pptx** (extração de texto de documentos)
 
 ### Inferência
 - **llama.cpp server** (binário pré-compilado, CUDA ou CPU)
@@ -121,7 +125,7 @@ myAIplayground/
 │   └── app/
 │       ├── api/routes/   # chat, conversations, health, models
 │       ├── core/         # config (pydantic-settings)
-│       └── services/     # chat, model, storage, input_adapter
+│       └── services/     # chat, model, storage, input_adapter, document
 ├── data/              # Dados locais (ignorados pelo git)
 │   ├── app.db            # SQLite com conversas e mensagens
 │   ├── uploads/          # Arquivos enviados nas conversas
@@ -144,7 +148,7 @@ As variáveis de ambiente ficam em `backend/.env` (criado automaticamente pelo i
 |---|---|---|
 | `ENABLE_MODEL_LOADING` | `true` | Habilita download e carregamento automático de modelos |
 | `DEFAULT_MODEL_KEY` | `e4b` | Modelo padrão (`e2b`, `e4b`, `26b`) |
-| `N_CTX` | `32768` | Tamanho do contexto do llama-server |
+| `N_CTX` | `0` (auto) | Tamanho do contexto do llama-server (`0` = usar perfil do modelo: 128K E2B/E4B, 256K 26B) |
 | `N_GPU_LAYERS` | `-1` | Camadas na GPU (`-1` = todas) |
 | `FLASH_ATTN` | `true` | Flash Attention (mais rápido em GPUs compatíveis) |
 | `WHISPER_MODEL_SIZE` | `base` | Tamanho do modelo Whisper (`tiny`, `base`, `small`, `medium`, `large`) |

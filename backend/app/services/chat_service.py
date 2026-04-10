@@ -1,4 +1,6 @@
 import base64
+import json
+import logging
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -11,6 +13,9 @@ from app.services.input_adapter_service import input_adapter_service
 from app.services.model_service import model_service
 from app.services.storage_service import storage_service
 from app.services.whisper_service import whisper_service
+from app.services.document_service import extract_text as extract_document_text
+
+logger = logging.getLogger(__name__)
 
 
 class ChatService:
@@ -67,6 +72,34 @@ class ChatService:
         except Exception:
             return "(Erro ao ler o arquivo)"
 
+    def _read_document_file(self, file_path: str, max_chars: int = 256000) -> str:
+        return extract_document_text(file_path, max_chars)
+
+    def _read_any_file(self, file_path: str) -> str:
+        """Read a file by detecting its type from extension."""
+        suffix = Path(file_path).suffix.lower()
+        if suffix in (".pdf", ".docx", ".xlsx", ".pptx"):
+            return self._read_document_file(file_path)
+        return self._read_text_file(file_path)
+
+    def _build_multi_file_prompt(self, names_json: str, paths_json: str, user_content: str) -> str:
+        try:
+            names = json.loads(names_json)
+            paths = json.loads(paths_json)
+        except (json.JSONDecodeError, TypeError):
+            return user_content or ""
+
+        sections: list[str] = []
+        for i, (name, path) in enumerate(zip(names, paths), 1):
+            content = self._read_any_file(path)
+            sections.append(f"[Arquivo {i}: {name}]\n\n{content}")
+
+        combined = "\n\n".join(sections)
+        user_text = user_content.strip()
+        if user_text:
+            return combined + f"\n\n{user_text}"
+        return combined
+
     def _load_audio_base64(self, file_path: str) -> tuple[str, str]:
         """Return (base64_data, audio_format) for native audio models."""
         raw = Path(file_path).read_bytes()
@@ -91,6 +124,14 @@ class ChatService:
             return attachment_name or "Imagem enviada"
         if input_type == "file":
             return attachment_summary or attachment_name or "Arquivo enviado"
+        if input_type == "document":
+            return attachment_summary or attachment_name or "Documento enviado"
+        if input_type == "multi_file":
+            try:
+                names = json.loads(attachment_name)
+                return f"{len(names)} arquivos enviados"
+            except Exception:
+                return "Múltiplos arquivos enviados"
         return attachment_name or "Nova conversa"
 
     def _stored_upload_content(
@@ -101,10 +142,10 @@ class ChatService:
         attachment_summary: str,
     ) -> str:
         trimmed = text.strip()
-        if input_type == "file":
+        if input_type in ("file", "document", "multi_file"):
             # File content is injected by _build_messages at inference time,
             # so we only store the user's own text here for clean display.
-            return trimmed or "Analise o arquivo enviado."
+            return trimmed
         if input_type == "audio":
             transcript = self._transcribe_audio(attachment_path)
             return transcript or trimmed
@@ -155,14 +196,124 @@ class ChatService:
                 and message.input_type == "file"
             ):
                 file_content = self._read_text_file(message.attachment_path)
-                user_text = message.content.strip() or "Analise o arquivo enviado."
-                prompt = f"[Arquivo: {message.attachment_name}]\n\n{file_content}\n\n{user_text}"
+                user_text = message.content.strip()
+                header = f"[Arquivo: {message.attachment_name}]\n\n{file_content}"
+                prompt = f"{header}\n\n{user_text}" if user_text else header
+                messages.append({"role": "user", "content": prompt})
+                continue
+
+            # Document attachments (PDF, DOCX, XLSX, PPTX): extract and inject
+            if (
+                message.role == "user"
+                and message.attachment_path
+                and message.input_type == "document"
+            ):
+                doc_content = self._read_document_file(message.attachment_path)
+                user_text = message.content.strip()
+                header = f"[Documento: {message.attachment_name}]\n\n{doc_content}"
+                prompt = f"{header}\n\n{user_text}" if user_text else header
+                messages.append({"role": "user", "content": prompt})
+                continue
+
+            # Multi-file attachments: read all files and combine
+            if (
+                message.role == "user"
+                and message.attachment_path
+                and message.input_type == "multi_file"
+            ):
+                prompt = self._build_multi_file_prompt(
+                    message.attachment_name or "[]",
+                    message.attachment_path,
+                    message.content,
+                )
                 messages.append({"role": "user", "content": prompt})
                 continue
 
             # Audio and plain text — use stored transcript / content
             messages.append({"role": message.role, "content": message.content})
-        return messages
+
+        return self._trim_messages_to_budget(messages)
+
+    # ── Token budget management ──────────────────────────────────
+
+    _GENERATION_RESERVE = 4096  # tokens reserved for the model's response
+
+    def _estimate_message_tokens(self, messages: list[dict[str, Any]]) -> int:
+        total = 0
+        for msg in messages:
+            content = msg.get("content", "")
+            if isinstance(content, str):
+                total += model_service.estimate_tokens(content)
+            elif isinstance(content, list):
+                for part in content:
+                    if isinstance(part, dict):
+                        text = part.get("text", "")
+                        if text:
+                            total += model_service.estimate_tokens(text)
+                        if "image_url" in part:
+                            total += 512  # rough estimate for image tokens
+        return total
+
+    def _trim_messages_to_budget(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Truncate content and apply sliding window if tokens exceed budget."""
+        context_size = model_service.context_size
+        budget = context_size - self._GENERATION_RESERVE
+        if budget <= 0:
+            return messages
+
+        total = self._estimate_message_tokens(messages)
+        if total <= budget:
+            return messages
+
+        overflow = total - budget
+
+        # Step 1: Try truncating the last large user message (file content)
+        for i in range(len(messages) - 1, -1, -1):
+            msg = messages[i]
+            if msg.get("role") != "user" or not isinstance(msg.get("content"), str):
+                continue
+            content = msg["content"]
+            content_tokens = model_service.estimate_tokens(content)
+            if content_tokens < 200:
+                continue
+            chars_to_remove = overflow * 4
+            if chars_to_remove >= len(content) - 200:
+                chars_to_remove = len(content) - 200
+            if chars_to_remove > 0:
+                truncated = content[: len(content) - chars_to_remove]
+                msg["content"] = truncated + "\n\n[...conteúdo truncado para caber no contexto do modelo]"
+                logger.info(
+                    "Conteúdo truncado: removidos ~%d tokens (overflow=%d, contexto=%d)",
+                    overflow, overflow, context_size,
+                )
+            break
+
+        # Re-check after truncation
+        total = self._estimate_message_tokens(messages)
+        if total <= budget:
+            return messages
+
+        # Step 2: Sliding window — keep system prompt + most recent messages
+        if len(messages) <= 2:
+            return messages
+
+        system_msgs = [m for m in messages if m.get("role") == "system"]
+        non_system = [m for m in messages if m.get("role") != "system"]
+
+        # Drop oldest non-system messages until within budget
+        while len(non_system) > 1:
+            dropped = non_system.pop(0)
+            result = system_msgs + non_system
+            total = self._estimate_message_tokens(result)
+            if total <= budget:
+                logger.info(
+                    "Sliding window: removida mensagem antiga (%s), %d mensagens restantes",
+                    dropped.get("role"), len(result),
+                )
+                return result
+
+        logger.warning("Após sliding window, mensagens ainda excedem orçamento de tokens.")
+        return system_msgs + non_system
 
     def handle_text_message(
         self,

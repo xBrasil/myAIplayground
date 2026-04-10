@@ -11,13 +11,14 @@ interface ComposerProps {
   activeModelKey?: ModelKey;
   onSendText: (text: string) => Promise<void>;
   onSendFile: (text: string, file: File) => Promise<void>;
+  onSendFiles: (text: string, files: File[]) => Promise<void>;
   onStop: () => void;
 }
 
-export default function Composer({ busy, enterToSend, activeModelKey, onSendText, onSendFile, onStop }: ComposerProps) {
+export default function Composer({ busy, enterToSend, activeModelKey, onSendText, onSendFile, onSendFiles, onStop }: ComposerProps) {
   const { t } = useI18n();
   const [text, setText] = useState('');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   // Recording
@@ -66,13 +67,17 @@ export default function Composer({ busy, enterToSend, activeModelKey, onSendText
     }
   }, [recordedAudioFile]);
 
-  async function sendFile(textToSend: string, file: File) {
-    setSelectedFile(null);
+  async function sendFiles(textToSend: string, files: File[]) {
+    setSelectedFiles([]);
     setText('');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
-    await onSendFile(textToSend, file);
+    if (files.length === 1) {
+      await onSendFile(textToSend, files[0]);
+    } else {
+      await onSendFiles(textToSend, files);
+    }
   }
 
   function encodeWav(audioBuffer: AudioBuffer): Blob {
@@ -161,8 +166,8 @@ export default function Composer({ busy, enterToSend, activeModelKey, onSendText
       await onSendFile(msg, audioFile);
       return;
     }
-    if (selectedFile) {
-      await sendFile(text, selectedFile);
+    if (selectedFiles.length > 0) {
+      await sendFiles(text, selectedFiles);
       return;
     }
     if (!text.trim()) return;
@@ -194,7 +199,7 @@ export default function Composer({ busy, enterToSend, activeModelKey, onSendText
       a.currentTime = 0;
     });
 
-    setSelectedFile(null);
+    setSelectedFiles([]);
     if (fileInputRef.current) fileInputRef.current.value = '';
 
     let stream: MediaStream;
@@ -317,7 +322,7 @@ export default function Composer({ busy, enterToSend, activeModelKey, onSendText
 
   const isRecording = recordingPhase !== 'idle';
   const hasAudio = recordedAudioFile !== null;
-  const canSend = !busy && (text.trim().length > 0 || selectedFile !== null || hasAudio);
+  const canSend = !busy && (text.trim().length > 0 || selectedFiles.length > 0 || hasAudio);
   const maxSec = getMaxRecordingSeconds();
   const timerDisplay = `${Math.floor(recordingSeconds / 60)}:${String(recordingSeconds % 60).padStart(2, '0')} / ${Math.floor(maxSec / 60)}:${String(maxSec % 60).padStart(2, '0')}`;
 
@@ -365,11 +370,24 @@ export default function Composer({ busy, enterToSend, activeModelKey, onSendText
         </div>
       )}
 
-      {/* File name pill (only when no audio is staged) */}
-      {selectedFile && !hasAudio ? (
-        <span className="composer-file-name" title={selectedFile.name}>
-          {selectedFile.name}
-        </span>
+      {/* File name pills (only when no audio is staged) */}
+      {selectedFiles.length > 0 && !hasAudio ? (
+        <div className="composer-file-pills">
+          {selectedFiles.map((file, idx) => (
+            <span key={`${file.name}-${idx}`} className="composer-file-name" title={file.name}>
+              <span className="composer-file-name__text">{file.name}</span>
+              <button
+                type="button"
+                className="composer-file-name__remove"
+                onClick={() => {
+                  setSelectedFiles((prev) => prev.filter((_, i) => i !== idx));
+                  if (selectedFiles.length <= 1 && fileInputRef.current) fileInputRef.current.value = '';
+                }}
+                aria-label={`Remove ${file.name}`}
+              >×</button>
+            </span>
+          ))}
+        </div>
       ) : null}
 
       {isRecording ? (
@@ -470,9 +488,12 @@ export default function Composer({ busy, enterToSend, activeModelKey, onSendText
               <input
                 ref={fileInputRef}
                 type="file"
+                multiple
                 disabled={busy || hasAudio}
-                accept="image/*,audio/*,.txt,.md,.py,.json,.csv,.log"
-                onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                onChange={(e) => {
+                  const newFiles = e.target.files ? Array.from(e.target.files) : [];
+                  if (newFiles.length > 0) setSelectedFiles((prev) => [...prev, ...newFiles]);
+                }}
                 aria-label="Anexar arquivo"
               />
             </button>

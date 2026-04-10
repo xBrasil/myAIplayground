@@ -169,6 +169,67 @@ export default function MessageList({
               ) : isUser ? (
                 <>
                   {message.attachment_name ? (
+                    message.input_type === 'multi_file' ? (
+                      <div className="attachment-pill-wrapper">
+                        {(() => {
+                          try {
+                            const names: string[] = JSON.parse(message.attachment_name);
+                            let paths: string[] = [];
+                            try {
+                              paths = message.attachment_path ? JSON.parse(message.attachment_path) : [];
+                            } catch { /* ignore */ }
+                            return names.map((name, idx) => {
+                              const filePath = paths[idx] || null;
+                              const isImg = isImageAttachment(name);
+                              return (
+                                <div key={idx}>
+                                  <div
+                                    className={`attachment-pill${filePath ? ' attachment-pill--clickable' : ''}`}
+                                    onClick={filePath ? (e) => {
+                                      e.stopPropagation();
+                                      if (isImg) {
+                                        const url = getUploadAssetUrl(filePath);
+                                        if (url) setPreviewUrl(url);
+                                      } else {
+                                        setFileMenuId((prev) => (prev === `${message.id}-${idx}` ? null : `${message.id}-${idx}`));
+                                      }
+                                    } : undefined}
+                                    role={filePath ? 'button' : undefined}
+                                    tabIndex={filePath ? 0 : undefined}
+                                    onKeyDown={filePath ? (e) => {
+                                      if (e.key === 'Enter') {
+                                        if (isImg) {
+                                          const url = getUploadAssetUrl(filePath);
+                                          if (url) setPreviewUrl(url);
+                                        } else {
+                                          setFileMenuId((prev) => (prev === `${message.id}-${idx}` ? null : `${message.id}-${idx}`));
+                                        }
+                                      }
+                                    } : undefined}
+                                  >
+                                    {name}
+                                  </div>
+                                  {fileMenuId === `${message.id}-${idx}` && filePath ? (
+                                    <div className="file-action-menu" onClick={(e) => e.stopPropagation()}>
+                                      <button type="button" onClick={() => handleOpenFile(filePath)}>
+                                        <svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" /></svg>
+                                        {t('messages.openFile')}
+                                      </button>
+                                      <button type="button" onClick={() => handleRevealFile(filePath)}>
+                                        <svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" /></svg>
+                                        {t('messages.revealInExplorer')}
+                                      </button>
+                                    </div>
+                                  ) : null}
+                                </div>
+                              );
+                            });
+                          } catch {
+                            return <div className="attachment-pill">{message.attachment_name}</div>;
+                          }
+                        })()}
+                      </div>
+                    ) : (
                     <div className="attachment-pill-wrapper">
                       <div
                         className="attachment-pill attachment-pill--clickable"
@@ -192,6 +253,7 @@ export default function MessageList({
                         </div>
                       ) : null}
                     </div>
+                    )
                   ) : null}
                   <p>{message.content}</p>
                 </>

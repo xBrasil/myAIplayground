@@ -20,6 +20,7 @@ import {
   streamRegenerate,
   streamTextMessage,
   streamUploadMessage,
+  streamMultiUploadMessage,
 } from './lib/api';
 import { loadEnterToSendPreference, loadLastModelKey, saveEnterToSendPreference, saveLastModelKey } from './lib/preferences';
 import { loadPreferredVoiceName } from './lib/speech';
@@ -340,6 +341,67 @@ export default function App() {
     }
   }
 
+  async function handleSendFiles(text: string, files: File[]) {
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    const effectiveId = isDraft(currentConversationId) ? null : currentConversationId;
+    activeConversationIdRef.current = effectiveId;
+    if (isDraft(currentConversationId)) {
+      setConversations((prev) => prev.filter((c) => c.id !== DRAFT_ID));
+    }
+    try {
+      setBusy(true);
+      setStreamingText('');
+      streamingTextRef.current = '';
+      setError(null);
+      await streamMultiUploadMessage(effectiveId, text, files, (event: ChatStreamEvent) => {
+        if (event.type === 'conversation') {
+          upsertConversation(event.conversation);
+          setCurrentConversationId(event.conversation.id);
+          activeConversationIdRef.current = event.conversation.id;
+          return;
+        }
+
+        if (event.type === 'delta') {
+          streamingTextRef.current += event.delta;
+          setStreamingText((current) => current + event.delta);
+          return;
+        }
+
+        upsertConversation(event.conversation);
+        setCurrentConversationId(event.conversation.id);
+        setStreamingText('');
+        streamingTextRef.current = '';
+      }, controller.signal, locale);
+      await refreshHealth().catch(() => null);
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        const partial = streamingTextRef.current.trim();
+        const convId = activeConversationIdRef.current;
+        setStreamingText('');
+        streamingTextRef.current = '';
+        if (partial && convId) {
+          setConversations((prev) =>
+            prev.map((c) =>
+              c.id === convId
+                ? { ...c, messages: [...c.messages, { id: `partial-${Date.now()}`, role: 'assistant' as const, content: partial, input_type: 'text' as const, created_at: new Date().toISOString() }] }
+                : c,
+            ),
+          );
+          await savePartial(convId, partial).catch(() => null);
+          await reloadConversations().catch(() => null);
+        }
+      } else {
+        setError(err instanceof Error ? err.message : t('error.sendFile'));
+        setStreamingText('');
+        streamingTextRef.current = '';
+      }
+    } finally {
+      abortControllerRef.current = null;
+      setBusy(false);
+    }
+  }
+
   function handleStop() {
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
@@ -540,6 +602,7 @@ export default function App() {
         onOpenLegal={setLegalDocument}
         onSendText={handleSendText}
         onSendFile={handleSendFile}
+        onSendFiles={handleSendFiles}
         onStop={handleStop}
         onSelectModel={handleSelectModel}
         onEditLastMessage={handleEditLastMessage}

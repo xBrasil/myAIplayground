@@ -22,6 +22,36 @@ from app.core.config import get_settings
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 
+def _estimate_upload_tokens(kind: str, raw_bytes: bytes) -> int:
+    """Rough token estimate for an uploaded file, before server tokenization."""
+    if kind == "image":
+        return 512  # vision token cost
+    if kind == "audio":
+        return 200  # transcript is typically short
+    if kind == "file":
+        return len(raw_bytes) // 4
+    if kind == "document":
+        # Documents get extracted (max 256K chars → ~64K tokens).
+        # Use raw file size as very rough upper bound.
+        return min(len(raw_bytes) // 4, 64000)
+    return len(raw_bytes) // 4
+
+
+def _check_upload_budget(total_tokens: int) -> None:
+    """Raise 413 if estimated tokens exceed 80% of context budget."""
+    ctx = model_service.context_size
+    budget = int(ctx * 0.8)
+    if total_tokens > budget:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"O conteúdo enviado é grande demais para o modelo atual "
+                f"(~{total_tokens:,} tokens estimados, limite: ~{budget:,} tokens). "
+                f"Envie um arquivo menor ou use um modelo com janela de contexto maior."
+            ),
+        )
+
+
 def _local_iso(dt: datetime) -> str:
     """Convert a naive UTC datetime (from SQLite) to a local-time ISO string with offset."""
     utc_dt = dt.replace(tzinfo=timezone.utc)
@@ -133,6 +163,7 @@ async def send_upload_message(
     normalized = await input_adapter_service.normalize_upload(file)
     if normalized.kind == "unsupported":
         raise HTTPException(status_code=400, detail=normalized.summary)
+    _check_upload_budget(_estimate_upload_tokens(normalized.kind, normalized.raw_bytes))
 
     saved_path = storage_service.save_upload(file_name=normalized.file_name, content=normalized.raw_bytes)
 
@@ -162,6 +193,7 @@ async def stream_upload_message(
     normalized = await input_adapter_service.normalize_upload(file)
     if normalized.kind == "unsupported":
         raise HTTPException(status_code=400, detail=normalized.summary)
+    _check_upload_budget(_estimate_upload_tokens(normalized.kind, normalized.raw_bytes))
 
     saved_path = storage_service.save_upload(file_name=normalized.file_name, content=normalized.raw_bytes)
 
@@ -173,6 +205,86 @@ async def stream_upload_message(
         attachment_name=normalized.file_name,
         attachment_path=str(Path(saved_path)),
         attachment_summary=normalized.summary,
+        enable_thinking=enable_thinking,
+        locale=locale,
+    )
+
+    def event_stream():
+        yield _event_line({"type": "conversation", "conversation": _serialize_conversation(conversation)})
+
+        chunks: list[str] = []
+        try:
+            for chunk in stream:
+                chunks.append(chunk)
+                yield _event_line({"type": "delta", "delta": chunk})
+        except GeneratorExit:
+            return
+
+        final_text = "".join(chunks).strip()
+        final_conversation, reply = chat_service.finalize_streamed_reply(db, conversation.id, final_text)
+
+        user_msgs = [m for m in final_conversation.messages if m.role == "user"]
+        if len(user_msgs) == 1:
+            updated = chat_service.generate_title(db, final_conversation.id)
+            if updated is not None:
+                final_conversation = updated
+
+        yield _event_line(
+            {
+                "type": "done",
+                "conversation": _serialize_conversation(final_conversation),
+                "reply": _serialize_message(reply),
+                "model_loaded": chat_service.model_loaded,
+            }
+        )
+
+    return StreamingResponse(event_stream(), media_type="application/x-ndjson")
+
+
+@router.post("/upload/multi/stream")
+async def stream_multi_upload_message(
+    message: str = Form(default=""),
+    conversation_id: str | None = Form(default=None),
+    enable_thinking: bool = Form(default=False),
+    locale: str = Form(default="en-US"),
+    files: list[UploadFile] = File(...),
+    db: Session = Depends(get_db),
+) -> StreamingResponse:
+    if not files:
+        raise HTTPException(status_code=400, detail="Nenhum arquivo enviado.")
+
+    file_infos: list[dict] = []
+    total_tokens = 0
+    normalized_files = []
+    for upload in files:
+        normalized = await input_adapter_service.normalize_upload(upload)
+        if normalized.kind == "unsupported":
+            raise HTTPException(status_code=400, detail=f"Arquivo não suportado: {normalized.file_name}")
+        total_tokens += _estimate_upload_tokens(normalized.kind, normalized.raw_bytes)
+        normalized_files.append(normalized)
+    _check_upload_budget(total_tokens)
+
+    for normalized in normalized_files:
+        saved_path = storage_service.save_upload(file_name=normalized.file_name, content=normalized.raw_bytes)
+        file_infos.append({
+            "name": normalized.file_name,
+            "path": str(Path(saved_path)),
+            "kind": normalized.kind,
+            "summary": normalized.summary,
+        })
+
+    names_json = json.dumps([f["name"] for f in file_infos], ensure_ascii=False)
+    paths_json = json.dumps([f["path"] for f in file_infos], ensure_ascii=False)
+    summaries = "; ".join(f["summary"] for f in file_infos)
+
+    conversation, stream = chat_service.prepare_file_stream(
+        db=db,
+        conversation_id=conversation_id,
+        text=message,
+        input_type="multi_file",
+        attachment_name=names_json,
+        attachment_path=paths_json,
+        attachment_summary=summaries,
         enable_thinking=enable_thinking,
         locale=locale,
     )

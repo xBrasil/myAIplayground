@@ -34,6 +34,7 @@ class ModelProfile:
     gguf_file: str
     mmproj_file: str = ""
     kv_cache_quant: bool = False
+    n_ctx: int = 32768
 
 
 class ModelService:
@@ -50,6 +51,7 @@ class ModelService:
                 gguf_repo=self._settings.gguf_repo_e2b,
                 gguf_file=self._settings.gguf_file_e2b,
                 mmproj_file=self._settings.mmproj_file_e2b,
+                n_ctx=131072,
             ),
             "e4b": ModelProfile(
                 key="e4b",
@@ -58,6 +60,7 @@ class ModelService:
                 gguf_repo=self._settings.gguf_repo_e4b,
                 gguf_file=self._settings.gguf_file_e4b,
                 mmproj_file=self._settings.mmproj_file_e4b,
+                n_ctx=131072,
             ),
             "26b": ModelProfile(
                 key="26b",
@@ -67,6 +70,7 @@ class ModelService:
                 gguf_file=self._settings.gguf_file_26b,
                 mmproj_file=self._settings.mmproj_file_26b,
                 kv_cache_quant=True,
+                n_ctx=262144,
             ),
         }
         self._active_model_key = self._settings.default_model_key
@@ -79,6 +83,7 @@ class ModelService:
         self._server_url = f"http://127.0.0.1:{self._server_port}"
         self._client = httpx.Client(timeout=self._HTTP_TIMEOUT)
         self._has_vision = False
+        self._actual_n_ctx: int = 0
         self._cuda_detected: bool | None = None
         self._log_file_handle = None
         atexit.register(self._shutdown)
@@ -174,6 +179,45 @@ class ModelService:
             time.sleep(1)
         return False
 
+    def _query_props(self) -> None:
+        """Fetch /props to learn the actual context size the server allocated."""
+        try:
+            r = self._client.get(f"{self._server_url}/props", timeout=10)
+            r.raise_for_status()
+            data = r.json()
+            n_ctx = data.get("default_generation_settings", {}).get("n_ctx", 0)
+            if n_ctx > 0:
+                self._actual_n_ctx = n_ctx
+                logger.info("Contexto real alocado: %d tokens", n_ctx)
+        except Exception as exc:
+            logger.warning("Não foi possível consultar /props: %s", exc)
+
+    @property
+    def context_size(self) -> int:
+        """Return the actual context size or the profile's n_ctx as fallback."""
+        if self._actual_n_ctx > 0:
+            return self._actual_n_ctx
+        profile = self._profiles.get(self._active_model_key)
+        if profile:
+            return self._settings.n_ctx or profile.n_ctx
+        return 32768
+
+    def estimate_tokens(self, text: str) -> int:
+        """Use /tokenize to count tokens. Falls back to char/4 heuristic."""
+        if not self.is_loaded:
+            return len(text) // 4
+        try:
+            r = self._client.post(
+                f"{self._server_url}/tokenize",
+                json={"content": text},
+                timeout=10,
+            )
+            r.raise_for_status()
+            tokens = r.json().get("tokens", [])
+            return len(tokens)
+        except Exception:
+            return len(text) // 4
+
     def _start_server(self, model_key: str) -> None:
         binary = self._find_server_binary()
         if binary is None:
@@ -218,8 +262,9 @@ class ModelService:
         creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
         # Try with configured n_ctx first, then fall back to auto (model default)
-        ctx_attempts = [str(self._settings.n_ctx)]
-        if self._settings.n_ctx > 0:
+        effective_n_ctx = self._settings.n_ctx or profile.n_ctx
+        ctx_attempts = [str(effective_n_ctx)]
+        if effective_n_ctx > 0:
             ctx_attempts.append("0")  # fallback: -c 0 = model default
 
         for ctx_value in ctx_attempts:
@@ -244,6 +289,7 @@ class ModelService:
                         "Falha com n_ctx=%s, iniciou com n_ctx=%s (fallback)",
                         ctx_attempts[0], ctx_value,
                     )
+                self._query_props()
                 return
 
             tail = self._read_log_tail()
@@ -487,9 +533,34 @@ class ModelService:
             return f"Servidor retornou erro {exc.response.status_code}."
         return str(exc)
 
+    @staticmethod
+    def _is_context_overflow(exc: Exception) -> bool:
+        """Check if the error indicates the prompt exceeded the context window."""
+        if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 400:
+            try:
+                body = exc.response.json()
+                msg = body.get("error", {}).get("message", "").lower()
+                if "context" in msg or "too long" in msg or "exceeds" in msg:
+                    return True
+            except Exception:
+                pass
+            return True  # treat any 400 as potential overflow
+        return False
+
+    @staticmethod
+    def _drop_oldest_non_system(messages: list[dict[str, Any]]) -> list[dict[str, Any]] | None:
+        """Remove the oldest non-system message. Returns None if nothing to drop."""
+        first_non_system = next(
+            (i for i, m in enumerate(messages) if m.get("role") != "system"), None
+        )
+        if first_non_system is None or len(messages) - first_non_system <= 1:
+            return None
+        return messages[:first_non_system] + messages[first_non_system + 1:]
+
     # ── Generation (HTTP → llama-server) ─────────────────────────
 
     _MAX_CONTINUATIONS = 5  # safety cap for auto-continue loops
+    _MAX_CONTEXT_RETRIES = 3  # max times to retry after context overflow
 
     def generate_reply_stream(self, messages: list[dict[str, Any]], enable_thinking: bool = False) -> Iterator[str]:
         if not self.is_loaded:
@@ -535,6 +606,16 @@ class ModelService:
                                     accumulated.append(cleaned)
                                     yield cleaned
             except Exception as exc:
+                if self._is_context_overflow(exc) and not accumulated:
+                    # No output yet — try dropping oldest messages
+                    reduced = self._drop_oldest_non_system(prepared)
+                    if reduced is not None:
+                        logger.warning(
+                            "Contexto excedido, removendo mensagem mais antiga e retentando (%d → %d msgs).",
+                            len(prepared), len(reduced),
+                        )
+                        prepared = reduced
+                        continue
                 yield f"Erro durante geração: {self._extract_server_error(exc)}"
                 return
 
@@ -582,6 +663,15 @@ class ModelService:
                     continue
                 break
             except Exception as exc:
+                if self._is_context_overflow(exc) and not parts:
+                    reduced = self._drop_oldest_non_system(prepared)
+                    if reduced is not None:
+                        logger.warning(
+                            "Contexto excedido (sync), removendo mensagem mais antiga (%d → %d msgs).",
+                            len(prepared), len(reduced),
+                        )
+                        prepared = reduced
+                        continue
                 parts.append(f"Erro durante geração: {self._extract_server_error(exc)}")
                 break
 
