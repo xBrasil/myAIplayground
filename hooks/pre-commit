@@ -1,0 +1,7 @@
+#!/bin/sh
+# Pre-commit hook — runs scripts/test.py before allowing a commit.
+# Install: copy to .git/hooks/pre-commit or run: git config core.hooksPath hooks
+
+echo "Running pre-commit checks..."
+python scripts/test.py
+exit $?

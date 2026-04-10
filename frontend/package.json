@@ -4,8 +4,12 @@
   "version": "1.0.1",
   "type": "module",
   "scripts": {
+    "generate:info": "node scripts/generate-app-info.mjs",
+    "predev": "npm run generate:info",
     "dev": "vite",
+    "prebuild": "npm run generate:info",
     "build": "tsc -b && vite build",
+    "typecheck": "tsc -b",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -17,6 +21,7 @@
     "remark-math": "^6.0.0"
   },
   "devDependencies": {
+    "@types/node": "^25.5.2",
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
     "@vitejs/plugin-react": "^4.4.1",

@@ -48,7 +48,7 @@ export default function App() {
   const [legalAccepted, setLegalAccepted] = useState<boolean | null>(null);
 
   useEffect(() => {
-    document.title = `My AI Playground v${__APP_VERSION__} - RMSaraiva.com`;
+    document.title = 'My AI Playground - RMSaraiva.com';
   }, []);
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -247,7 +247,7 @@ export default function App() {
         setCurrentConversationId(event.conversation.id);
         setStreamingText('');
         streamingTextRef.current = '';
-      }, controller.signal);
+      }, controller.signal, locale);
       await refreshHealth().catch(() => null);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -310,7 +310,7 @@ export default function App() {
         setCurrentConversationId(event.conversation.id);
         setStreamingText('');
         streamingTextRef.current = '';
-      }, controller.signal);
+      }, controller.signal, locale);
       await refreshHealth().catch(() => null);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -376,7 +376,7 @@ export default function App() {
         upsertConversation(event.conversation);
         setStreamingText('');
         streamingTextRef.current = '';
-      }, controller.signal);
+      }, controller.signal, locale);
       await refreshHealth().catch(() => null);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -437,7 +437,7 @@ export default function App() {
         upsertConversation(event.conversation);
         setStreamingText('');
         streamingTextRef.current = '';
-      }, controller.signal);
+      }, controller.signal, locale);
       await refreshHealth().catch(() => null);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {

@@ -2,14 +2,18 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 
 import ptBR from '../locales/pt-BR.json';
 import enUS from '../locales/en-US.json';
+import esES from '../locales/es-ES.json';
+import frFR from '../locales/fr-FR.json';
 
-export type Locale = 'pt-BR' | 'en-US';
+export type Locale = 'pt-BR' | 'en-US' | 'es-ES' | 'fr-FR';
 
 type Translations = Record<string, string | string[]>;
 
 const locales: Record<Locale, Translations> = {
   'pt-BR': ptBR as unknown as Translations,
   'en-US': enUS as unknown as Translations,
+  'es-ES': esES as unknown as Translations,
+  'fr-FR': frFR as unknown as Translations,
 };
 
 const STORAGE_KEY = 'locale';
@@ -19,6 +23,8 @@ function detectLocale(): Locale {
   if (saved && saved in locales) return saved as Locale;
   const nav = navigator.language;
   if (nav.startsWith('pt')) return 'pt-BR';
+  if (nav.startsWith('es')) return 'es-ES';
+  if (nav.startsWith('fr')) return 'fr-FR';
   return 'en-US';
 }
 

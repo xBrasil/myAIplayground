@@ -1,3 +1,4 @@
+import { APP_VERSION } from '../app-info';
 import { useI18n } from '../lib/i18n';
 import type { Conversation } from '../types';
 
@@ -28,7 +29,7 @@ export default function Sidebar({
     <aside className="sidebar">
       <div className="sidebar-header">
         <div className="sidebar-brand">
-          <img src="/favicon-32x32.png" alt="" className="sidebar-brand__logo" width={24} height={24} />
+          <img src="/favicon-32x32.png" alt="" className="sidebar-brand__logo" width={32} height={32} />
           <div className="sidebar-brand__text">
             <strong>My AI Playground</strong>
             <a href="https://rmsaraiva.com/" target="_blank" rel="noopener noreferrer" className="sidebar-brand__author">RMSaraiva.com</a>
@@ -112,10 +113,9 @@ export default function Sidebar({
       </div>
 
       <div className="sidebar-footer">
-        <button type="button" onClick={onOpenSettings}>{t('settings')}</button>
         <button type="button" onClick={() => onOpenLegal('terms')}>{t('sidebar.terms')}</button>
         <button type="button" onClick={() => onOpenLegal('privacy')}>{t('sidebar.privacy')}</button>
-        <span className="sidebar-footer__version">v{__APP_VERSION__}</span>
+        <span className="sidebar-footer__version">v{APP_VERSION}</span>
       </div>
     </aside>
   );

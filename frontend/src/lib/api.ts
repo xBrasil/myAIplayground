@@ -130,11 +130,12 @@ export async function deleteAllConversations(
 export async function sendTextMessage(
   conversationId: string | null,
   message: string,
+  locale: string = 'en-US',
 ): Promise<ChatResponse> {
   const response = await fetch(`${API_BASE}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ conversation_id: conversationId, message }),
+    body: JSON.stringify({ conversation_id: conversationId, message, locale }),
   });
   if (!response.ok) {
     throw new Error('Falha ao enviar mensagem');
@@ -147,11 +148,12 @@ export async function streamTextMessage(
   message: string,
   onEvent: (event: ChatStreamEvent) => void,
   signal?: AbortSignal,
+  locale: string = 'en-US',
 ): Promise<void> {
   const response = await fetch(`${API_BASE}/chat/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ conversation_id: conversationId, message }),
+    body: JSON.stringify({ conversation_id: conversationId, message, locale }),
     signal,
   });
   if (!response.ok || !response.body) {
@@ -190,12 +192,14 @@ export async function sendUploadMessage(
   conversationId: string | null,
   message: string,
   file: File,
+  locale: string = 'en-US',
 ): Promise<ChatResponse> {
   const formData = new FormData();
   formData.append('message', getUploadMessage(message, file));
   if (conversationId) {
     formData.append('conversation_id', conversationId);
   }
+  formData.append('locale', locale);
   formData.append('file', file);
 
   const response = await fetch(`${API_BASE}/chat/upload`, {
@@ -215,12 +219,14 @@ export async function streamUploadMessage(
   file: File,
   onEvent: (event: ChatStreamEvent) => void,
   signal?: AbortSignal,
+  locale: string = 'en-US',
 ): Promise<void> {
   const formData = new FormData();
   formData.append('message', getUploadMessage(message, file));
   if (conversationId) {
     formData.append('conversation_id', conversationId);
   }
+  formData.append('locale', locale);
   formData.append('file', file);
 
   const response = await fetch(`${API_BASE}/chat/upload/stream`, {
@@ -290,11 +296,12 @@ export async function streamEditLastMessage(
   message: string,
   onEvent: (event: ChatStreamEvent) => void,
   signal?: AbortSignal,
+  locale: string = 'en-US',
 ): Promise<void> {
   const response = await fetch(`${API_BASE}/chat/${conversationId}/edit-last/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, locale }),
     signal,
   });
   if (!response.ok || !response.body) {
@@ -323,9 +330,12 @@ export async function streamRegenerate(
   conversationId: string,
   onEvent: (event: ChatStreamEvent) => void,
   signal?: AbortSignal,
+  locale: string = 'en-US',
 ): Promise<void> {
   const response = await fetch(`${API_BASE}/chat/${conversationId}/regenerate/stream`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ locale }),
     signal,
   });
   if (!response.ok || !response.body) {

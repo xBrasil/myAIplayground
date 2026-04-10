@@ -59,6 +59,8 @@ export default function SettingsPanel({
               >
                 <option value="pt-BR">Português (Brasil)</option>
                 <option value="en-US">English (US)</option>
+                <option value="es-ES">Español</option>
+                <option value="fr-FR">Français</option>
               </select>
             </label>
           </section>
