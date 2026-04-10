@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.schemas import ChatRequest, ChatResponse
 from app.services.chat_service import chat_service
+from app.services.document_service import extract_text as extract_document_text
 from app.services.input_adapter_service import input_adapter_service
 from app.services.model_service import model_service
 from app.services.storage_service import storage_service
@@ -22,19 +23,18 @@ from app.core.config import get_settings
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 
-def _estimate_upload_tokens(kind: str, raw_bytes: bytes) -> int:
-    """Rough token estimate for an uploaded file, before server tokenization."""
+def _estimate_content_tokens(kind: str, file_path: str, raw_bytes: bytes) -> int:
+    """Estimate tokens from the *actual* content that will be sent to the model."""
     if kind == "image":
-        return 512  # vision token cost
+        return 512
     if kind == "audio":
-        return 200  # transcript is typically short
-    if kind == "file":
-        return len(raw_bytes) // 4
+        return 200
+    # Extract real text content, then count tokens
     if kind == "document":
-        # Documents get extracted (max 256K chars → ~64K tokens).
-        # Use raw file size as very rough upper bound.
-        return min(len(raw_bytes) // 4, 64000)
-    return len(raw_bytes) // 4
+        text = extract_document_text(file_path)
+    else:
+        text = raw_bytes.decode("utf-8", errors="ignore")
+    return model_service.estimate_tokens(text)
 
 
 def _check_upload_budget(total_tokens: int) -> None:
@@ -163,9 +163,9 @@ async def send_upload_message(
     normalized = await input_adapter_service.normalize_upload(file)
     if normalized.kind == "unsupported":
         raise HTTPException(status_code=400, detail=normalized.summary)
-    _check_upload_budget(_estimate_upload_tokens(normalized.kind, normalized.raw_bytes))
 
     saved_path = storage_service.save_upload(file_name=normalized.file_name, content=normalized.raw_bytes)
+    _check_upload_budget(_estimate_content_tokens(normalized.kind, saved_path, normalized.raw_bytes))
 
     conversation, reply = chat_service.handle_file_message(
         db=db,
@@ -193,9 +193,9 @@ async def stream_upload_message(
     normalized = await input_adapter_service.normalize_upload(file)
     if normalized.kind == "unsupported":
         raise HTTPException(status_code=400, detail=normalized.summary)
-    _check_upload_budget(_estimate_upload_tokens(normalized.kind, normalized.raw_bytes))
 
     saved_path = storage_service.save_upload(file_name=normalized.file_name, content=normalized.raw_bytes)
+    _check_upload_budget(_estimate_content_tokens(normalized.kind, saved_path, normalized.raw_bytes))
 
     conversation, stream = chat_service.prepare_file_stream(
         db=db,
@@ -254,24 +254,25 @@ async def stream_multi_upload_message(
         raise HTTPException(status_code=400, detail="Nenhum arquivo enviado.")
 
     file_infos: list[dict] = []
-    total_tokens = 0
     normalized_files = []
     for upload in files:
         normalized = await input_adapter_service.normalize_upload(upload)
         if normalized.kind == "unsupported":
             raise HTTPException(status_code=400, detail=f"Arquivo não suportado: {normalized.file_name}")
-        total_tokens += _estimate_upload_tokens(normalized.kind, normalized.raw_bytes)
         normalized_files.append(normalized)
-    _check_upload_budget(total_tokens)
 
+    # Save all files first, then estimate tokens on actual extracted content
+    total_tokens = 0
     for normalized in normalized_files:
         saved_path = storage_service.save_upload(file_name=normalized.file_name, content=normalized.raw_bytes)
+        total_tokens += _estimate_content_tokens(normalized.kind, saved_path, normalized.raw_bytes)
         file_infos.append({
             "name": normalized.file_name,
             "path": str(Path(saved_path)),
             "kind": normalized.kind,
             "summary": normalized.summary,
         })
+    _check_upload_budget(total_tokens)
 
     names_json = json.dumps([f["name"] for f in file_infos], ensure_ascii=False)
     paths_json = json.dumps([f["path"] for f in file_infos], ensure_ascii=False)

@@ -124,6 +124,11 @@ export default function App() {
     return () => window.clearInterval(intervalId);
   }, [health?.model_status]);
 
+  // Clear error banner when switching conversations
+  useEffect(() => {
+    setError(null);
+  }, [currentConversationId]);
+
   useEffect(() => {
     async function checkLegalAcceptance() {
       const terms = tList('legal.terms');
