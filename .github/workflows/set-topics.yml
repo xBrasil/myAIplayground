@@ -1,0 +1,37 @@
+name: Set repository topics
+
+on:
+  workflow_dispatch:  # run manually from Actions tab
+
+permissions:
+  contents: read
+
+jobs:
+  set-topics:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set topics via GitHub API
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.repos.replaceAllTopics({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              names: [
+                "ai",
+                "llm",
+                "gemma",
+                "local-ai",
+                "llama-cpp",
+                "fastapi",
+                "react",
+                "python",
+                "typescript",
+                "multimodal",
+                "whisper",
+                "open-source",
+                "privacy"
+              ]
+            });
+            core.info("Topics updated successfully.");

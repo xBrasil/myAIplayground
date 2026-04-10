@@ -12,8 +12,10 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout (full history for release notes)
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -25,11 +27,60 @@ jobs:
         working-directory: frontend
 
       - name: Run pre-release checks
-        run: python3 scripts/test.py
+        run: PYTHONIOENCODING=utf-8 python3 scripts/test.py
 
       - name: Read version
         id: version
         run: echo "version=$(cat VERSION)" >> "$GITHUB_OUTPUT"
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          # Find the previous tag (the one before this release)
+          PREV_TAG=$(git tag --sort=-version:refname | grep -v "^${{ github.ref_name }}$" | head -1)
+
+          if [ -z "$PREV_TAG" ]; then
+            # First release ever — use all commits
+            RANGE="HEAD"
+          else
+            RANGE="${PREV_TAG}..${{ github.ref_name }}"
+          fi
+
+          echo "Generating notes for range: ${PREV_TAG:-<initial>} → ${{ github.ref_name }}"
+
+          # Collect commits in the range
+          COMMITS=$(git log "$RANGE" --pretty=format:"%s" --no-merges 2>/dev/null || git log --pretty=format:"%s" --no-merges)
+
+          # Helper: extract lines matching a prefix, strip the prefix
+          extract() {
+            echo "$COMMITS" | grep -iE "^$1" | sed -E "s/^[^:]+: //" | sed 's/^/- /'
+          }
+
+          FEATURES=$(extract "feat")
+          FIXES=$(extract "fix")
+          CHORES=$(extract "chore|build|ci|docs|refactor|perf|style|test")
+
+          BODY=""
+
+          if [ -n "$FEATURES" ]; then
+            BODY="${BODY}## ✨ Novidades\n${FEATURES}\n\n"
+          fi
+
+          if [ -n "$FIXES" ]; then
+            BODY="${BODY}## 🐛 Correções\n${FIXES}\n\n"
+          fi
+
+          if [ -n "$CHORES" ]; then
+            BODY="${BODY}## 🔧 Melhorias internas\n${CHORES}\n\n"
+          fi
+
+          if [ -z "$BODY" ]; then
+            BODY="Veja os commits para detalhes das alterações.\n"
+          fi
+
+          # Write to file (avoids quoting issues with multiline)
+          printf "%b" "$BODY" > release_notes.md
+          echo "notes_file=release_notes.md" >> "$GITHUB_OUTPUT"
 
       - name: Build release ZIP
         run: python3 scripts/release.py -o "my-ai-playground-${{ github.ref_name }}.zip"
@@ -38,5 +89,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: My AI Playground ${{ github.ref_name }}
+          body_path: release_notes.md
           generate_release_notes: true
           files: "my-ai-playground-${{ github.ref_name }}.zip"
