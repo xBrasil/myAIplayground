@@ -6,6 +6,13 @@ from pathlib import Path
 from fastapi import UploadFile
 from PIL import Image
 
+# Register pillow-heif if available (adds HEIC and AVIF support to Pillow)
+try:
+    import pillow_heif  # type: ignore[import]
+    pillow_heif.register_heif_opener()
+except ImportError:
+    pass
+
 
 # ── Supported file extensions ────────────────────────────────────
 
@@ -15,8 +22,8 @@ TEXT_EXTENSIONS = {
     # Data / config
     ".json", ".csv", ".tsv", ".log", ".xml", ".yaml", ".yml", ".toml",
     ".ini", ".cfg", ".conf", ".env", ".properties",
-    # Web
-    ".html", ".htm", ".css", ".scss", ".less", ".sass", ".svg",
+    # Web (svg is an image, not text)
+    ".html", ".htm", ".css", ".scss", ".less", ".sass",
     # Programming — common
     ".py", ".js", ".ts", ".jsx", ".tsx", ".vue", ".svelte",
     ".java", ".kt", ".scala", ".clj",
@@ -35,9 +42,22 @@ TEXT_EXTENSIONS = {
 
 DOCUMENT_EXTENSIONS = {".pdf", ".docx", ".xlsx", ".pptx"}
 
-IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+IMAGE_EXTENSIONS = {
+    ".png", ".jpg", ".jpeg", ".webp", ".gif",
+    ".ico", ".bmp", ".tiff",
+    ".svg",
+    ".heic", ".heif", ".avif",
+}
 AUDIO_EXTENSIONS = {".mp3", ".wav", ".webm", ".m4a", ".ogg", ".mp4"}
-IMAGE_TYPES = {"image/png", "image/jpeg", "image/webp", "image/gif"}
+IMAGE_TYPES = {
+    "image/png", "image/jpeg", "image/webp", "image/gif",
+    "image/x-icon", "image/vnd.microsoft.icon",
+    "image/bmp", "image/x-bmp",
+    "image/tiff",
+    "image/svg+xml",
+    "image/heic", "image/heif",
+    "image/avif",
+}
 AUDIO_TYPES = {
     "audio/mpeg",
     "audio/wav",
@@ -112,7 +132,8 @@ class InputAdapterService:
             kind="unsupported",
             file_name=file_name,
             summary=(
-                "Tipo de arquivo não suportado. Use texto, imagem, áudio, PDF, Word, Excel ou PowerPoint."
+                "Tipo de arquivo não suportado. Use texto, imagem (PNG, JPEG, WebP, GIF, SVG, "
+                "HEIC, AVIF, BMP, ICO, TIFF), áudio, PDF, Word, Excel ou PowerPoint."
             ),
             raw_bytes=raw_bytes,
         )
@@ -131,17 +152,34 @@ class InputAdapterService:
         return True
 
     def load_image(self, file_path: str):
+        suffix = Path(file_path).suffix.lower()
+        if suffix == ".svg":
+            return self._load_svg(file_path)
         with Image.open(file_path) as image:
             return image.convert("RGB")
 
     def load_image_base64(self, file_path: str) -> str:
         """Load image and return as base64 data URL for llama-cpp-python multimodal."""
-        with Image.open(file_path) as img:
-            img = img.convert("RGB")
-            buffer = BytesIO()
-            img.save(buffer, format="PNG")
-            b64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
-            return f"data:image/png;base64,{b64}"
+        suffix = Path(file_path).suffix.lower()
+        if suffix == ".svg":
+            img = self._load_svg(file_path)
+        else:
+            with Image.open(file_path) as raw:
+                img = raw.convert("RGB")
+        buffer = BytesIO()
+        img.save(buffer, format="PNG")
+        b64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+        return f"data:image/png;base64,{b64}"
+
+    @staticmethod
+    def _load_svg(file_path: str) -> Image.Image:
+        """Render an SVG file to a PIL Image via svglib + reportlab."""
+        from svglib.svglib import svg2rlg  # type: ignore[import]
+        from reportlab.graphics import renderPM  # type: ignore[import]
+        drawing = svg2rlg(file_path)
+        if drawing is None:
+            raise ValueError(f"Could not parse SVG: {file_path}")
+        return renderPM.drawToPIL(drawing).convert("RGB")
 
 
 input_adapter_service = InputAdapterService()

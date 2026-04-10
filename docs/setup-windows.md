@@ -13,7 +13,7 @@
 ## O que `install.cmd` faz
 
 1. Detecta e instala Python e Node.js via `winget` (se executado como Administrador)
-2. Cria o ambiente virtual `.venv` na raiz e instala dependências Python (`backend/requirements.txt`)
+2. Cria o ambiente virtual `.venv` na raiz e instala dependências Python (`backend/requirements.txt`) — incluindo `pillow-heif` e `svglib` para suporte completo a imagens
 3. Baixa o binário mais recente do `llama-server` do GitHub (CUDA ou CPU, conforme sua GPU)
 4. Instala dependências npm do frontend (`npm install`)
 5. Cria os diretórios `data/`, `data/uploads/`, `data/model-cache/`

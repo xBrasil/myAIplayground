@@ -82,6 +82,8 @@ class ChatService:
             return self._read_document_file(file_path)
         return self._read_text_file(file_path)
 
+    _IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".ico", ".bmp", ".tiff", ".svg", ".heic", ".heif", ".avif"}
+
     def _build_multi_file_prompt(self, names_json: str, paths_json: str, user_content: str) -> str:
         try:
             names = json.loads(names_json)
@@ -91,8 +93,11 @@ class ChatService:
 
         sections: list[str] = []
         for i, (name, path) in enumerate(zip(names, paths), 1):
-            content = self._read_any_file(path)
-            sections.append(f"[Arquivo {i}: {name}]\n\n{content}")
+            if Path(path).suffix.lower() in self._IMAGE_EXTS:
+                sections.append(f"[Arquivo {i}: {name}]\n\n(Imagem — análise visual não disponível para o modelo atual)")
+            else:
+                content = self._read_any_file(path)
+                sections.append(f"[Arquivo {i}: {name}]\n\n{content}")
 
         combined = "\n\n".join(sections)
         user_text = user_content.strip()
@@ -221,12 +226,44 @@ class ChatService:
                 and message.attachment_path
                 and message.input_type == "multi_file"
             ):
-                prompt = self._build_multi_file_prompt(
-                    message.attachment_name or "[]",
-                    message.attachment_path,
-                    message.content,
-                )
-                messages.append({"role": "user", "content": prompt})
+                try:
+                    names = json.loads(message.attachment_name or "[]")
+                    paths = json.loads(message.attachment_path)
+                except (json.JSONDecodeError, TypeError):
+                    names, paths = [], []
+
+                has_images = any(Path(p).suffix.lower() in self._IMAGE_EXTS for p in paths)
+
+                if has_images and model_service.supports_vision:
+                    content_parts: list[dict[str, Any]] = []
+                    pending_text: list[str] = []
+                    for i, (name, path) in enumerate(zip(names, paths), 1):
+                        if Path(path).suffix.lower() in self._IMAGE_EXTS:
+                            if pending_text:
+                                content_parts.append({"type": "text", "text": "\n\n".join(pending_text)})
+                                pending_text = []
+                            try:
+                                data_url = input_adapter_service.load_image_base64(path)
+                                content_parts.append({"type": "image_url", "image_url": {"url": data_url}})
+                                content_parts.append({"type": "text", "text": f"[Arquivo {i}: {name}]"})
+                            except Exception:
+                                pending_text.append(f"[Arquivo {i}: {name}]\n\n(Erro ao carregar imagem)")
+                        else:
+                            file_content = self._read_any_file(path)
+                            pending_text.append(f"[Arquivo {i}: {name}]\n\n{file_content}")
+                    if pending_text:
+                        content_parts.append({"type": "text", "text": "\n\n".join(pending_text)})
+                    user_text = message.content.strip()
+                    if user_text:
+                        content_parts.append({"type": "text", "text": user_text})
+                    messages.append({"role": "user", "content": content_parts})
+                else:
+                    prompt = self._build_multi_file_prompt(
+                        message.attachment_name or "[]",
+                        message.attachment_path,
+                        message.content,
+                    )
+                    messages.append({"role": "user", "content": prompt})
                 continue
 
             # Audio and plain text — use stored transcript / content
@@ -438,6 +475,7 @@ class ChatService:
             attachment_path=attachment_path,
         )
         conversation = storage_service.get_conversation(db, conversation.id)
+        assert conversation is not None
         stream = model_service.generate_reply_stream(self._build_messages(conversation, locale), enable_thinking)
         return conversation, stream
 

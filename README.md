@@ -21,7 +21,7 @@
 
 | Categoria | Descrição |
 |---|---|
-| **Chat multimodal** | Texto, imagens, áudio e arquivos em uma única conversa — envio simultâneo de múltiplos arquivos |
+| **Chat multimodal** | Texto, imagens, áudio e arquivos em uma única conversa — envio simultâneo de múltiplos arquivos; imagens em PNG, JPEG, WebP, GIF, SVG, HEIC/HEIF, AVIF, BMP, ICO e TIFF |
 | **Modelos Gemma** | Gemma 4 E2B, E4B e 26B-A4B via GGUF — troque de modelo a qualquer momento pela interface |
 | **Arquivos de texto** | 60+ extensões de código e dados (`.py`, `.ts`, `.json`, `.csv`, `.xml`, `.yaml`, `.sql`, `.rs`, `.go`…) lidos como texto |
 | **Documentos** | PDF, Word (`.docx`), Excel (`.xlsx`) e PowerPoint (`.pptx`) — extração de texto automática |
@@ -105,6 +105,8 @@ O modelo E4B é o padrão. Todos são executados pelo llama.cpp via GGUF, sem Py
 - **huggingface_hub** (download de modelos)
 - **httpx** (comunicação com llama-server)
 - **PyMuPDF** / **python-docx** / **openpyxl** / **python-pptx** (extração de texto de documentos)
+- **pillow-heif** (suporte a HEIC e AVIF no Pillow)
+- **svglib** + **reportlab** (renderização de SVG para análise visual)
 
 ### Inferência
 - **llama.cpp server** (binário pré-compilado, CUDA ou CPU)
@@ -192,6 +194,9 @@ Criado por [Rodolfo Motta Saraiva](https://rmsaraiva.com/) como projeto pessoal 
 | [React](https://github.com/facebook/react) | MIT |
 | [Hugging Face Hub](https://github.com/huggingface/huggingface_hub) | Apache 2.0 |
 | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) | MIT |
+| [pillow-heif](https://github.com/bigcat88/pillow_heif) | BSD-3-Clause |
+| [svglib](https://github.com/deeplook/svglib) | LGPL-3.0 |
+| [reportlab](https://www.reportlab.com/dev/opensource/) | BSD-3-Clause |
 
 ---
 

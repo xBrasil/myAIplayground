@@ -662,6 +662,10 @@ input {
   background: rgba(255, 255, 255, 0.06);
   font-size: 12px;
   color: var(--text-secondary);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Speak icon button */
@@ -1819,7 +1823,8 @@ input {
 /* Attachment pill wrapper */
 .attachment-pill-wrapper {
   position: relative;
-  display: inline-block;
+  display: block;
+  max-width: 100%;
 }
 
 /* Assistant actions row */

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """Pre-commit / pre-release validation for My AI Playground.
 
 Runs:
@@ -18,6 +19,12 @@ import py_compile
 import subprocess
 import sys
 from pathlib import Path
+
+# Ensure UTF-8 output even on Windows terminals with narrow encodings
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 FRONTEND_DIR = REPO_ROOT / "frontend"
