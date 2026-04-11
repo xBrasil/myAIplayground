@@ -358,6 +358,42 @@ input {
   height: 100vh;
   overflow: hidden;
   background: var(--bg-app);
+  position: relative;
+}
+
+/* Drag-and-drop overlay */
+.drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+  pointer-events: none;
+}
+
+.drop-overlay__content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 32px 48px;
+  border-radius: 16px;
+  border: 2px dashed var(--accent);
+  background: var(--bg-elevated);
+  color: var(--fg);
+  font-size: 1.1rem;
+  font-weight: 500;
+}
+
+.drop-overlay__content svg {
+  stroke: var(--accent);
+  stroke-width: 2;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .chat-header {
@@ -716,6 +752,127 @@ input {
   padding: 8px 0 4px;
 }
 
+/* Tool call display */
+.tool-calls-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.tool-call-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  animation: toolCallFadeIn 0.3s ease-out;
+}
+
+.tool-call-item--done {
+  opacity: 0.6;
+}
+
+.tool-call-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--accent);
+}
+
+.tool-call-item:not(.tool-call-item--done) .tool-call-icon::after {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--text-tertiary);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: toolCallSpin 0.8s linear infinite;
+}
+
+.tool-call-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 400px;
+}
+
+.tool-call-label a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.tool-call-label a:hover {
+  text-decoration: underline;
+}
+
+@keyframes toolCallFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes toolCallSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Persistent tool calls on finalized messages */
+.tool-calls-persisted {
+  margin-bottom: 8px;
+}
+
+.tool-calls-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+
+.tool-calls-toggle:hover {
+  background: var(--surface-hover);
+}
+
+.tool-calls-chevron {
+  transition: transform 0.2s;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.tool-calls-chevron--open {
+  transform: rotate(90deg);
+}
+
+.tool-calls-section--persisted {
+  margin-top: 4px;
+  padding-left: 18px;
+}
+
+.tool-calls-section--persisted .tool-call-item--done {
+  opacity: 0.8;
+}
+
 .typing-indicator span {
   width: 5px;
   height: 5px;
@@ -982,6 +1139,54 @@ input {
   display: flex;
   flex-direction: column;
   align-items: center;
+}
+
+/* Thinking indicator */
+.composer-thinking {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 768px;
+  padding: 0 4px 8px;
+  animation: thinkingFadeIn 0.3s ease-out;
+}
+
+.composer-thinking__dots {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.composer-thinking__dots span {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: thinkingPulse 1.4s ease-in-out infinite;
+}
+
+.composer-thinking__dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.composer-thinking__dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+.composer-thinking__label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  animation: thinkingPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes thinkingPulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+@keyframes thinkingFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .composer-file-name,
@@ -1491,6 +1696,94 @@ input {
 }
 
 .danger-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Local file access folder management */
+.settings-subsection {
+  margin-top: 8px;
+}
+
+.settings-subsection h5 {
+  font-size: 12px;
+  font-weight: 600;
+  margin: 0 0 6px;
+  color: var(--text-secondary);
+}
+
+.folder-entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  margin-bottom: 4px;
+}
+
+.folder-path {
+  flex: 1;
+  font-size: 12px;
+  word-break: break-all;
+  color: var(--text-primary);
+}
+
+.folder-remove-button {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  transition: color var(--transition), background var(--transition);
+}
+
+.folder-remove-button:hover {
+  color: #f07070;
+  background: rgba(220, 70, 70, 0.1);
+}
+
+.folder-add-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.folder-input {
+  flex: 1;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.folder-input::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.6;
+}
+
+.folder-add-button {
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+  transition: background var(--transition);
+}
+
+.folder-add-button:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.folder-add-button:disabled {
   opacity: 0.4;
   cursor: default;
 }
@@ -2253,6 +2546,14 @@ input {
 @keyframes indeterminate {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(400%); }
+}
+
+.progress-bar__fill--complete {
+  height: 100%;
+  width: 100%;
+  background: #4caf50;
+  border-radius: 2px;
+  transition: width 0.4s ease;
 }
 
 /* ── Model Selector Actions ────────────────────────────────── */

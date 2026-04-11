@@ -75,6 +75,7 @@ class HealthResponse(BaseModel):
     model_status: Literal["idle", "loading", "loaded", "error"]
     model_loaded: bool
     cuda_available: bool
+    context_size: int
     model_setup_status: str
     model_loading_enabled: bool
     available_models: list[ModelOption]
@@ -86,6 +87,9 @@ class ChatRequest(BaseModel):
     enable_thinking: bool = False
     locale: str = "en-US"
     custom_instructions: str = ""
+    enable_web_access: bool = False
+    enable_local_files: bool = False
+    allowed_folders: list[str] = Field(default_factory=list)
 
 
 class ChatResponse(BaseModel):

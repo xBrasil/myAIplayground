@@ -25,6 +25,11 @@
 | **Modelos Gemma** | Gemma 4 E2B, E4B e 26B-A4B via GGUF — troque de modelo a qualquer momento pela interface |
 | **Arquivos de texto** | 60+ extensões de código e dados (`.py`, `.ts`, `.json`, `.csv`, `.xml`, `.yaml`, `.sql`, `.rs`, `.go`…) lidos como texto |
 | **Documentos** | PDF, Word (`.docx`), Excel (`.xlsx`) e PowerPoint (`.pptx`) — extração de texto automática |
+| **Pesquisa na web** | Busca via DuckDuckGo e leitura de páginas — o modelo cita fontes com referências numeradas `[1]`, `[2]`… |
+| **Acesso a arquivos locais** | O modelo pode listar e ler arquivos de pastas permitidas pelo usuário (somente leitura) |
+| **Visão de imagens locais** | Em modelos com visão (Gemma 4 E2B/E4B), o modelo pode ver e descrever imagens de pastas permitidas |
+| **Tool calling** | O modelo pode chamar ferramentas (web, filesystem, visão) automaticamente; chamadas ficam salvas no histórico e são exibidas de forma auditável |
+| **Instruções personalizadas** | System prompt customizável pelo usuário nos Ajustes — aplicado a todas as conversas |
 | **Inferência local** | llama.cpp server com CUDA, flash attention, contexto por modelo (128K–256K tokens) |
 | **Streaming** | Respostas exibidas token a token em tempo real |
 | **Auto-continuação** | Respostas longas continuam automaticamente quando o limite de tokens é atingido (até 5 rodadas) |
@@ -33,7 +38,7 @@
 | **Leitura de respostas** | Text-to-Speech via Web Speech API com preferência para vozes Microsoft |
 | **Markdown rico** | Renderização com GFM, blocos de código com syntax highlight, matemática KaTeX |
 | **Edição de mensagens** | Editar mensagens enviadas e regenerar respostas |
-| **i18n** | Português (Brasil) e English — detecta automaticamente o idioma do navegador |
+| **i18n** | Português (BR), English (US), Español e Français — detecta automaticamente o idioma do navegador |
 | **Tema escuro** | UI minimalista e responsiva com design dark-mode |
 | **Janela deslizante** | Gestão automática de contexto: truncamento de conteúdo longo, descarte de mensagens antigas e retry em estouro |
 | **Privacidade total** | Conversas e arquivos ficam em `data/` no seu disco. Nada é enviado para a nuvem. |
@@ -104,6 +109,8 @@ O modelo E4B é o padrão. Todos são executados pelo llama.cpp via GGUF, sem Py
 - **faster-whisper** (transcrição de áudio)
 - **huggingface_hub** (download de modelos)
 - **httpx** (comunicação com llama-server)
+- **duckduckgo-search** (pesquisa web via DuckDuckGo)
+- **beautifulsoup4** (extração de conteúdo de páginas web)
 - **PyMuPDF** / **python-docx** / **openpyxl** / **python-pptx** (extração de texto de documentos)
 - **pillow-heif** (suporte a HEIC e AVIF no Pillow)
 - **svglib** + **reportlab** (renderização de SVG para análise visual)
@@ -122,21 +129,21 @@ myAIplayground/
 │   └── src/
 │       ├── components/   # Sidebar, ChatLayout, Composer, MessageList...
 │       ├── lib/          # API client, preferências, speech, i18n
-│       └── locales/      # pt-BR.json, en-US.json
+│       └── locales/      # pt-BR.json, en-US.json, es-ES.json, fr-FR.json
 ├── backend/           # FastAPI (API + serviços)
 │   └── app/
 │       ├── api/routes/   # chat, conversations, health, models
 │       ├── core/         # config (pydantic-settings)
-│       └── services/     # chat, model, storage, input_adapter, document
+│       └── services/     # chat, model, storage, input_adapter, document, web, filesystem
 ├── data/              # Dados locais (ignorados pelo git)
 │   ├── app.db            # SQLite com conversas e mensagens
 │   ├── uploads/          # Arquivos enviados nas conversas
 │   ├── model-cache/      # GGUF e mmproj baixados do HF
 │   └── llama-server/     # Binário do llama-server
 ├── docs/              # Documentação adicional
-├── scripts/           # Scripts utilitários (release.py)
-├── install.cmd/.ps1   # Instalação automatizada
-├── run.cmd/.ps1       # Launcher
+├── scripts/           # Scripts utilitários (install, run, release, i18n, test)
+├── install.cmd        # Instalação automatizada (entrada)
+├── run.cmd            # Launcher (entrada)
 └── README.md
 ```
 
@@ -163,6 +170,8 @@ As variáveis de ambiente ficam em `backend/.env` (criado automaticamente pelo i
 - As conversas são salvas apenas em `data/app.db` (local).
 - Arquivos enviados ficam em `data/uploads/` (local).
 - O download inicial dos modelos vem do Hugging Face. Após isso, tudo roda offline.
+- **Pesquisa web**: quando ativada nos Ajustes, o modelo pode fazer buscas no DuckDuckGo e acessar páginas web. Essas requisições saem da sua máquina. Desative nos Ajustes para modo totalmente offline.
+- **Acesso a arquivos locais**: quando ativado nos Ajustes, o modelo pode ler arquivos **somente** das pastas que você permitiu explicitamente. Acesso é READ-ONLY e protegido contra travessia de diretório.
 - A funcionalidade de Text-to-Speech usa a API `speechSynthesis` do navegador. O comportamento (local vs. online) depende da voz selecionada e da configuração do sistema.
 
 ---
@@ -194,6 +203,8 @@ Criado por [Rodolfo Motta Saraiva](https://rmsaraiva.com/) como projeto pessoal 
 | [React](https://github.com/facebook/react) | MIT |
 | [Hugging Face Hub](https://github.com/huggingface/huggingface_hub) | Apache 2.0 |
 | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) | MIT |
+| [duckduckgo-search](https://github.com/deedy5/duckduckgo_search) | MIT |
+| [beautifulsoup4](https://www.crummy.com/software/BeautifulSoup/) | MIT |
 | [pillow-heif](https://github.com/bigcat88/pillow_heif) | BSD-3-Clause |
 | [svglib](https://github.com/deeplook/svglib) | LGPL-3.0 |
 | [reportlab](https://www.reportlab.com/dev/opensource/) | BSD-3-Clause |

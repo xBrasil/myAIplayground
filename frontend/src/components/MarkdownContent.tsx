@@ -72,6 +72,9 @@ export default function MarkdownContent({ content }: MarkdownContentProps) {
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[rehypeKatex]}
         components={{
+          a({ href, children, ...props }) {
+            return <a href={href} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>;
+          },
           pre({ children }) {
             // Extract code element from pre
             if (children && typeof children === 'object' && 'type' in (children as any)) {

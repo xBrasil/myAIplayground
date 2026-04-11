@@ -7,15 +7,20 @@ type RecordingPhase = 'idle' | 'recording' | 'paused';
 
 interface ComposerProps {
   busy: boolean;
+  modelLoading: boolean;
   enterToSend: boolean;
   activeModelKey?: ModelKey;
   onSendText: (text: string) => Promise<void>;
   onSendFile: (text: string, file: File) => Promise<void>;
   onSendFiles: (text: string, files: File[]) => Promise<void>;
   onStop: () => void;
+  droppedFiles?: File[];
+  onDroppedFilesConsumed?: () => void;
+  restoreComposer?: { text: string; files: File[] } | null;
+  onRestoreComposerConsumed?: () => void;
 }
 
-export default function Composer({ busy, enterToSend, activeModelKey, onSendText, onSendFile, onSendFiles, onStop }: ComposerProps) {
+export default function Composer({ busy, modelLoading, enterToSend, activeModelKey, onSendText, onSendFile, onSendFiles, onStop, droppedFiles, onDroppedFilesConsumed, restoreComposer, onRestoreComposerConsumed }: ComposerProps) {
   const { t } = useI18n();
   const [text, setText] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -51,6 +56,25 @@ export default function Composer({ busy, enterToSend, activeModelKey, onSendText
   useEffect(() => {
     autoResize();
   }, [text, autoResize]);
+
+  // Merge externally dropped files into selectedFiles
+  useEffect(() => {
+    if (droppedFiles && droppedFiles.length > 0) {
+      setSelectedFiles((prev) => [...prev, ...droppedFiles]);
+      onDroppedFilesConsumed?.();
+    }
+  }, [droppedFiles, onDroppedFilesConsumed]);
+
+  // Restore composer state on send error
+  useEffect(() => {
+    if (restoreComposer) {
+      setText(restoreComposer.text);
+      if (restoreComposer.files.length > 0) {
+        setSelectedFiles(restoreComposer.files);
+      }
+      onRestoreComposerConsumed?.();
+    }
+  }, [restoreComposer, onRestoreComposerConsumed]);
 
   useEffect(() => {
     return () => {
@@ -344,12 +368,24 @@ export default function Composer({ busy, enterToSend, activeModelKey, onSendText
 
   const isRecording = recordingPhase !== 'idle';
   const hasAudio = recordedAudioFile !== null;
+  const generating = busy && !modelLoading;
   const canSend = !busy && (text.trim().length > 0 || selectedFiles.length > 0 || hasAudio);
   const maxSec = getMaxRecordingSeconds();
   const timerDisplay = `${Math.floor(recordingSeconds / 60)}:${String(recordingSeconds % 60).padStart(2, '0')} / ${Math.floor(maxSec / 60)}:${String(maxSec % 60).padStart(2, '0')}`;
 
   return (
     <section className="composer">
+      {/* Thinking indicator */}
+      {generating && (
+        <div className="composer-thinking">
+          <div className="composer-thinking__dots">
+            <span />
+            <span />
+            <span />
+          </div>
+          <span className="composer-thinking__label">{t('composer.thinking')}</span>
+        </div>
+      )}
       {/* Audio ready pill */}
       {hasAudio && !isRecording && (
         <div className="composer-audio-pill">
@@ -549,7 +585,7 @@ export default function Composer({ busy, enterToSend, activeModelKey, onSendText
             )}
 
             {/* Send / Stop */}
-            {busy ? (
+            {generating ? (
               <button
                 type="button"
                 className="composer-icon-btn composer-icon-btn--stop"

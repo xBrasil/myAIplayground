@@ -19,9 +19,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # Patterns to INCLUDE (relative to repo root)
 INCLUDE = [
     "install.cmd",
-    "install.ps1",
     "run.cmd",
-    "run.ps1",
     "README.md",
     "LICENSE",
     "LICENÇA",
@@ -29,6 +27,8 @@ INCLUDE = [
     "backend/",
     "frontend/",
     "scripts/i18n.ps1",
+    "scripts/install.ps1",
+    "scripts/run.ps1",
 ]
 
 # Patterns to EXCLUDE (checked against relative path parts)

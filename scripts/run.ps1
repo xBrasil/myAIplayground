@@ -8,7 +8,7 @@ Set-StrictMode -Version Latest
 $Host.UI.RawUI.WindowTitle = "My AI Playground"
 
 # --- i18n ---
-$repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$repoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 . (Join-Path $repoRoot "scripts\i18n.ps1")
 Initialize-I18n -RepoRoot $repoRoot
 

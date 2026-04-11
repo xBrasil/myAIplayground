@@ -7,7 +7,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -38,9 +38,9 @@ def _estimate_content_tokens(kind: str, file_path: str, raw_bytes: bytes) -> int
 
 
 def _check_upload_budget(total_tokens: int) -> None:
-    """Raise 413 if estimated tokens exceed 80% of context budget."""
+    """Raise 413 if estimated tokens exceed 90% of context budget."""
     ctx = model_service.context_size
-    budget = int(ctx * 0.8)
+    budget = int(ctx * 0.9)
     if total_tokens > budget:
         raise HTTPException(
             status_code=413,
@@ -62,6 +62,27 @@ def _event_line(payload: dict) -> str:
     return json.dumps(payload, ensure_ascii=False) + "\n"
 
 
+def _iter_stream(stream, chunks: list[str], tool_calls_out: list[dict]):
+    """Iterate a model stream, yielding NDJSON event lines for deltas and tool events.
+
+    tool_calls_out is populated as a side-effect so callers can include the
+    accumulated list in the ``done`` event.
+    """
+    for chunk in stream:
+        if isinstance(chunk, dict):
+            if chunk.get("type") == "tool_start":
+                tool_calls_out.append({"name": chunk["name"], "arguments": chunk["arguments"], "done": False})
+            elif chunk.get("type") == "tool_done":
+                for tc in tool_calls_out:
+                    if tc["name"] == chunk["name"] and not tc["done"]:
+                        tc["done"] = True
+                        break
+            yield _event_line(chunk)
+        else:
+            chunks.append(chunk)
+            yield _event_line({"type": "delta", "delta": chunk})
+
+
 def _serialize_conversation(current_conversation) -> dict:
     return {
         "id": current_conversation.id,
@@ -77,6 +98,7 @@ def _serialize_conversation(current_conversation) -> dict:
                 "model_key": message.model_key,
                 "attachment_name": message.attachment_name,
                 "attachment_path": message.attachment_path,
+                "tool_calls": json.loads(message.tool_calls_json) if message.tool_calls_json else None,
                 "created_at": _local_iso(message.created_at),
             }
             for message in current_conversation.messages
@@ -93,6 +115,7 @@ def _serialize_message(message) -> dict:
         "model_key": message.model_key,
         "attachment_name": message.attachment_name,
         "attachment_path": message.attachment_path,
+        "tool_calls": json.loads(message.tool_calls_json) if message.tool_calls_json else None,
         "created_at": _local_iso(message.created_at),
     }
 
@@ -106,6 +129,9 @@ async def send_text_message(payload: ChatRequest, db: Session = Depends(get_db))
         enable_thinking=payload.enable_thinking,
         locale=payload.locale,
         custom_instructions=payload.custom_instructions,
+        enable_web_access=payload.enable_web_access,
+        enable_local_files=payload.enable_local_files,
+        allowed_folders=payload.allowed_folders,
     )
     return ChatResponse(conversation=conversation, reply=reply, model_loaded=chat_service.model_loaded)
 
@@ -119,21 +145,23 @@ async def stream_text_message(payload: ChatRequest, db: Session = Depends(get_db
         enable_thinking=payload.enable_thinking,
         locale=payload.locale,
         custom_instructions=payload.custom_instructions,
+        enable_web_access=payload.enable_web_access,
+        enable_local_files=payload.enable_local_files,
+        allowed_folders=payload.allowed_folders,
     )
 
     def event_stream():
         yield _event_line({"type": "conversation", "conversation": _serialize_conversation(conversation)})
 
         chunks: list[str] = []
+        tool_calls_out: list[dict] = []
         try:
-            for chunk in stream:
-                chunks.append(chunk)
-                yield _event_line({"type": "delta", "delta": chunk})
+            yield from _iter_stream(stream, chunks, tool_calls_out)
         except GeneratorExit:
             return
 
         final_text = "".join(chunks).strip()
-        final_conversation, reply = chat_service.finalize_streamed_reply(db, conversation.id, final_text)
+        final_conversation, reply = chat_service.finalize_streamed_reply(db, conversation.id, final_text, tool_calls=tool_calls_out)
 
         user_msgs = [m for m in final_conversation.messages if m.role == "user"]
         if len(user_msgs) == 1:
@@ -147,6 +175,7 @@ async def stream_text_message(payload: ChatRequest, db: Session = Depends(get_db
                 "conversation": _serialize_conversation(final_conversation),
                 "reply": _serialize_message(reply),
                 "model_loaded": chat_service.model_loaded,
+                "tool_calls": tool_calls_out,
             }
         )
 
@@ -160,9 +189,13 @@ async def send_upload_message(
     enable_thinking: bool = Form(default=False),
     locale: str = Form(default="en-US"),
     custom_instructions: str = Form(default=""),
+    enable_web_access: bool = Form(default=False),
+    enable_local_files: bool = Form(default=False),
+    allowed_folders: str = Form(default=""),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ) -> ChatResponse:
+    parsed_folders = json.loads(allowed_folders) if allowed_folders else []
     normalized = await input_adapter_service.normalize_upload(file)
     if normalized.kind == "unsupported":
         raise HTTPException(status_code=400, detail=normalized.summary)
@@ -181,6 +214,9 @@ async def send_upload_message(
         enable_thinking=enable_thinking,
         locale=locale,
         custom_instructions=custom_instructions,
+        enable_web_access=enable_web_access,
+        enable_local_files=enable_local_files,
+        allowed_folders=parsed_folders,
     )
     return ChatResponse(conversation=conversation, reply=reply, model_loaded=chat_service.model_loaded)
 
@@ -192,9 +228,13 @@ async def stream_upload_message(
     enable_thinking: bool = Form(default=False),
     locale: str = Form(default="en-US"),
     custom_instructions: str = Form(default=""),
+    enable_web_access: bool = Form(default=False),
+    enable_local_files: bool = Form(default=False),
+    allowed_folders: str = Form(default=""),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
+    parsed_folders = json.loads(allowed_folders) if allowed_folders else []
     normalized = await input_adapter_service.normalize_upload(file)
     if normalized.kind == "unsupported":
         raise HTTPException(status_code=400, detail=normalized.summary)
@@ -213,21 +253,23 @@ async def stream_upload_message(
         enable_thinking=enable_thinking,
         locale=locale,
         custom_instructions=custom_instructions,
+        enable_web_access=enable_web_access,
+        enable_local_files=enable_local_files,
+        allowed_folders=parsed_folders,
     )
 
     def event_stream():
         yield _event_line({"type": "conversation", "conversation": _serialize_conversation(conversation)})
 
         chunks: list[str] = []
+        tool_calls_out: list[dict] = []
         try:
-            for chunk in stream:
-                chunks.append(chunk)
-                yield _event_line({"type": "delta", "delta": chunk})
+            yield from _iter_stream(stream, chunks, tool_calls_out)
         except GeneratorExit:
             return
 
         final_text = "".join(chunks).strip()
-        final_conversation, reply = chat_service.finalize_streamed_reply(db, conversation.id, final_text)
+        final_conversation, reply = chat_service.finalize_streamed_reply(db, conversation.id, final_text, tool_calls=tool_calls_out)
 
         user_msgs = [m for m in final_conversation.messages if m.role == "user"]
         if len(user_msgs) == 1:
@@ -241,6 +283,7 @@ async def stream_upload_message(
                 "conversation": _serialize_conversation(final_conversation),
                 "reply": _serialize_message(reply),
                 "model_loaded": chat_service.model_loaded,
+                "tool_calls": tool_calls_out,
             }
         )
 
@@ -254,9 +297,13 @@ async def stream_multi_upload_message(
     enable_thinking: bool = Form(default=False),
     locale: str = Form(default="en-US"),
     custom_instructions: str = Form(default=""),
+    enable_web_access: bool = Form(default=False),
+    enable_local_files: bool = Form(default=False),
+    allowed_folders: str = Form(default=""),
     files: list[UploadFile] = File(...),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
+    parsed_folders = json.loads(allowed_folders) if allowed_folders else []
     if not files:
         raise HTTPException(status_code=400, detail="Nenhum arquivo enviado.")
 
@@ -296,21 +343,23 @@ async def stream_multi_upload_message(
         enable_thinking=enable_thinking,
         locale=locale,
         custom_instructions=custom_instructions,
+        enable_web_access=enable_web_access,
+        enable_local_files=enable_local_files,
+        allowed_folders=parsed_folders,
     )
 
     def event_stream():
         yield _event_line({"type": "conversation", "conversation": _serialize_conversation(conversation)})
 
         chunks: list[str] = []
+        tool_calls_out: list[dict] = []
         try:
-            for chunk in stream:
-                chunks.append(chunk)
-                yield _event_line({"type": "delta", "delta": chunk})
+            yield from _iter_stream(stream, chunks, tool_calls_out)
         except GeneratorExit:
             return
 
         final_text = "".join(chunks).strip()
-        final_conversation, reply = chat_service.finalize_streamed_reply(db, conversation.id, final_text)
+        final_conversation, reply = chat_service.finalize_streamed_reply(db, conversation.id, final_text, tool_calls=tool_calls_out)
 
         user_msgs = [m for m in final_conversation.messages if m.role == "user"]
         if len(user_msgs) == 1:
@@ -324,6 +373,7 @@ async def stream_multi_upload_message(
                 "conversation": _serialize_conversation(final_conversation),
                 "reply": _serialize_message(reply),
                 "model_loaded": chat_service.model_loaded,
+                "tool_calls": tool_calls_out,
             }
         )
 
@@ -408,6 +458,9 @@ class EditLastRequest(BaseModel):
     message: str
     locale: str = "en-US"
     custom_instructions: str = ""
+    enable_web_access: bool = False
+    enable_local_files: bool = False
+    allowed_folders: list[str] = Field(default_factory=list)
 
 
 @router.post("/{conversation_id}/edit-last/stream")
@@ -432,24 +485,35 @@ async def edit_last_message_stream(
     storage_service.update_message_content(db, last_user.id, payload.message)
 
     conversation = storage_service.get_conversation(db, conversation_id)
-    stream = model_service.generate_reply_stream(chat_service._build_messages(conversation, locale=payload.locale, custom_instructions=payload.custom_instructions), enable_thinking=False)
+    tools = chat_service._get_tools(payload.enable_web_access, payload.enable_local_files, payload.allowed_folders)
+    tool_executor = chat_service._make_tool_executor(payload.enable_web_access, payload.enable_local_files, payload.allowed_folders)
+    stream = model_service.generate_reply_stream(
+        chat_service._build_messages(
+            conversation, locale=payload.locale, custom_instructions=payload.custom_instructions,
+            enable_web_access=payload.enable_web_access, enable_local_files=payload.enable_local_files,
+            allowed_folders=payload.allowed_folders,
+        ),
+        enable_thinking=False,
+        tools=tools,
+        tool_executor=tool_executor,
+    )
 
     def event_stream():
         yield _event_line({"type": "conversation", "conversation": _serialize_conversation(conversation)})
         chunks: list[str] = []
+        tool_calls_out: list[dict] = []
         try:
-            for chunk in stream:
-                chunks.append(chunk)
-                yield _event_line({"type": "delta", "delta": chunk})
+            yield from _iter_stream(stream, chunks, tool_calls_out)
         except GeneratorExit:
             return
         final_text = "".join(chunks).strip()
-        final_conversation, reply = chat_service.finalize_streamed_reply(db, conversation.id, final_text)
+        final_conversation, reply = chat_service.finalize_streamed_reply(db, conversation.id, final_text, tool_calls=tool_calls_out)
         yield _event_line({
             "type": "done",
             "conversation": _serialize_conversation(final_conversation),
             "reply": _serialize_message(reply),
             "model_loaded": chat_service.model_loaded,
+            "tool_calls": tool_calls_out,
         })
 
     return StreamingResponse(event_stream(), media_type="application/x-ndjson")
@@ -458,6 +522,9 @@ async def edit_last_message_stream(
 class RegenerateRequest(BaseModel):
     locale: str = "en-US"
     custom_instructions: str = ""
+    enable_web_access: bool = False
+    enable_local_files: bool = False
+    allowed_folders: list[str] = Field(default_factory=list)
 
 
 @router.post("/{conversation_id}/regenerate/stream")
@@ -477,24 +544,35 @@ async def regenerate_last_stream(
     storage_service.delete_message(db, last_assistant.id)
 
     conversation = storage_service.get_conversation(db, conversation_id)
-    stream = model_service.generate_reply_stream(chat_service._build_messages(conversation, locale=payload.locale, custom_instructions=payload.custom_instructions), enable_thinking=False)
+    tools = chat_service._get_tools(payload.enable_web_access, payload.enable_local_files, payload.allowed_folders)
+    tool_executor = chat_service._make_tool_executor(payload.enable_web_access, payload.enable_local_files, payload.allowed_folders)
+    stream = model_service.generate_reply_stream(
+        chat_service._build_messages(
+            conversation, locale=payload.locale, custom_instructions=payload.custom_instructions,
+            enable_web_access=payload.enable_web_access, enable_local_files=payload.enable_local_files,
+            allowed_folders=payload.allowed_folders,
+        ),
+        enable_thinking=False,
+        tools=tools,
+        tool_executor=tool_executor,
+    )
 
     def event_stream():
         yield _event_line({"type": "conversation", "conversation": _serialize_conversation(conversation)})
         chunks: list[str] = []
+        tool_calls_out: list[dict] = []
         try:
-            for chunk in stream:
-                chunks.append(chunk)
-                yield _event_line({"type": "delta", "delta": chunk})
+            yield from _iter_stream(stream, chunks, tool_calls_out)
         except GeneratorExit:
             return
         final_text = "".join(chunks).strip()
-        final_conversation, reply = chat_service.finalize_streamed_reply(db, conversation.id, final_text)
+        final_conversation, reply = chat_service.finalize_streamed_reply(db, conversation.id, final_text, tool_calls=tool_calls_out)
         yield _event_line({
             "type": "done",
             "conversation": _serialize_conversation(final_conversation),
             "reply": _serialize_message(reply),
             "model_loaded": chat_service.model_loaded,
+            "tool_calls": tool_calls_out,
         })
 
     return StreamingResponse(event_stream(), media_type="application/x-ndjson")

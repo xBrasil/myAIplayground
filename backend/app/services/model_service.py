@@ -561,29 +561,43 @@ class ModelService:
 
     _MAX_CONTINUATIONS = 5  # safety cap for auto-continue loops
     _MAX_CONTEXT_RETRIES = 3  # max times to retry after context overflow
+    _MAX_TOOL_ROUNDS = 3  # max tool-calling rounds per generation
 
-    def generate_reply_stream(self, messages: list[dict[str, Any]], enable_thinking: bool = False) -> Iterator[str]:
+    def generate_reply_stream(
+        self,
+        messages: list[dict[str, Any]],
+        enable_thinking: bool = False,
+        tools: list[dict[str, Any]] | None = None,
+        tool_executor: Any | None = None,
+    ) -> Iterator[str | dict[str, Any]]:
         if not self.is_loaded:
             yield f"Setup pendente do modelo: {self.setup_status}"
             return
 
         prepared = self._prepare_messages(messages, enable_thinking)
         accumulated: list[str] = []
+        tool_rounds = 0
 
-        for _round in range(1 + self._MAX_CONTINUATIONS):
+        for _round in range(1 + self._MAX_CONTINUATIONS + self._MAX_TOOL_ROUNDS):
             finish_reason: str | None = None
+            tool_calls_data: list[dict[str, Any]] = []
+
+            request_body: dict[str, Any] = {
+                "messages": prepared,
+                "max_tokens": 4096,
+                "temperature": 1.0,
+                "top_p": 0.95,
+                "top_k": 64,
+                "stream": True,
+            }
+            if tools and tool_executor:
+                request_body["tools"] = tools
+
             try:
                 with self._client.stream(
                     "POST",
                     f"{self._server_url}/v1/chat/completions",
-                    json={
-                        "messages": prepared,
-                        "max_tokens": 4096,
-                        "temperature": 1.0,
-                        "top_p": 0.95,
-                        "top_k": 64,
-                        "stream": True,
-                    },
+                    json=request_body,
                 ) as response:
                     response.raise_for_status()
                     for line in response.iter_lines():
@@ -605,9 +619,21 @@ class ModelService:
                                 if cleaned:
                                     accumulated.append(cleaned)
                                     yield cleaned
+                            # Accumulate tool call deltas
+                            if "tool_calls" in delta:
+                                for tc in delta["tool_calls"]:
+                                    idx = tc.get("index", 0)
+                                    while len(tool_calls_data) <= idx:
+                                        tool_calls_data.append({"id": "", "function": {"name": "", "arguments": ""}})
+                                    if "id" in tc and tc["id"]:
+                                        tool_calls_data[idx]["id"] = tc["id"]
+                                    fn = tc.get("function", {})
+                                    if "name" in fn and fn["name"]:
+                                        tool_calls_data[idx]["function"]["name"] = fn["name"]
+                                    if "arguments" in fn:
+                                        tool_calls_data[idx]["function"]["arguments"] += fn["arguments"]
             except Exception as exc:
                 if self._is_context_overflow(exc) and not accumulated:
-                    # No output yet — try dropping oldest messages
                     reduced = self._drop_oldest_non_system(prepared)
                     if reduced is not None:
                         logger.warning(
@@ -619,6 +645,62 @@ class ModelService:
                 yield f"Erro durante geração: {self._extract_server_error(exc)}"
                 return
 
+            # Handle tool calls
+            if finish_reason == "tool_calls" and tool_calls_data and tool_executor and tool_rounds < self._MAX_TOOL_ROUNDS:
+                tool_rounds += 1
+                # Add assistant message with tool calls
+                assistant_msg: dict[str, Any] = {"role": "assistant", "content": "".join(accumulated)}
+                tc_list = []
+                for tc in tool_calls_data:
+                    tc_list.append({
+                        "id": tc["id"],
+                        "type": "function",
+                        "function": {
+                            "name": tc["function"]["name"],
+                            "arguments": tc["function"]["arguments"],
+                        },
+                    })
+                assistant_msg["tool_calls"] = tc_list
+                prepared = prepared + [assistant_msg]
+
+                # Execute each tool call and add results
+                for tc in tool_calls_data:
+                    fn_name = tc["function"]["name"]
+                    try:
+                        fn_args = json.loads(tc["function"]["arguments"])
+                    except json.JSONDecodeError:
+                        fn_args = {}
+                    logger.info("Executando tool call: %s(%s)", fn_name, fn_args)
+                    yield {"type": "tool_start", "name": fn_name, "arguments": fn_args}
+                    tool_result = tool_executor(fn_name, fn_args)
+                    yield {"type": "tool_done", "name": fn_name, "arguments": fn_args}
+
+                    # Handle multimodal tool results (e.g., view_image)
+                    if isinstance(tool_result, dict) and tool_result.get("__multimodal__"):
+                        # Tool message must be text-only for llama-server compatibility.
+                        prepared.append({
+                            "role": "tool",
+                            "tool_call_id": tc["id"],
+                            "content": tool_result["text"],
+                        })
+                        # Inject image as a user message so the vision model can see it.
+                        prepared.append({
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": tool_result["text"]},
+                                {"type": "image_url", "image_url": {"url": tool_result["image_url"]}},
+                            ],
+                        })
+                    else:
+                        prepared.append({
+                            "role": "tool",
+                            "tool_call_id": tc["id"],
+                            "content": tool_result,
+                        })
+
+                accumulated = []
+                continue
+
             # Auto-continue if generation was truncated by max_tokens
             if finish_reason == "length":
                 text_so_far = "".join(accumulated)
@@ -627,33 +709,73 @@ class ModelService:
                 continue
             break
 
-    def generate_reply(self, messages: list[dict[str, Any]], enable_thinking: bool = False) -> str:
+    def generate_reply(
+        self,
+        messages: list[dict[str, Any]],
+        enable_thinking: bool = False,
+        tools: list[dict[str, Any]] | None = None,
+        tool_executor: Any | None = None,
+    ) -> str:
         if not self.is_loaded:
             return f"Setup pendente do modelo: {self.setup_status}"
 
         prepared = self._prepare_messages(messages, enable_thinking)
         parts: list[str] = []
+        tool_rounds = 0
 
-        for _round in range(1 + self._MAX_CONTINUATIONS):
+        for _round in range(1 + self._MAX_CONTINUATIONS + self._MAX_TOOL_ROUNDS):
+            request_body: dict[str, Any] = {
+                "messages": prepared,
+                "max_tokens": 4096,
+                "temperature": 1.0,
+                "top_p": 0.95,
+                "top_k": 64,
+                "stream": False,
+            }
+            if tools and tool_executor:
+                request_body["tools"] = tools
+
             try:
                 response = self._client.post(
                     f"{self._server_url}/v1/chat/completions",
-                    json={
-                        "messages": prepared,
-                        "max_tokens": 4096,
-                        "temperature": 1.0,
-                        "top_p": 0.95,
-                        "top_k": 64,
-                        "stream": False,
-                    },
+                    json=request_body,
                 )
                 response.raise_for_status()
                 data = response.json()
                 choices = data.get("choices", [])
                 if not choices:
                     break
-                content = choices[0].get("message", {}).get("content", "")
-                finish_reason = choices[0].get("finish_reason")
+
+                choice = choices[0]
+                message_data = choice.get("message", {})
+                content = message_data.get("content", "")
+                finish_reason = choice.get("finish_reason")
+
+                # Handle tool calls
+                if finish_reason == "tool_calls" and tool_executor and tool_rounds < self._MAX_TOOL_ROUNDS:
+                    tool_calls = message_data.get("tool_calls", [])
+                    if tool_calls:
+                        tool_rounds += 1
+                        cleaned = self._clean_text(content) if content else ""
+                        if cleaned:
+                            parts.append(cleaned)
+                        prepared = prepared + [message_data]
+                        for tc in tool_calls:
+                            fn = tc.get("function", {})
+                            fn_name = fn.get("name", "")
+                            try:
+                                fn_args = json.loads(fn.get("arguments", "{}"))
+                            except json.JSONDecodeError:
+                                fn_args = {}
+                            logger.info("Executando tool call (sync): %s(%s)", fn_name, fn_args)
+                            tool_result = tool_executor(fn_name, fn_args)
+                            prepared.append({
+                                "role": "tool",
+                                "tool_call_id": tc.get("id", ""),
+                                "content": tool_result,
+                            })
+                        continue
+
                 cleaned = self._clean_text(content)
                 parts.append(cleaned)
 

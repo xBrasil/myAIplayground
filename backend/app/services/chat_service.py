@@ -14,6 +14,13 @@ from app.services.model_service import model_service
 from app.services.storage_service import storage_service
 from app.services.whisper_service import whisper_service
 from app.services.document_service import extract_text as extract_document_text
+from app.services.web_service import FETCH_URL_TOOL, WEB_SEARCH_TOOL, execute_tool_call
+from app.services.filesystem_service import (
+    LIST_DIRECTORY_TOOL,
+    READ_FILE_TOOL,
+    VIEW_IMAGE_TOOL,
+    execute_filesystem_tool,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -156,7 +163,14 @@ class ChatService:
             return transcript or trimmed
         return trimmed
 
-    def _build_system_prompt(self, locale: str = "en-US", custom_instructions: str = "") -> str:
+    def _build_system_prompt(
+        self,
+        locale: str = "en-US",
+        custom_instructions: str = "",
+        enable_web_access: bool = False,
+        enable_local_files: bool = False,
+        allowed_folders: list[str] | None = None,
+    ) -> str:
         base = self._settings.default_system_prompt
         today = date.today().isoformat()
         lang = self.LANG_NAMES.get(locale, "English")
@@ -167,13 +181,63 @@ class ChatService:
             f"Your knowledge cut-off date: January 2025. Information after this date may not be in your training data.\n"
             f"User's preferred language: {lang}. Always respond in {lang} unless the user explicitly requests a different language."
         )
+        if model_service.supports_vision:
+            prompt += (
+                "\nYou are a vision-capable model. When the user sends an image in the conversation, "
+                "you can already see it directly — just describe or answer about it without using any tool. "
+                "The view_image tool is ONLY for viewing images stored on the user's local file system, "
+                "NOT for images the user has uploaded in the chat."
+            )
+        if enable_web_access:
+            prompt += (
+                "\n\n[Web access]\n"
+                "You have access to web tools:\n"
+                "- web_search: Search the web for information. Returns a list of results with titles, URLs, and snippets.\n"
+                "- fetch_url: Fetch the full content of a specific web page.\n"
+                "Use web_search when you need to find information or the user asks you to search for something. "
+                "Use fetch_url to read specific pages you already know the URL of, or to read pages from search results. "
+                "If the user explicitly asks you to search or look something up, ALWAYS use web_search "
+                "even if you think you already know the answer — the user expects fresh, verified results.\n"
+                "IMPORTANT — citing sources: Every piece of information you get from the web MUST be cited "
+                "using inline numbered markdown links. The EXACT syntax is: [N](URL) where N is a sequential "
+                "number and URL is the full page URL. Example: 'The population grew rapidly [1](https://example.com/article)'. "
+                "Rules: use each number only once; do NOT repeat the same citation; do NOT group citations "
+                "at the end; do NOT write a Sources/References section; do NOT write bare numbers like [1] "
+                "without the (URL) part — every citation must be a clickable markdown link."
+            )
+        if enable_local_files and allowed_folders:
+            folders_str = ", ".join(allowed_folders)
+            prompt += (
+                "\n\n[Local file access]\n"
+                "You have access to list_directory and read_file tools that can list and read files "
+                "on the user's local file system. You can ONLY access files within these allowed folders: "
+                f"{folders_str}. "
+                "Use list_directory to explore folder contents before reading specific files. "
+                "You have READ-ONLY access — you cannot create, modify, or delete any files."
+            )
+            if model_service.supports_vision:
+                prompt += (
+                    " You also have a view_image tool that lets you see and describe image files "
+                    "(PNG, JPG, GIF, BMP, WEBP). When the user asks about photos or images in their "
+                    "files, use view_image to look at them."
+                )
         if custom_instructions.strip():
             prompt += f"\n\n[User's custom instructions]\n{custom_instructions.strip()}"
         return prompt
 
-    def _build_messages(self, conversation: Conversation, locale: str = "en-US", custom_instructions: str = "") -> list[dict[str, Any]]:
+    def _build_messages(
+        self,
+        conversation: Conversation,
+        locale: str = "en-US",
+        custom_instructions: str = "",
+        enable_web_access: bool = False,
+        enable_local_files: bool = False,
+        allowed_folders: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
         messages: list[dict[str, Any]] = [
-            {"role": "system", "content": self._build_system_prompt(locale, custom_instructions)}
+            {"role": "system", "content": self._build_system_prompt(
+                locale, custom_instructions, enable_web_access, enable_local_files, allowed_folders,
+            )}
         ]
         for message in conversation.messages:
             # Image attachments: send as base64 for vision models
@@ -355,6 +419,43 @@ class ChatService:
         logger.warning("Após sliding window, mensagens ainda excedem orçamento de tokens.")
         return system_msgs + non_system
 
+    def _get_tools(
+        self,
+        enable_web_access: bool,
+        enable_local_files: bool = False,
+        allowed_folders: list[str] | None = None,
+    ) -> list[dict[str, Any]] | None:
+        """Return tool definitions if any tools are enabled."""
+        tools: list[dict[str, Any]] = []
+        if enable_web_access:
+            tools.append(FETCH_URL_TOOL)
+            tools.append(WEB_SEARCH_TOOL)
+        if enable_local_files and allowed_folders:
+            tools.extend([LIST_DIRECTORY_TOOL, READ_FILE_TOOL])
+            if model_service.supports_vision:
+                tools.append(VIEW_IMAGE_TOOL)
+        return tools or None
+
+    def _make_tool_executor(
+        self,
+        enable_web_access: bool,
+        enable_local_files: bool = False,
+        allowed_folders: list[str] | None = None,
+    ):
+        """Build a combined tool executor callback."""
+        if not enable_web_access and not (enable_local_files and allowed_folders):
+            return None
+        folders = allowed_folders or []
+
+        def executor(name: str, arguments: dict) -> str | dict:
+            if name in ("fetch_url", "web_search"):
+                return execute_tool_call(name, arguments)
+            if name in ("list_directory", "read_file", "view_image"):
+                return execute_filesystem_tool(name, arguments, folders)
+            return f"Error: unknown tool '{name}'."
+
+        return executor
+
     def handle_text_message(
         self,
         db: Session,
@@ -363,11 +464,21 @@ class ChatService:
         enable_thinking: bool,
         locale: str = "en-US",
         custom_instructions: str = "",
+        enable_web_access: bool = False,
+        enable_local_files: bool = False,
+        allowed_folders: list[str] | None = None,
     ) -> tuple[Conversation, Message]:
         conversation = self._ensure_conversation(db, conversation_id, text)
         storage_service.append_message(db, conversation.id, "user", text, input_type="text", model_key=model_service.active_model_key)
         conversation = storage_service.get_conversation(db, conversation.id)
-        reply_text = model_service.generate_reply(self._build_messages(conversation, locale, custom_instructions), enable_thinking)
+        tools = self._get_tools(enable_web_access, enable_local_files, allowed_folders)
+        tool_executor = self._make_tool_executor(enable_web_access, enable_local_files, allowed_folders)
+        reply_text = model_service.generate_reply(
+            self._build_messages(conversation, locale, custom_instructions, enable_web_access, enable_local_files, allowed_folders),
+            enable_thinking,
+            tools=tools,
+            tool_executor=tool_executor,
+        )
         reply = storage_service.append_message(db, conversation.id, "assistant", reply_text, input_type="text", model_key=model_service.active_model_key)
         conversation = storage_service.get_conversation(db, conversation.id)
         return conversation, reply
@@ -380,15 +491,27 @@ class ChatService:
         enable_thinking: bool,
         locale: str = "en-US",
         custom_instructions: str = "",
+        enable_web_access: bool = False,
+        enable_local_files: bool = False,
+        allowed_folders: list[str] | None = None,
     ) -> tuple[Conversation, object]:
         conversation = self._ensure_conversation(db, conversation_id, text)
         storage_service.append_message(db, conversation.id, "user", text, input_type="text", model_key=model_service.active_model_key)
         conversation = storage_service.get_conversation(db, conversation.id)
-        stream = model_service.generate_reply_stream(self._build_messages(conversation, locale, custom_instructions), enable_thinking)
+        tools = self._get_tools(enable_web_access, enable_local_files, allowed_folders)
+        tool_executor = self._make_tool_executor(enable_web_access, enable_local_files, allowed_folders)
+        stream = model_service.generate_reply_stream(
+            self._build_messages(conversation, locale, custom_instructions, enable_web_access, enable_local_files, allowed_folders),
+            enable_thinking,
+            tools=tools,
+            tool_executor=tool_executor,
+        )
         return conversation, stream
 
-    def finalize_streamed_reply(self, db: Session, conversation_id: str, content: str) -> tuple[Conversation, Message]:
-        reply = storage_service.append_message(db, conversation_id, "assistant", content, input_type="text", model_key=model_service.active_model_key)
+    def finalize_streamed_reply(self, db: Session, conversation_id: str, content: str, tool_calls: list[dict] | None = None) -> tuple[Conversation, Message]:
+        import json as _json
+        tc_json = _json.dumps(tool_calls, ensure_ascii=False) if tool_calls else None
+        reply = storage_service.append_message(db, conversation_id, "assistant", content, input_type="text", model_key=model_service.active_model_key, tool_calls_json=tc_json)
         conversation = storage_service.get_conversation(db, conversation_id)
         return conversation, reply
 
@@ -433,6 +556,9 @@ class ChatService:
         enable_thinking: bool,
         locale: str = "en-US",
         custom_instructions: str = "",
+        enable_web_access: bool = False,
+        enable_local_files: bool = False,
+        allowed_folders: list[str] | None = None,
     ) -> tuple[Conversation, Message]:
         stored_content = self._stored_upload_content(text, input_type, attachment_path, attachment_summary)
         seed_text = self._conversation_seed_for_upload(stored_content, input_type, attachment_name, attachment_summary)
@@ -449,7 +575,14 @@ class ChatService:
             attachment_path=attachment_path,
         )
         conversation = storage_service.get_conversation(db, conversation.id)
-        reply_text = model_service.generate_reply(self._build_messages(conversation, locale, custom_instructions), enable_thinking)
+        tools = self._get_tools(enable_web_access, enable_local_files, allowed_folders)
+        tool_executor = self._make_tool_executor(enable_web_access, enable_local_files, allowed_folders)
+        reply_text = model_service.generate_reply(
+            self._build_messages(conversation, locale, custom_instructions, enable_web_access, enable_local_files, allowed_folders),
+            enable_thinking,
+            tools=tools,
+            tool_executor=tool_executor,
+        )
         reply = storage_service.append_message(db, conversation.id, "assistant", reply_text, input_type="text", model_key=model_service.active_model_key)
         conversation = storage_service.get_conversation(db, conversation.id)
         return conversation, reply
@@ -466,6 +599,9 @@ class ChatService:
         enable_thinking: bool,
         locale: str = "en-US",
         custom_instructions: str = "",
+        enable_web_access: bool = False,
+        enable_local_files: bool = False,
+        allowed_folders: list[str] | None = None,
     ) -> tuple[Conversation, object]:
         stored_content = self._stored_upload_content(text, input_type, attachment_path, attachment_summary)
         seed_text = self._conversation_seed_for_upload(stored_content, input_type, attachment_name, attachment_summary)
@@ -483,7 +619,14 @@ class ChatService:
         )
         conversation = storage_service.get_conversation(db, conversation.id)
         assert conversation is not None
-        stream = model_service.generate_reply_stream(self._build_messages(conversation, locale, custom_instructions), enable_thinking)
+        tools = self._get_tools(enable_web_access, enable_local_files, allowed_folders)
+        tool_executor = self._make_tool_executor(enable_web_access, enable_local_files, allowed_folders)
+        stream = model_service.generate_reply_stream(
+            self._build_messages(conversation, locale, custom_instructions, enable_web_access, enable_local_files, allowed_folders),
+            enable_thinking,
+            tools=tools,
+            tool_executor=tool_executor,
+        )
         return conversation, stream
 
 

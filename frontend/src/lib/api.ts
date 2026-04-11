@@ -132,11 +132,14 @@ export async function sendTextMessage(
   message: string,
   locale: string = 'en-US',
   customInstructions: string = '',
+  enableWebAccess: boolean = false,
+  enableLocalFiles: boolean = false,
+  allowedFolders: string[] = [],
 ): Promise<ChatResponse> {
   const response = await fetch(`${API_BASE}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ conversation_id: conversationId, message, locale, custom_instructions: customInstructions || undefined }),
+    body: JSON.stringify({ conversation_id: conversationId, message, locale, custom_instructions: customInstructions || undefined, enable_web_access: enableWebAccess, enable_local_files: enableLocalFiles, allowed_folders: allowedFolders.length ? allowedFolders : undefined }),
   });
   if (!response.ok) {
     throw new Error('Falha ao enviar mensagem');
@@ -151,11 +154,14 @@ export async function streamTextMessage(
   signal?: AbortSignal,
   locale: string = 'en-US',
   customInstructions: string = '',
+  enableWebAccess: boolean = false,
+  enableLocalFiles: boolean = false,
+  allowedFolders: string[] = [],
 ): Promise<void> {
   const response = await fetch(`${API_BASE}/chat/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ conversation_id: conversationId, message, locale, custom_instructions: customInstructions || undefined }),
+    body: JSON.stringify({ conversation_id: conversationId, message, locale, custom_instructions: customInstructions || undefined, enable_web_access: enableWebAccess, enable_local_files: enableLocalFiles, allowed_folders: allowedFolders.length ? allowedFolders : undefined }),
     signal,
   });
   if (!response.ok || !response.body) {
@@ -196,6 +202,9 @@ export async function sendUploadMessage(
   file: File,
   locale: string = 'en-US',
   customInstructions: string = '',
+  enableWebAccess: boolean = false,
+  enableLocalFiles: boolean = false,
+  allowedFolders: string[] = [],
 ): Promise<ChatResponse> {
   const formData = new FormData();
   formData.append('message', getUploadMessage(message, file));
@@ -204,6 +213,9 @@ export async function sendUploadMessage(
   }
   formData.append('locale', locale);
   if (customInstructions) formData.append('custom_instructions', customInstructions);
+  if (enableWebAccess) formData.append('enable_web_access', 'true');
+  if (enableLocalFiles) formData.append('enable_local_files', 'true');
+  if (allowedFolders.length) formData.append('allowed_folders', JSON.stringify(allowedFolders));
   formData.append('file', file);
 
   const response = await fetch(`${API_BASE}/chat/upload`, {
@@ -225,6 +237,9 @@ export async function streamUploadMessage(
   signal?: AbortSignal,
   locale: string = 'en-US',
   customInstructions: string = '',
+  enableWebAccess: boolean = false,
+  enableLocalFiles: boolean = false,
+  allowedFolders: string[] = [],
 ): Promise<void> {
   const formData = new FormData();
   formData.append('message', getUploadMessage(message, file));
@@ -233,6 +248,9 @@ export async function streamUploadMessage(
   }
   formData.append('locale', locale);
   if (customInstructions) formData.append('custom_instructions', customInstructions);
+  if (enableWebAccess) formData.append('enable_web_access', 'true');
+  if (enableLocalFiles) formData.append('enable_local_files', 'true');
+  if (allowedFolders.length) formData.append('allowed_folders', JSON.stringify(allowedFolders));
   formData.append('file', file);
 
   const response = await fetch(`${API_BASE}/chat/upload/stream`, {
@@ -281,6 +299,9 @@ export async function streamMultiUploadMessage(
   signal?: AbortSignal,
   locale: string = 'en-US',
   customInstructions: string = '',
+  enableWebAccess: boolean = false,
+  enableLocalFiles: boolean = false,
+  allowedFolders: string[] = [],
 ): Promise<void> {
   const formData = new FormData();
   formData.append('message', message.trim());
@@ -289,6 +310,9 @@ export async function streamMultiUploadMessage(
   }
   formData.append('locale', locale);
   if (customInstructions) formData.append('custom_instructions', customInstructions);
+  if (enableWebAccess) formData.append('enable_web_access', 'true');
+  if (enableLocalFiles) formData.append('enable_local_files', 'true');
+  if (allowedFolders.length) formData.append('allowed_folders', JSON.stringify(allowedFolders));
   for (const file of files) {
     formData.append('files', file);
   }
@@ -362,11 +386,14 @@ export async function streamEditLastMessage(
   signal?: AbortSignal,
   locale: string = 'en-US',
   customInstructions: string = '',
+  enableWebAccess: boolean = false,
+  enableLocalFiles: boolean = false,
+  allowedFolders: string[] = [],
 ): Promise<void> {
   const response = await fetch(`${API_BASE}/chat/${conversationId}/edit-last/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, locale, custom_instructions: customInstructions || undefined }),
+    body: JSON.stringify({ message, locale, custom_instructions: customInstructions || undefined, enable_web_access: enableWebAccess, enable_local_files: enableLocalFiles, allowed_folders: allowedFolders.length ? allowedFolders : undefined }),
     signal,
   });
   if (!response.ok || !response.body) {
@@ -397,11 +424,14 @@ export async function streamRegenerate(
   signal?: AbortSignal,
   locale: string = 'en-US',
   customInstructions: string = '',
+  enableWebAccess: boolean = false,
+  enableLocalFiles: boolean = false,
+  allowedFolders: string[] = [],
 ): Promise<void> {
   const response = await fetch(`${API_BASE}/chat/${conversationId}/regenerate/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ locale, custom_instructions: customInstructions || undefined }),
+    body: JSON.stringify({ locale, custom_instructions: customInstructions || undefined, enable_web_access: enableWebAccess, enable_local_files: enableLocalFiles, allowed_folders: allowedFolders.length ? allowedFolders : undefined }),
     signal,
   });
   if (!response.ok || !response.body) {
