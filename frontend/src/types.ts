@@ -17,6 +17,7 @@ export interface Message {
   attachment_name?: string | null;
   attachment_path?: string | null;
   tool_calls?: ToolCallInfo[] | null;
+  custom_instructions_snapshot?: string | null;
   created_at: string;
 }
 

@@ -99,6 +99,7 @@ def _serialize_conversation(current_conversation) -> dict:
                 "attachment_name": message.attachment_name,
                 "attachment_path": message.attachment_path,
                 "tool_calls": json.loads(message.tool_calls_json) if message.tool_calls_json else None,
+                "custom_instructions_snapshot": message.custom_instructions_snapshot,
                 "created_at": _local_iso(message.created_at),
             }
             for message in current_conversation.messages
@@ -116,6 +117,7 @@ def _serialize_message(message) -> dict:
         "attachment_name": message.attachment_name,
         "attachment_path": message.attachment_path,
         "tool_calls": json.loads(message.tool_calls_json) if message.tool_calls_json else None,
+        "custom_instructions_snapshot": message.custom_instructions_snapshot,
         "created_at": _local_iso(message.created_at),
     }
 
@@ -161,7 +163,7 @@ async def stream_text_message(payload: ChatRequest, db: Session = Depends(get_db
             return
 
         final_text = "".join(chunks).strip()
-        final_conversation, reply = chat_service.finalize_streamed_reply(db, conversation.id, final_text, tool_calls=tool_calls_out)
+        final_conversation, reply = chat_service.finalize_streamed_reply(db, conversation.id, final_text, tool_calls=tool_calls_out, custom_instructions=payload.custom_instructions)
 
         user_msgs = [m for m in final_conversation.messages if m.role == "user"]
         if len(user_msgs) == 1:
@@ -195,7 +197,12 @@ async def send_upload_message(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ) -> ChatResponse:
-    parsed_folders = json.loads(allowed_folders) if allowed_folders else []
+    try:
+        parsed_folders = json.loads(allowed_folders) if allowed_folders else []
+        if not isinstance(parsed_folders, list) or not all(isinstance(f, str) for f in parsed_folders):
+            raise ValueError
+    except (json.JSONDecodeError, ValueError):
+        raise HTTPException(status_code=400, detail="allowed_folders inválido.")
     normalized = await input_adapter_service.normalize_upload(file)
     if normalized.kind == "unsupported":
         raise HTTPException(status_code=400, detail=normalized.summary)
@@ -234,7 +241,12 @@ async def stream_upload_message(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
-    parsed_folders = json.loads(allowed_folders) if allowed_folders else []
+    try:
+        parsed_folders = json.loads(allowed_folders) if allowed_folders else []
+        if not isinstance(parsed_folders, list) or not all(isinstance(f, str) for f in parsed_folders):
+            raise ValueError
+    except (json.JSONDecodeError, ValueError):
+        raise HTTPException(status_code=400, detail="allowed_folders inválido.")
     normalized = await input_adapter_service.normalize_upload(file)
     if normalized.kind == "unsupported":
         raise HTTPException(status_code=400, detail=normalized.summary)
@@ -269,7 +281,7 @@ async def stream_upload_message(
             return
 
         final_text = "".join(chunks).strip()
-        final_conversation, reply = chat_service.finalize_streamed_reply(db, conversation.id, final_text, tool_calls=tool_calls_out)
+        final_conversation, reply = chat_service.finalize_streamed_reply(db, conversation.id, final_text, tool_calls=tool_calls_out, custom_instructions=custom_instructions)
 
         user_msgs = [m for m in final_conversation.messages if m.role == "user"]
         if len(user_msgs) == 1:
@@ -303,7 +315,12 @@ async def stream_multi_upload_message(
     files: list[UploadFile] = File(...),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
-    parsed_folders = json.loads(allowed_folders) if allowed_folders else []
+    try:
+        parsed_folders = json.loads(allowed_folders) if allowed_folders else []
+        if not isinstance(parsed_folders, list) or not all(isinstance(f, str) for f in parsed_folders):
+            raise ValueError
+    except (json.JSONDecodeError, ValueError):
+        raise HTTPException(status_code=400, detail="allowed_folders inválido.")
     if not files:
         raise HTTPException(status_code=400, detail="Nenhum arquivo enviado.")
 
@@ -359,7 +376,7 @@ async def stream_multi_upload_message(
             return
 
         final_text = "".join(chunks).strip()
-        final_conversation, reply = chat_service.finalize_streamed_reply(db, conversation.id, final_text, tool_calls=tool_calls_out)
+        final_conversation, reply = chat_service.finalize_streamed_reply(db, conversation.id, final_text, tool_calls=tool_calls_out, custom_instructions=custom_instructions)
 
         user_msgs = [m for m in final_conversation.messages if m.role == "user"]
         if len(user_msgs) == 1:
@@ -507,7 +524,7 @@ async def edit_last_message_stream(
         except GeneratorExit:
             return
         final_text = "".join(chunks).strip()
-        final_conversation, reply = chat_service.finalize_streamed_reply(db, conversation.id, final_text, tool_calls=tool_calls_out)
+        final_conversation, reply = chat_service.finalize_streamed_reply(db, conversation.id, final_text, tool_calls=tool_calls_out, custom_instructions=payload.custom_instructions)
         yield _event_line({
             "type": "done",
             "conversation": _serialize_conversation(final_conversation),
@@ -566,7 +583,7 @@ async def regenerate_last_stream(
         except GeneratorExit:
             return
         final_text = "".join(chunks).strip()
-        final_conversation, reply = chat_service.finalize_streamed_reply(db, conversation.id, final_text, tool_calls=tool_calls_out)
+        final_conversation, reply = chat_service.finalize_streamed_reply(db, conversation.id, final_text, tool_calls=tool_calls_out, custom_instructions=payload.custom_instructions)
         yield _event_line({
             "type": "done",
             "conversation": _serialize_conversation(final_conversation),

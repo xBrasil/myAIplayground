@@ -25,9 +25,16 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(async () => {
-    await navigator.clipboard.writeText(code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setCopied(false);
+    }
   }, [code]);
 
   const handleDownload = useCallback(() => {
@@ -81,7 +88,8 @@ export default function MarkdownContent({ content }: MarkdownContentProps) {
               const child = children as React.ReactElement<{ className?: string; children?: React.ReactNode }>;
               if (child.type === 'code') {
                 const className = child.props.className || '';
-                const lang = className.replace('language-', '');
+                const langMatch = className.match(/language-(\S+)/);
+                const lang = langMatch ? langMatch[1] : '';
                 const code = String(child.props.children).replace(/\n$/, '');
                 return <CodeBlock code={code} language={lang} />;
               }

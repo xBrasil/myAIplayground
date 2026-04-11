@@ -40,6 +40,7 @@ EXCLUDE_DIRS = {
     "dist",
     ".vite",
     ".git",
+    ".local_only",
     "releases",
     ".mypy_cache",
     ".ruff_cache",

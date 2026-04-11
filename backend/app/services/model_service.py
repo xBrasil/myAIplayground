@@ -577,6 +577,7 @@ class ModelService:
         prepared = self._prepare_messages(messages, enable_thinking)
         accumulated: list[str] = []
         tool_rounds = 0
+        vision_only_next_round = False
 
         for _round in range(1 + self._MAX_CONTINUATIONS + self._MAX_TOOL_ROUNDS):
             finish_reason: str | None = None
@@ -591,7 +592,13 @@ class ModelService:
                 "stream": True,
             }
             if tools and tool_executor:
-                request_body["tools"] = tools
+                if vision_only_next_round:
+                    vision_tools = [t for t in tools if t.get("function", {}).get("name") == "view_image"]
+                    if vision_tools:
+                        request_body["tools"] = vision_tools
+                else:
+                    request_body["tools"] = tools
+            vision_only_next_round = False
 
             try:
                 with self._client.stream(
@@ -691,6 +698,9 @@ class ModelService:
                                 {"type": "image_url", "image_url": {"url": tool_result["image_url"]}},
                             ],
                         })
+                        # Next round: only allow view_image so the model can
+                        # view more images but won't get distracted by other tools.
+                        vision_only_next_round = True
                     else:
                         prepared.append({
                             "role": "tool",
@@ -722,6 +732,7 @@ class ModelService:
         prepared = self._prepare_messages(messages, enable_thinking)
         parts: list[str] = []
         tool_rounds = 0
+        vision_only_next_round = False
 
         for _round in range(1 + self._MAX_CONTINUATIONS + self._MAX_TOOL_ROUNDS):
             request_body: dict[str, Any] = {
@@ -733,7 +744,13 @@ class ModelService:
                 "stream": False,
             }
             if tools and tool_executor:
-                request_body["tools"] = tools
+                if vision_only_next_round:
+                    vision_tools = [t for t in tools if t.get("function", {}).get("name") == "view_image"]
+                    if vision_tools:
+                        request_body["tools"] = vision_tools
+                else:
+                    request_body["tools"] = tools
+            vision_only_next_round = False
 
             try:
                 response = self._client.post(
@@ -769,11 +786,28 @@ class ModelService:
                                 fn_args = {}
                             logger.info("Executando tool call (sync): %s(%s)", fn_name, fn_args)
                             tool_result = tool_executor(fn_name, fn_args)
-                            prepared.append({
-                                "role": "tool",
-                                "tool_call_id": tc.get("id", ""),
-                                "content": tool_result,
-                            })
+
+                            # Handle multimodal tool results (e.g., view_image)
+                            if isinstance(tool_result, dict) and tool_result.get("__multimodal__"):
+                                prepared.append({
+                                    "role": "tool",
+                                    "tool_call_id": tc.get("id", ""),
+                                    "content": tool_result["text"],
+                                })
+                                prepared.append({
+                                    "role": "user",
+                                    "content": [
+                                        {"type": "text", "text": tool_result["text"]},
+                                        {"type": "image_url", "image_url": {"url": tool_result["image_url"]}},
+                                    ],
+                                })
+                                vision_only_next_round = True
+                            else:
+                                prepared.append({
+                                    "role": "tool",
+                                    "tool_call_id": tc.get("id", ""),
+                                    "content": tool_result,
+                                })
                         continue
 
                 cleaned = self._clean_text(content)

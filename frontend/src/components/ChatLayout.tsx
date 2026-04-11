@@ -9,6 +9,7 @@ interface ChatLayoutProps {
   busy: boolean;
   modelLoading: boolean;
   enterToSend: boolean;
+  customInstructionsEnabled: boolean;
   conversations: Conversation[];
   currentConversation: Conversation | null;
   streamingText: string;
@@ -41,6 +42,7 @@ export default function ChatLayout({
   busy,
   modelLoading,
   enterToSend,
+  customInstructionsEnabled,
   conversations,
   currentConversation,
   streamingText,
@@ -242,6 +244,7 @@ export default function ChatLayout({
           messages={currentConversation?.messages || []}
           preferredVoice={preferredVoice}
           streamingText={streamingText}
+          customInstructionsEnabled={customInstructionsEnabled}
           onEditLastMessage={onEditLastMessage}
           onRegenerate={onRegenerate}
           activeToolCalls={activeToolCalls}

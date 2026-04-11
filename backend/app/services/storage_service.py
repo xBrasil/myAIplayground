@@ -52,6 +52,7 @@ class StorageService:
         attachment_name: str | None = None,
         attachment_path: str | None = None,
         tool_calls_json: str | None = None,
+        custom_instructions_snapshot: str | None = None,
     ) -> Message:
         message = Message(
             id=str(uuid4()),
@@ -63,6 +64,7 @@ class StorageService:
             attachment_name=attachment_name,
             attachment_path=attachment_path,
             tool_calls_json=tool_calls_json,
+            custom_instructions_snapshot=custom_instructions_snapshot,
         )
         db.add(message)
         conv = db.get(Conversation, conversation_id)

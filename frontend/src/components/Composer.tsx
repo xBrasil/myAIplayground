@@ -32,6 +32,7 @@ export default function Composer({ busy, modelLoading, enterToSend, activeModelK
   const [recordedAudioFile, setRecordedAudioFile] = useState<File | null>(null);
   const [previewPlaying, setPreviewPlaying] = useState(false);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const previewUrlRef = useRef<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -316,11 +317,12 @@ export default function Composer({ busy, modelLoading, enterToSend, activeModelK
     }
     if (!recordedAudioFile) return;
     const url = URL.createObjectURL(recordedAudioFile);
+    previewUrlRef.current = url;
     const audio = new Audio(url);
     previewAudioRef.current = audio;
     audio.onended = () => {
       setPreviewPlaying(false);
-      URL.revokeObjectURL(url);
+      if (previewUrlRef.current) { URL.revokeObjectURL(previewUrlRef.current); previewUrlRef.current = null; }
       previewAudioRef.current = null;
     };
     audio.play().catch(() => null);
@@ -333,6 +335,7 @@ export default function Composer({ busy, modelLoading, enterToSend, activeModelK
       previewAudioRef.current.currentTime = 0;
       previewAudioRef.current = null;
     }
+    if (previewUrlRef.current) { URL.revokeObjectURL(previewUrlRef.current); previewUrlRef.current = null; }
     setPreviewPlaying(false);
   }
 

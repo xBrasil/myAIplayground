@@ -14,7 +14,7 @@ import re
 import socket
 from html.parser import HTMLParser
 from io import StringIO
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import httpx
 
@@ -126,20 +126,47 @@ def fetch_url(url: str) -> dict[str, str]:
         result["error"] = "Acesso a endereços internos/privados não é permitido."
         return result
 
-    # Fetch
+    # Fetch (manual redirects to re-validate each hop against SSRF)
+    _MAX_REDIRECTS = 5
     try:
         with httpx.Client(
             timeout=_REQUEST_TIMEOUT,
-            follow_redirects=True,
-            max_redirects=5,
+            follow_redirects=False,
         ) as client:
-            response = client.get(
-                url,
-                headers={
-                    "User-Agent": "MyAIPlayground/1.0 (Web Fetch Tool)",
-                    "Accept": "text/html,application/xhtml+xml,text/plain,application/json,*/*;q=0.8",
-                },
-            )
+            current_url = url
+            for _ in range(_MAX_REDIRECTS + 1):
+                response = client.get(
+                    current_url,
+                    headers={
+                        "User-Agent": "MyAIPlayground/1.0 (Web Fetch Tool)",
+                        "Accept": "text/html,application/xhtml+xml,text/plain,application/json,*/*;q=0.8",
+                    },
+                )
+                if response.is_redirect:
+                    location = response.headers.get("location", "")
+                    if not location:
+                        result["error"] = "Redirecionamento sem cabeçalho Location."
+                        return result
+                    redirect_parsed = urlparse(location)
+                    # Resolve relative redirects
+                    if not redirect_parsed.scheme:
+                        location = urljoin(current_url, location)
+                        redirect_parsed = urlparse(location)
+                    if redirect_parsed.scheme not in _ALLOWED_SCHEMES:
+                        result["error"] = f"Redirecionamento para protocolo não permitido: {redirect_parsed.scheme}."
+                        return result
+                    if not redirect_parsed.hostname:
+                        result["error"] = "Redirecionamento para URL sem hostname."
+                        return result
+                    if _is_private_host(redirect_parsed.hostname):
+                        result["error"] = "Redirecionamento bloqueado: destino é endereço interno/privado."
+                        return result
+                    current_url = location
+                    continue
+                break
+            else:
+                result["error"] = f"Muitos redirecionamentos (limite: {_MAX_REDIRECTS})."
+                return result
             response.raise_for_status()
 
             # Enforce size limit

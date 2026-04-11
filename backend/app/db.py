@@ -40,3 +40,6 @@ def create_db_and_tables() -> None:
     if "tool_calls_json" not in columns:
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE messages ADD COLUMN tool_calls_json TEXT"))
+    if "custom_instructions_snapshot" not in columns:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE messages ADD COLUMN custom_instructions_snapshot TEXT"))
