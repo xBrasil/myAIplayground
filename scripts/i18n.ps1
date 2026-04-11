@@ -35,7 +35,9 @@ function T {
     $value = $script:I18nStrings[$Key]
     if (-not $value) { return $Key }
     foreach ($k in $Params.Keys) {
-        $value = $value -replace "\{\{$k\}\}", $Params[$k]
+        $placeholder = "{{$k}}"
+        $replacement = [string]$Params[$k]
+        $value = $value.Replace($placeholder, $replacement)
     }
     return $value
 }

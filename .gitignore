@@ -5,6 +5,7 @@ __pycache__/
 .Python
 .claude/
 .venv/
+.local_only/
 venv/
 env/
 ENV/
@@ -22,6 +23,7 @@ data/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+*.tsbuildinfo
 
 .DS_Store
 Thumbs.db
@@ -29,6 +31,3 @@ Thumbs.db
 *.log
 
 releases/
-
-TODO.md
-ADMIN_INSTRUCTIONS.md

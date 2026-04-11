@@ -24,7 +24,7 @@ import {
   streamUploadMessage,
   streamMultiUploadMessage,
 } from './lib/api';
-import { loadEnterToSendPreference, loadLastModelKey, loadCustomInstructions, loadWebAccess, loadLocalFiles, loadAllowedFolders, saveEnterToSendPreference, saveLastModelKey, saveCustomInstructions, saveWebAccess, saveLocalFiles, saveAllowedFolders } from './lib/preferences';
+import { loadEnterToSendPreference, loadLastModelKey, loadCustomInstructions, loadCustomInstructionsEnabled, loadWebAccess, loadLocalFiles, loadAllowedFolders, saveEnterToSendPreference, saveLastModelKey, saveCustomInstructions, saveCustomInstructionsEnabled, saveWebAccess, saveLocalFiles, saveAllowedFolders } from './lib/preferences';
 import { loadPreferredVoiceName } from './lib/speech';
 import type { ChatStreamEvent, Conversation, HealthResponse, ModelKey } from './types';
 
@@ -62,6 +62,7 @@ export default function App() {
   const [preferredVoice, setPreferredVoice] = useState(loadPreferredVoiceName());
   const [enterToSend, setEnterToSend] = useState(loadEnterToSendPreference());
   const [customInstructions, setCustomInstructions] = useState(loadCustomInstructions());
+  const [customInstructionsEnabled, setCustomInstructionsEnabled] = useState(loadCustomInstructionsEnabled());
   const [webAccess, setWebAccess] = useState(loadWebAccess());
   const [localFiles, setLocalFiles] = useState(loadLocalFiles());
   const [allowedFolders, setAllowedFolders] = useState(loadAllowedFolders());
@@ -73,6 +74,7 @@ export default function App() {
   const [droppedFiles, setDroppedFiles] = useState<File[]>([]);
   const [restoreComposer, setRestoreComposer] = useState<{ text: string; files: File[] } | null>(null);
   const [activeToolCalls, setActiveToolCalls] = useState<ToolCallInfo[]>([]);
+  const [streamingConversationId, setStreamingConversationId] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const streamingTextRef = useRef('');
   const activeConversationIdRef = useRef<string | null>(null);
@@ -236,6 +238,7 @@ export default function App() {
     abortControllerRef.current = controller;
     const effectiveId = isDraft(currentConversationId) ? null : currentConversationId;
     activeConversationIdRef.current = effectiveId;
+    setStreamingConversationId(effectiveId);
     // Remove draft from list once we're sending
     if (isDraft(currentConversationId)) {
       setConversations((prev) => prev.filter((c) => c.id !== DRAFT_ID));
@@ -261,6 +264,7 @@ export default function App() {
           upsertConversation(event.conversation);
           setCurrentConversationId(event.conversation.id);
           activeConversationIdRef.current = event.conversation.id;
+          setStreamingConversationId(event.conversation.id);
           return;
         }
 
@@ -275,7 +279,7 @@ export default function App() {
         setActiveToolCalls([]);
         setStreamingText('');
         streamingTextRef.current = '';
-      }, controller.signal, locale, customInstructions, webAccess, localFiles, allowedFolders);
+      }, controller.signal, locale, effectiveCustomInstructions, webAccess, localFiles, allowedFolders);
       await refreshHealth().catch(() => null);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -304,6 +308,7 @@ export default function App() {
       }
     } finally {
       abortControllerRef.current = null;
+      setStreamingConversationId(null);
       setBusy(false);
     }
   }
@@ -313,6 +318,7 @@ export default function App() {
     abortControllerRef.current = controller;
     const effectiveId = isDraft(currentConversationId) ? null : currentConversationId;
     activeConversationIdRef.current = effectiveId;
+    setStreamingConversationId(effectiveId);
     if (isDraft(currentConversationId)) {
       setConversations((prev) => prev.filter((c) => c.id !== DRAFT_ID));
     }
@@ -337,6 +343,7 @@ export default function App() {
           upsertConversation(event.conversation);
           setCurrentConversationId(event.conversation.id);
           activeConversationIdRef.current = event.conversation.id;
+          setStreamingConversationId(event.conversation.id);
           return;
         }
 
@@ -351,7 +358,7 @@ export default function App() {
         setActiveToolCalls([]);
         setStreamingText('');
         streamingTextRef.current = '';
-      }, controller.signal, locale, customInstructions, webAccess, localFiles, allowedFolders);
+      }, controller.signal, locale, effectiveCustomInstructions, webAccess, localFiles, allowedFolders);
       await refreshHealth().catch(() => null);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -378,6 +385,7 @@ export default function App() {
       }
     } finally {
       abortControllerRef.current = null;
+      setStreamingConversationId(null);
       setBusy(false);
     }
   }
@@ -387,6 +395,7 @@ export default function App() {
     abortControllerRef.current = controller;
     const effectiveId = isDraft(currentConversationId) ? null : currentConversationId;
     activeConversationIdRef.current = effectiveId;
+    setStreamingConversationId(effectiveId);
     if (isDraft(currentConversationId)) {
       setConversations((prev) => prev.filter((c) => c.id !== DRAFT_ID));
     }
@@ -411,6 +420,7 @@ export default function App() {
           upsertConversation(event.conversation);
           setCurrentConversationId(event.conversation.id);
           activeConversationIdRef.current = event.conversation.id;
+          setStreamingConversationId(event.conversation.id);
           return;
         }
 
@@ -425,7 +435,7 @@ export default function App() {
         setActiveToolCalls([]);
         setStreamingText('');
         streamingTextRef.current = '';
-      }, controller.signal, locale, customInstructions, webAccess, localFiles, allowedFolders);
+      }, controller.signal, locale, effectiveCustomInstructions, webAccess, localFiles, allowedFolders);
       await refreshHealth().catch(() => null);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -452,6 +462,7 @@ export default function App() {
       }
     } finally {
       abortControllerRef.current = null;
+      setStreamingConversationId(null);
       setBusy(false);
     }
   }
@@ -473,6 +484,7 @@ export default function App() {
     const controller = new AbortController();
     abortControllerRef.current = controller;
     activeConversationIdRef.current = currentConversationId;
+    setStreamingConversationId(currentConversationId);
     try {
       setBusy(true);
       setStreamingText('');
@@ -493,6 +505,7 @@ export default function App() {
         if (event.type === 'conversation') {
           upsertConversation(event.conversation);
           activeConversationIdRef.current = event.conversation.id;
+          setStreamingConversationId(event.conversation.id);
           return;
         }
         if (event.type === 'delta') {
@@ -504,7 +517,7 @@ export default function App() {
         setActiveToolCalls([]);
         setStreamingText('');
         streamingTextRef.current = '';
-      }, controller.signal, locale, customInstructions, webAccess, localFiles, allowedFolders);
+      }, controller.signal, locale, effectiveCustomInstructions, webAccess, localFiles, allowedFolders);
       await refreshHealth().catch(() => null);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -530,6 +543,7 @@ export default function App() {
       }
     } finally {
       abortControllerRef.current = null;
+      setStreamingConversationId(null);
       setBusy(false);
     }
   }
@@ -546,6 +560,7 @@ export default function App() {
     const controller = new AbortController();
     abortControllerRef.current = controller;
     activeConversationIdRef.current = currentConversationId;
+    setStreamingConversationId(currentConversationId);
     try {
       setBusy(true);
       setStreamingText('');
@@ -566,6 +581,7 @@ export default function App() {
         if (event.type === 'conversation') {
           upsertConversation(event.conversation);
           activeConversationIdRef.current = event.conversation.id;
+          setStreamingConversationId(event.conversation.id);
           return;
         }
         if (event.type === 'delta') {
@@ -577,7 +593,7 @@ export default function App() {
         setActiveToolCalls([]);
         setStreamingText('');
         streamingTextRef.current = '';
-      }, controller.signal, locale, customInstructions, webAccess, localFiles, allowedFolders);
+      }, controller.signal, locale, effectiveCustomInstructions, webAccess, localFiles, allowedFolders);
       await refreshHealth().catch(() => null);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -603,6 +619,7 @@ export default function App() {
       }
     } finally {
       abortControllerRef.current = null;
+      setStreamingConversationId(null);
       setBusy(false);
     }
   }
@@ -615,6 +632,11 @@ export default function App() {
   function handleChangeCustomInstructions(value: string) {
     saveCustomInstructions(value);
     setCustomInstructions(value);
+  }
+
+  function handleChangeCustomInstructionsEnabled(value: boolean) {
+    saveCustomInstructionsEnabled(value);
+    setCustomInstructionsEnabled(value);
   }
 
   function handleChangeWebAccess(value: boolean) {
@@ -659,7 +681,12 @@ export default function App() {
   }
 
   const modelLoading = health?.model_status === 'loading';
-  const interfaceBusy = busy || modelLoading;
+  const effectiveCustomInstructions = customInstructionsEnabled ? customInstructions : '';
+
+  const isViewingStreamingConversation = currentConversationId != null && currentConversationId === streamingConversationId;
+  const interfaceBusy = (busy && isViewingStreamingConversation) || modelLoading;
+  const effectiveStreamingText = isViewingStreamingConversation ? streamingText : '';
+  const effectiveToolCalls = isViewingStreamingConversation ? activeToolCalls : [];
 
   if (legalAccepted === null) {
     return null;
@@ -677,6 +704,7 @@ export default function App() {
         preferredVoice={preferredVoice}
         enterToSend={enterToSend}
         customInstructions={customInstructions}
+        customInstructionsEnabled={customInstructionsEnabled}
         webAccess={webAccess}
         localFiles={localFiles}
         allowedFolders={allowedFolders}
@@ -684,6 +712,7 @@ export default function App() {
         onChangePreferredVoice={setPreferredVoice}
         onToggleEnterToSend={handleToggleEnterToSend}
         onChangeCustomInstructions={handleChangeCustomInstructions}
+        onChangeCustomInstructionsEnabled={handleChangeCustomInstructionsEnabled}
         onChangeWebAccess={handleChangeWebAccess}
         onChangeLocalFiles={handleChangeLocalFiles}
         onChangeAllowedFolders={handleChangeAllowedFolders}
@@ -702,9 +731,10 @@ export default function App() {
         busy={interfaceBusy}
         modelLoading={!!modelLoading}
         enterToSend={enterToSend}
+        customInstructionsEnabled={customInstructionsEnabled && !!customInstructions.trim()}
         conversations={conversations}
         currentConversation={currentConversation}
-        streamingText={streamingText}
+        streamingText={effectiveStreamingText}
         preferredVoice={preferredVoice}
         health={health}
         error={error}
@@ -727,7 +757,7 @@ export default function App() {
         onStop={handleStop}
         onEditLastMessage={handleEditLastMessage}
         onRegenerate={handleRegenerate}
-        activeToolCalls={activeToolCalls}
+        activeToolCalls={effectiveToolCalls}
       />
     </>
   );

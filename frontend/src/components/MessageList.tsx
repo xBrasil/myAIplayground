@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { getUploadAssetUrl, openFile, revealFile } from '../lib/api';
 import { useI18n } from '../lib/i18n';
 import AudioMessageContent from './AudioMessageContent';
+import CustomInstructionsModal from './CustomInstructionsModal';
 import MarkdownContent from './MarkdownContent';
 import SpeakButton from './SpeakButton';
 import type { Message, ModelKey, ToolCallInfo } from '../types';
@@ -40,24 +41,28 @@ interface MessageListProps {
   messages: Message[];
   preferredVoice: string;
   streamingText?: string;
+  customInstructionsEnabled?: boolean;
   onEditLastMessage?: (newText: string) => void;
   onRegenerate?: () => void;
   activeToolCalls?: ToolCallInfo[];
 }
 
 function renderToolCallLabel(tc: ToolCallInfo, t: (key: string) => string) {
-  const args = tc.arguments as Record<string, string>;
+  const args = (tc.arguments ?? {}) as Record<string, unknown>;
   switch (tc.name) {
-    case 'fetch_url':
-      return <>{t('chat.toolFetchingUrl')}: <a href={args.url} target="_blank" rel="noopener noreferrer">{args.url}</a></>;
+    case 'fetch_url': {
+      const url = typeof args.url === 'string' ? args.url : '';
+      const safe = /^https?:\/\//i.test(url);
+      return <>{t('chat.toolFetchingUrl')}: {safe ? <a href={url} target="_blank" rel="noopener noreferrer">{url}</a> : url}</>;
+    }
     case 'read_file':
-      return `${t('chat.toolReadingFile')}: ${args.path || ''}`;
+      return `${t('chat.toolReadingFile')}: ${typeof args.path === 'string' ? args.path : ''}`;
     case 'list_directory':
-      return `${t('chat.toolListingDir')}: ${args.path || ''}`;
+      return `${t('chat.toolListingDir')}: ${typeof args.path === 'string' ? args.path : ''}`;
     case 'web_search':
-      return `${t('chat.toolSearchingWeb')}: ${args.query || ''}`;
+      return `${t('chat.toolSearchingWeb')}: ${typeof args.query === 'string' ? args.query : ''}`;
     case 'view_image':
-      return `${t('chat.toolViewingImage')}: ${args.path || ''}`;
+      return `${t('chat.toolViewingImage')}: ${typeof args.path === 'string' ? args.path : ''}`;
     default:
       return tc.name;
   }
@@ -67,6 +72,7 @@ export default function MessageList({
   messages,
   preferredVoice,
   streamingText = '',
+  customInstructionsEnabled = false,
   onEditLastMessage,
   onRegenerate,
   activeToolCalls = [],
@@ -77,6 +83,33 @@ export default function MessageList({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [fileMenuId, setFileMenuId] = useState<string | null>(null);
   const [expandedToolCalls, setExpandedToolCalls] = useState<Set<string>>(new Set());
+  const [ciModalOpen, setCiModalOpen] = useState(false);
+
+  // Collect custom instruction snapshots from messages for the audit modal
+  const ciSnapshots = useMemo(() => {
+    const snapshots: { text: string; date: string }[] = [];
+    for (const msg of messages) {
+      if (msg.custom_instructions_snapshot) {
+        snapshots.push({ text: msg.custom_instructions_snapshot, date: msg.created_at });
+      }
+    }
+    return snapshots;
+  }, [messages]);
+
+  // Compute the set of message indices that need a CI banner rendered before them.
+  // A banner appears before the first assistant message that has a given snapshot text.
+  const ciBannerBeforeIdx = useMemo(() => {
+    const indices = new Set<number>();
+    let lastSeenSnapshot: string | null = null;
+    for (let i = 0; i < messages.length; i++) {
+      const snap = messages[i].custom_instructions_snapshot;
+      if (snap && snap !== lastSeenSnapshot) {
+        lastSeenSnapshot = snap;
+        indices.add(i);
+      }
+    }
+    return indices;
+  }, [messages]);
 
   // Scroll to bottom on conversation change (smooth)
   useEffect(() => {
@@ -170,6 +203,7 @@ export default function MessageList({
   }
 
   return (
+    <>
     <div className="message-list" ref={containerRef}>
       {messages.map((message, idx) => {
         if (message.role === 'system') return null;
@@ -177,10 +211,25 @@ export default function MessageList({
         const isAudio = message.input_type === 'audio' && isUser;
         const isLastUser = idx === lastUserIdx;
         const isLastAssistant = idx === lastAssistantIdx && !streamingText;
+        const showCiBannerHere = ciBannerBeforeIdx.has(idx);
 
         return (
-          <div key={message.id} className={`message-row message-row--${message.role}`}>
-            <div className={`message-bubble message-bubble--${message.role}`}>
+          <div key={message.id}>
+            {showCiBannerHere && (
+              <div
+                className="custom-instructions-banner"
+                role="button"
+                tabIndex={0}
+                onClick={() => setCiModalOpen(true)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') setCiModalOpen(true);
+                }}
+              >
+                ⚠ {t('chat.customInstructionsDisclaimer')}
+              </div>
+            )}
+            <div className={`message-row message-row--${message.role}`}>
+              <div className={`message-bubble message-bubble--${message.role}`}>
               {isAudio ? (
                 (() => {
                   const audioUrl = getUploadAssetUrl(message.attachment_path);
@@ -352,6 +401,7 @@ export default function MessageList({
                 </svg>
               </button>
             ) : null}
+            </div>
           </div>
         );
       })}
@@ -413,5 +463,7 @@ export default function MessageList({
         </div>
       ) : null}
     </div>
+    <CustomInstructionsModal open={ciModalOpen} snapshots={ciSnapshots} onClose={() => setCiModalOpen(false)} />
+    </>
   );
 }

@@ -1,6 +1,7 @@
 const ENTER_TO_SEND_KEY = 'gemma-local-studio.enter-to-send';
 const LAST_MODEL_KEY = 'gemma-local-studio.last-model';
 const CUSTOM_INSTRUCTIONS_KEY = 'gemma-local-studio.custom-instructions';
+const CUSTOM_INSTRUCTIONS_ENABLED_KEY = 'gemma-local-studio.custom-instructions-enabled';
 const WEB_ACCESS_KEY = 'gemma-local-studio.web-access';
 const LOCAL_FILES_KEY = 'gemma-local-studio.local-files';
 const ALLOWED_FOLDERS_KEY = 'gemma-local-studio.allowed-folders';
@@ -31,6 +32,14 @@ export function loadCustomInstructions(): string {
 
 export function saveCustomInstructions(value: string): void {
   window.localStorage.setItem(CUSTOM_INSTRUCTIONS_KEY, value);
+}
+
+export function loadCustomInstructionsEnabled(): boolean {
+  return window.localStorage.getItem(CUSTOM_INSTRUCTIONS_ENABLED_KEY) === 'true';
+}
+
+export function saveCustomInstructionsEnabled(value: boolean): void {
+  window.localStorage.setItem(CUSTOM_INSTRUCTIONS_ENABLED_KEY, String(value));
 }
 
 export function loadWebAccess(): boolean {

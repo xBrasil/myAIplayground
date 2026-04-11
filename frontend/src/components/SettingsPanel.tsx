@@ -9,6 +9,7 @@ interface SettingsPanelProps {
   preferredVoice: string;
   enterToSend: boolean;
   customInstructions: string;
+  customInstructionsEnabled: boolean;
   webAccess: boolean;
   localFiles: boolean;
   allowedFolders: string[];
@@ -16,6 +17,7 @@ interface SettingsPanelProps {
   onChangePreferredVoice: (voiceName: string) => void;
   onToggleEnterToSend: (value: boolean) => void;
   onChangeCustomInstructions: (value: string) => void;
+  onChangeCustomInstructionsEnabled: (value: boolean) => void;
   onChangeWebAccess: (value: boolean) => void;
   onChangeLocalFiles: (value: boolean) => void;
   onChangeAllowedFolders: (folders: string[]) => void;
@@ -28,6 +30,7 @@ export default function SettingsPanel({
   preferredVoice,
   enterToSend,
   customInstructions,
+  customInstructionsEnabled,
   webAccess,
   localFiles,
   allowedFolders,
@@ -35,6 +38,7 @@ export default function SettingsPanel({
   onChangePreferredVoice,
   onToggleEnterToSend,
   onChangeCustomInstructions,
+  onChangeCustomInstructionsEnabled,
   onChangeWebAccess,
   onChangeLocalFiles,
   onChangeAllowedFolders,
@@ -93,6 +97,20 @@ export default function SettingsPanel({
             <p className="settings-help">
               {t('settings.customInstructionsHelp')}
             </p>
+            <label className="toggle-row">
+              <span>{t('settings.customInstructionsToggle')}</span>
+              <input
+                type="checkbox"
+                checked={customInstructionsEnabled}
+                onChange={(event) => {
+                  if (event.target.checked && !customInstructionsEnabled) {
+                    const confirmed = window.confirm(t('settings.customInstructionsWarning'));
+                    if (!confirmed) return;
+                  }
+                  onChangeCustomInstructionsEnabled(event.target.checked);
+                }}
+              />
+            </label>
             <textarea
               className="custom-instructions-textarea"
               value={customInstructions}
@@ -100,6 +118,11 @@ export default function SettingsPanel({
               placeholder={t('settings.customInstructionsPlaceholder')}
               rows={4}
             />
+            {!customInstructionsEnabled && customInstructions.trim() && (
+              <p className="settings-help settings-help--warning">
+                ⚠ {t('settings.customInstructionsDisabledNote')}
+              </p>
+            )}
           </section>
 
           <section className="settings-section">

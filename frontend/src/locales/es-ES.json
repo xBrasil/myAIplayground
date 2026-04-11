@@ -117,6 +117,13 @@
   "settings.customInstructions": "Instrucciones personalizadas",
   "settings.customInstructionsHelp": "Indícale al modelo cómo te gustaría que respondiera. Estas instrucciones se incluyen en todas las conversaciones.",
   "settings.customInstructionsPlaceholder": "Ej.: Siempre responde en español. Sé conciso y directo.",
+  "settings.customInstructionsToggle": "Activar instrucciones personalizadas",
+  "settings.customInstructionsWarning": "Al activar las instrucciones personalizadas, usted asume total responsabilidad por el contenido proporcionado al modelo. Las instrucciones personalizadas pueden hacer que el modelo genere respuestas:\n\n• Imprecisas o factualmente incorrectas\n• Inapropiadas u ofensivas\n• Potencialmente peligrosas o dañinas\n• Potencialmente ilegales o en violación de los términos de uso\n\nEl sistema no filtra ni modera las respuestas cuando las instrucciones personalizadas están activas.\n\n¿Desea activar las instrucciones personalizadas?",
+  "settings.customInstructionsDisabledNote": "Active el botón de arriba para que las instrucciones personalizadas se apliquen a las conversaciones.",
+  "chat.customInstructionsDisclaimer": "ADVERTENCIA: instrucciones personalizadas activadas, uso bajo su responsabilidad",
+  "chat.customInstructionsDisclaimerFull": "Las instrucciones personalizadas están activas. El modelo puede generar respuestas imprecisas, inapropiadas, peligrosas, potencialmente dañinas o ilegales. Usted es el único responsable del contenido generado. El sistema no filtra ni modera las respuestas cuando esta funcionalidad está activa.",
+  "chat.customInstructionsModalTitle": "Instrucciones personalizadas en esta conversación",
+  "chat.customInstructionsFrom": "Activas desde",
 
   "settings.webAccess": "Acceso web",
   "settings.webAccessHelp": "Cuando está activado, el modelo puede obtener contenido de páginas web públicas para responder preguntas con información actualizada.",

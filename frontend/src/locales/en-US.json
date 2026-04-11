@@ -117,6 +117,13 @@
   "settings.customInstructions": "Custom instructions",
   "settings.customInstructionsHelp": "Tell the model how you'd like it to respond. These instructions are included in every conversation.",
   "settings.customInstructionsPlaceholder": "E.g.: Always answer in Portuguese. Be concise and direct.",
+  "settings.customInstructionsToggle": "Enable custom instructions",
+  "settings.customInstructionsWarning": "By enabling custom instructions, you take full responsibility for the content provided to the model. Custom instructions may cause the model to generate responses that are:\n\n• Inaccurate or factually incorrect\n• Inappropriate or offensive\n• Potentially dangerous or harmful\n• Potentially illegal or in violation of terms of use\n\nThe system does not filter or moderate responses when custom instructions are active.\n\nDo you want to enable custom instructions?",
+  "settings.customInstructionsDisabledNote": "Enable the toggle above for custom instructions to be applied to conversations.",
+  "chat.customInstructionsDisclaimer": "WARNING: custom instructions enabled, use at your own risk",
+  "chat.customInstructionsDisclaimerFull": "Custom instructions are active. The model may generate inaccurate, inappropriate, dangerous, potentially harmful or illegal responses. You are solely responsible for the generated content. The system does not filter or moderate responses when this feature is active.",
+  "chat.customInstructionsModalTitle": "Custom instructions in this conversation",
+  "chat.customInstructionsFrom": "Active from",
 
   "settings.webAccess": "Web access",
   "settings.webAccessHelp": "When enabled, the model can fetch content from public web pages to answer questions with up-to-date information.",

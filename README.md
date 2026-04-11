@@ -45,6 +45,54 @@
 
 ---
 
+## Interface
+
+<!-- Substitua os placeholders abaixo pelas capturas de tela reais -->
+<!-- Sugestões de como tirar cada screenshot: veja docs/screenshots/README.md -->
+
+| | |
+|---|---|
+| ![Chat em tema escuro](docs/screenshots/chat-dark-mode.png) | ![Entrada multimodal com imagem](docs/screenshots/multimodal-image.png) |
+| Chat principal com tema escuro | Envio e análise de imagens |
+| ![Seletor de modelos](docs/screenshots/model-selector.png) | ![Painel de ajustes](docs/screenshots/settings-panel.png) |
+| Seletor de modelos com capacidades | Painel de ajustes completo |
+
+---
+
+## Requisitos de Sistema
+
+O My AI Playground roda modelos de IA localmente no seu hardware. Os requisitos variam conforme o modelo escolhido.
+
+### Mínimos (modelo Gemma 4 E2B — 2B parâmetros)
+
+| Componente | Requisito |
+|---|---|
+| **SO** | Windows 10/11 (64 bits) |
+| **RAM** | 8 GB |
+| **VRAM (GPU)** | 4 GB (NVIDIA com CUDA) ou modo CPU |
+| **Disco** | ~3 GB para o modelo + ~1 GB para dependências |
+| **CPU** | Qualquer x86-64 com suporte AVX2 |
+
+### Recomendados (modelo Gemma 4 E4B — 4B parâmetros)
+
+| Componente | Requisito |
+|---|---|
+| **RAM** | 16 GB |
+| **VRAM (GPU)** | 6 GB (NVIDIA com CUDA) |
+| **Disco** | ~5 GB para o modelo |
+
+### Para o modelo maior (Gemma 4 26B-A4B — 26B parâmetros, MoE)
+
+| Componente | Requisito |
+|---|---|
+| **RAM** | 32 GB |
+| **VRAM (GPU)** | 16 GB+ (NVIDIA com CUDA) |
+| **Disco** | ~15 GB para o modelo |
+
+> **Nota:** sem VRAM suficiente, o llama.cpp fará offloading para a RAM do sistema (modo CPU/parcial), resultando em inferência significativamente mais lenta. Se você receber erros de **Out of Memory (OOM)**, experimente um modelo menor ou reduza `N_CTX` no arquivo `backend/.env`.
+
+---
+
 ## Início rápido (Windows)
 
 ### Pré-requisitos
@@ -80,6 +128,36 @@ O launcher:
 - Logs salvos em `data/backend.log` e `data/frontend.log`
 
 > **Dica:** o primeiro uso de cada modelo envolve download do GGUF do Hugging Face. Modelos ficam em cache em `data/model-cache/`.
+
+---
+
+## Início rápido (Linux / macOS)
+
+### Pré-requisitos
+
+- **Python 3.11+** com `venv` (`python3-venv` no Ubuntu/Debian)
+- **Node.js 20+**
+- **GPU NVIDIA** com drivers atualizados (recomendado; funciona sem GPU em modo CPU)
+- `curl` e `unzip` instalados
+
+### Instalação
+
+```bash
+chmod +x install.sh
+./install.sh
+```
+
+O instalador faz as mesmas etapas da versão Windows: cria `.venv`, instala dependências, baixa `llama-server` e prepara `.env`.
+
+### Execução
+
+```bash
+./run.sh
+```
+
+Inicia backend e frontend, aguarda ambos ficarem prontos e abre o navegador. Use `Ctrl+C` para encerrar.
+
+> **Nota:** o script detecta automaticamente macOS (arm64/x64) e Linux para baixar o binário correto do llama-server.
 
 ---
 
@@ -142,8 +220,10 @@ myAIplayground/
 │   └── llama-server/     # Binário do llama-server
 ├── docs/              # Documentação adicional
 ├── scripts/           # Scripts utilitários (install, run, release, i18n, test)
-├── install.cmd        # Instalação automatizada (entrada)
-├── run.cmd            # Launcher (entrada)
+├── install.cmd        # Instalação automatizada (Windows)
+├── run.cmd            # Launcher (Windows)
+├── install.sh         # Instalação automatizada (Linux / macOS)
+├── run.sh             # Launcher (Linux / macOS)
 └── README.md
 ```
 
@@ -215,6 +295,16 @@ Criado por [Rodolfo Motta Saraiva](https://rmsaraiva.com/) como projeto pessoal 
 
 **My AI Playground** is an open-source, desktop-local application for chatting with [Google Gemma](https://ai.google.dev/gemma) AI models running entirely on your machine. It features a modern web UI, multimodal input (text, images, audio, files), and conversation history stored only locally.
 
+### System Requirements
+
+| Model | RAM | VRAM (NVIDIA CUDA) | Disk |
+|---|---|---|---|
+| Gemma 4 E2B (2B) | 8 GB | 4 GB (or CPU-only) | ~3 GB |
+| Gemma 4 E4B (4B) | 16 GB | 6 GB | ~5 GB |
+| Gemma 4 26B-A4B (26B MoE) | 32 GB | 16 GB+ | ~15 GB |
+
+> Without sufficient VRAM, llama.cpp will offload layers to system RAM (CPU mode), resulting in significantly slower inference. If you encounter **OOM errors**, try a smaller model or reduce `N_CTX` in `backend/.env`.
+
 ### Key points
 
 - **100% local inference** — all AI processing runs on your hardware via [llama.cpp](https://github.com/ggml-org/llama.cpp) (GGUF format). No data is sent to cloud services during normal chat use.
@@ -224,3 +314,18 @@ Criado por [Rodolfo Motta Saraiva](https://rmsaraiva.com/) como projeto pessoal 
 - **License**: [Apache License 2.0](LICENSE) — Copyright 2026 Rodolfo Motta Saraiva.
 
 For setup instructions, see the Portuguese sections above or the [setup guide](docs/setup-windows.md).
+
+### Quick Start
+
+**Windows:**
+```powershell
+install.cmd   # one-time setup
+run.cmd        # launch
+```
+
+**Linux / macOS:**
+```bash
+chmod +x install.sh run.sh
+./install.sh   # one-time setup
+./run.sh       # launch
+```

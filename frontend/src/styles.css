@@ -548,6 +548,71 @@ input {
   padding: 16px 14px 16px 20px;
 }
 
+.custom-instructions-banner {
+  text-align: center;
+  padding: 4px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(220, 180, 50, 0.10);
+  border: 1px solid rgba(220, 180, 50, 0.25);
+  font-size: 11px;
+  color: #d4a830;
+  cursor: pointer;
+  user-select: none;
+  margin-top: 12px;
+  margin-bottom: 4px;
+  flex-shrink: 0;
+}
+
+.custom-instructions-banner:hover {
+  background: rgba(220, 180, 50, 0.18);
+}
+
+.ci-snapshot-block {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-primary);
+  max-height: 300px;
+  overflow: auto;
+}
+
+.ci-modal-card {
+  width: min(600px, calc(100% - 32px));
+  max-height: 85vh;
+  overflow: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-surface);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+}
+
+.ci-modal-disclaimer {
+  margin: 0 0 16px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.ci-modal-snapshot {
+  margin-bottom: 16px;
+}
+
+.ci-modal-snapshot:last-child {
+  margin-bottom: 0;
+}
+
+.ci-modal-date {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
 .message-list > * {
   width: 100%;
   max-width: 768px;

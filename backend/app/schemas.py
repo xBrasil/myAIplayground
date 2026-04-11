@@ -26,6 +26,7 @@ class MessageRead(BaseModel):
     model_key: str | None
     attachment_name: str | None
     attachment_path: str | None
+    custom_instructions_snapshot: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -86,7 +87,7 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=1)
     enable_thinking: bool = False
     locale: str = "en-US"
-    custom_instructions: str = ""
+    custom_instructions: str = Field(default="", max_length=4000)
     enable_web_access: bool = False
     enable_local_files: bool = False
     allowed_folders: list[str] = Field(default_factory=list)

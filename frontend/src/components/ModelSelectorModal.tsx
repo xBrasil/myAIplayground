@@ -60,6 +60,7 @@ export default function ModelSelectorModal({
   const [errorDetail, setErrorDetail] = useState('');
   const previousModelRef = useRef<ModelKey | null>(null);
   const pollRef = useRef<number | null>(null);
+  const pollingInFlightRef = useRef(false);
   const prevOpenRef = useRef(false);
 
   const activeKey = health?.active_model_key || 'e4b';
@@ -130,6 +131,8 @@ export default function ModelSelectorModal({
 
     // Poll health for status updates
     pollRef.current = window.setInterval(async () => {
+      if (pollingInFlightRef.current) return;
+      pollingInFlightRef.current = true;
       try {
         const h = await onRefreshHealth();
         if (!h) return;
@@ -167,6 +170,8 @@ export default function ModelSelectorModal({
         }
       } catch {
         // network error during polling, keep trying
+      } finally {
+        pollingInFlightRef.current = false;
       }
     }, 2000);
   }, [selectedKey, activeKey, onSelectModel, onRefreshHealth, stopPolling, t]);
