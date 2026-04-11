@@ -5,7 +5,7 @@ import { useI18n } from '../lib/i18n';
 import AudioMessageContent from './AudioMessageContent';
 import MarkdownContent from './MarkdownContent';
 import SpeakButton from './SpeakButton';
-import type { Message, ModelKey } from '../types';
+import type { Message, ModelKey, ToolCallInfo } from '../types';
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg']);
 
@@ -42,6 +42,25 @@ interface MessageListProps {
   streamingText?: string;
   onEditLastMessage?: (newText: string) => void;
   onRegenerate?: () => void;
+  activeToolCalls?: ToolCallInfo[];
+}
+
+function renderToolCallLabel(tc: ToolCallInfo, t: (key: string) => string) {
+  const args = tc.arguments as Record<string, string>;
+  switch (tc.name) {
+    case 'fetch_url':
+      return <>{t('chat.toolFetchingUrl')}: <a href={args.url} target="_blank" rel="noopener noreferrer">{args.url}</a></>;
+    case 'read_file':
+      return `${t('chat.toolReadingFile')}: ${args.path || ''}`;
+    case 'list_directory':
+      return `${t('chat.toolListingDir')}: ${args.path || ''}`;
+    case 'web_search':
+      return `${t('chat.toolSearchingWeb')}: ${args.query || ''}`;
+    case 'view_image':
+      return `${t('chat.toolViewingImage')}: ${args.path || ''}`;
+    default:
+      return tc.name;
+  }
 }
 
 export default function MessageList({
@@ -50,12 +69,14 @@ export default function MessageList({
   streamingText = '',
   onEditLastMessage,
   onRegenerate,
+  activeToolCalls = [],
 }: MessageListProps) {
   const { t, locale } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const isStreamingRef = useRef(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [fileMenuId, setFileMenuId] = useState<string | null>(null);
+  const [expandedToolCalls, setExpandedToolCalls] = useState<Set<string>>(new Set());
 
   // Scroll to bottom on conversation change (smooth)
   useEffect(() => {
@@ -259,6 +280,34 @@ export default function MessageList({
                 </>
               ) : (
                 <>
+                  {message.tool_calls && message.tool_calls.length > 0 ? (
+                    <div className="tool-calls-persisted">
+                      <button
+                        type="button"
+                        className="tool-calls-toggle"
+                        onClick={() => setExpandedToolCalls((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(message.id)) next.delete(message.id);
+                          else next.add(message.id);
+                          return next;
+                        })}
+                        aria-expanded={expandedToolCalls.has(message.id)}
+                      >
+                        <svg className={`tool-calls-chevron${expandedToolCalls.has(message.id) ? ' tool-calls-chevron--open' : ''}`} viewBox="0 0 24 24" width="14" height="14"><polyline points="9 18 15 12 9 6" /></svg>
+                        <span>{t('chat.toolCallsUsed').replace('{n}', String(message.tool_calls.length))}</span>
+                      </button>
+                      {expandedToolCalls.has(message.id) ? (
+                        <div className="tool-calls-section tool-calls-section--persisted">
+                          {message.tool_calls.map((tc, i) => (
+                            <div key={i} className="tool-call-item tool-call-item--done">
+                              <span className="tool-call-icon">✓</span>
+                              <span className="tool-call-label">{renderToolCallLabel(tc, t)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <MarkdownContent content={message.content} />
                   <div className="assistant-actions">
                     <SpeakButton text={message.content} preferredVoice={preferredVoice} />
@@ -307,15 +356,35 @@ export default function MessageList({
         );
       })}
 
-      {streamingText ? (
+      {streamingText || activeToolCalls.length > 0 ? (
         <div className="message-row message-row--assistant">
           <div className="message-bubble message-bubble--streaming">
-            <MarkdownContent content={streamingText} />
-            <div className="typing-indicator">
-              <span />
-              <span />
-              <span />
-            </div>
+            {activeToolCalls.length > 0 ? (
+              <div className="tool-calls-section">
+                {activeToolCalls.map((tc, i) => (
+                  <div key={i} className={`tool-call-item${tc.done ? ' tool-call-item--done' : ''}`}>
+                    <span className="tool-call-icon">{tc.done ? '✓' : ''}</span>
+                    <span className="tool-call-label">{renderToolCallLabel(tc, t)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {streamingText ? (
+              <>
+                <MarkdownContent content={streamingText} />
+                <div className="typing-indicator">
+                  <span />
+                  <span />
+                  <span />
+                </div>
+              </>
+            ) : (
+              <div className="typing-indicator">
+                <span />
+                <span />
+                <span />
+              </div>
+            )}
           </div>
         </div>
       ) : null}

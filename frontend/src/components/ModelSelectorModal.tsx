@@ -60,12 +60,15 @@ export default function ModelSelectorModal({
   const [errorDetail, setErrorDetail] = useState('');
   const previousModelRef = useRef<ModelKey | null>(null);
   const pollRef = useRef<number | null>(null);
+  const prevOpenRef = useRef(false);
 
   const activeKey = health?.active_model_key || 'e4b';
 
-  // Reset state when modal opens
+  // Reset state only when the modal opens (not when activeKey changes during a switch)
   useEffect(() => {
-    if (open) {
+    const justOpened = open && !prevOpenRef.current;
+    prevOpenRef.current = open;
+    if (justOpened) {
       setSelectedKey(activeKey);
       setSwitchState('idle');
       setStatusMessage('');
@@ -175,9 +178,19 @@ export default function ModelSelectorModal({
   }, []);
 
   const handleClose = useCallback(() => {
-    if (switchState === 'switching') return; // don't close while switching
     stopPolling();
     onClose();
+  }, [stopPolling, onClose]);
+
+  // Auto-close on success after a brief delay
+  useEffect(() => {
+    if (switchState === 'success') {
+      const timer = window.setTimeout(() => {
+        stopPolling();
+        onClose();
+      }, 1500);
+      return () => window.clearTimeout(timer);
+    }
   }, [switchState, stopPolling, onClose]);
 
   if (!open) return null;
@@ -192,7 +205,7 @@ export default function ModelSelectorModal({
       >
         <header className="modal-header">
           <h3>{t('modelSelector.title')}</h3>
-          <button type="button" onClick={handleClose} disabled={switchState === 'switching'}>
+          <button type="button" onClick={handleClose} disabled={switchState === 'success'}>
             {t('close')}
           </button>
         </header>
@@ -259,10 +272,10 @@ export default function ModelSelectorModal({
           {/* Status / Progress area */}
           {switchState !== 'idle' && (
             <div className={`model-selector-status model-selector-status--${switchState}`}>
-              {switchState === 'switching' && (
+              {(switchState === 'switching' || switchState === 'success') && (
                 <div className="model-selector-progress">
                   <div className="progress-bar">
-                    <div className="progress-bar__fill progress-bar__fill--indeterminate" />
+                    <div className={`progress-bar__fill ${switchState === 'success' ? 'progress-bar__fill--complete' : 'progress-bar__fill--indeterminate'}`} />
                   </div>
                 </div>
               )}
@@ -287,13 +300,13 @@ export default function ModelSelectorModal({
             </>
           )}
           {switchState === 'switching' && (
-            <button type="button" disabled>
-              {t('modelSelector.switching')}
+            <button type="button" onClick={handleClose}>
+              {t('modelSelector.cancel')}
             </button>
           )}
           {switchState === 'success' && (
             <button type="button" className="primary-button" onClick={handleClose}>
-              {t('close')}
+              {t('modelSelector.successClose')}
             </button>
           )}
           {switchState === 'error' && (

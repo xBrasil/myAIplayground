@@ -19,6 +19,7 @@ def healthcheck() -> HealthResponse:
         model_status=model_service.model_status,
         model_loaded=model_service.is_loaded,
         cuda_available=model_service.cuda_available,
+        context_size=model_service.context_size,
         model_setup_status=model_service.setup_status,
         model_loading_enabled=settings.enable_model_loading,
         available_models=model_service.available_models(),

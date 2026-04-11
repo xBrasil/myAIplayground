@@ -2,6 +2,12 @@ export type InputType = 'text' | 'image' | 'audio' | 'file' | 'document' | 'mult
 export type ModelKey = 'e2b' | 'e4b' | '26b';
 export type ModelStatus = 'idle' | 'loading' | 'loaded' | 'error';
 
+export interface ToolCallInfo {
+  name: string;
+  arguments: Record<string, unknown>;
+  done: boolean;
+}
+
 export interface Message {
   id: string;
   role: 'system' | 'user' | 'assistant';
@@ -10,6 +16,7 @@ export interface Message {
   model_key?: ModelKey | null;
   attachment_name?: string | null;
   attachment_path?: string | null;
+  tool_calls?: ToolCallInfo[] | null;
   created_at: string;
 }
 
@@ -64,9 +71,22 @@ export interface StreamDoneEvent {
   conversation: Conversation;
   reply: Message;
   model_loaded: boolean;
+  tool_calls?: ToolCallInfo[];
 }
 
-export type ChatStreamEvent = StreamConversationEvent | StreamDeltaEvent | StreamDoneEvent;
+export interface StreamToolStartEvent {
+  type: 'tool_start';
+  name: string;
+  arguments: Record<string, unknown>;
+}
+
+export interface StreamToolDoneEvent {
+  type: 'tool_done';
+  name: string;
+  arguments: Record<string, unknown>;
+}
+
+export type ChatStreamEvent = StreamConversationEvent | StreamDeltaEvent | StreamDoneEvent | StreamToolStartEvent | StreamToolDoneEvent;
 
 export interface HealthResponse {
   app_name: string;
@@ -76,6 +96,7 @@ export interface HealthResponse {
   model_status: ModelStatus;
   model_loaded: boolean;
   cuda_available: boolean;
+  context_size: number;
   model_setup_status: string;
   model_loading_enabled: boolean;
   available_models: ModelOption[];

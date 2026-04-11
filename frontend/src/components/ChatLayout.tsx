@@ -3,10 +3,11 @@ import { useI18n } from '../lib/i18n';
 import Composer from './Composer';
 import MessageList from './MessageList';
 import Sidebar from './Sidebar';
-import type { Conversation, HealthResponse } from '../types';
+import type { Conversation, HealthResponse, ToolCallInfo } from '../types';
 
 interface ChatLayoutProps {
   busy: boolean;
+  modelLoading: boolean;
   enterToSend: boolean;
   conversations: Conversation[];
   currentConversation: Conversation | null;
@@ -24,14 +25,21 @@ interface ChatLayoutProps {
   onSendText: (text: string) => Promise<void>;
   onSendFile: (text: string, file: File) => Promise<void>;
   onSendFiles: (text: string, files: File[]) => Promise<void>;
+  onDropFiles?: (files: File[]) => void;
   onStop: () => void;
   onOpenModelSelector: () => void;
   onEditLastMessage?: (newText: string) => void;
   onRegenerate?: () => void;
+  droppedFiles?: File[];
+  onDroppedFilesConsumed?: () => void;
+  restoreComposer?: { text: string; files: File[] } | null;
+  onRestoreComposerConsumed?: () => void;
+  activeToolCalls?: ToolCallInfo[];
 }
 
 export default function ChatLayout({
   busy,
+  modelLoading,
   enterToSend,
   conversations,
   currentConversation,
@@ -49,12 +57,55 @@ export default function ChatLayout({
   onSendText,
   onSendFile,
   onSendFiles,
+  onDropFiles,
   onStop,
   onOpenModelSelector,
   onEditLastMessage,
   onRegenerate,
+  droppedFiles,
+  onDroppedFilesConsumed,
+  restoreComposer,
+  onRestoreComposerConsumed,
+  activeToolCalls,
 }: ChatLayoutProps) {
   const { t } = useI18n();
+  const [isDragOver, setIsDragOver] = useState(false);
+  const dragCounterRef = useRef(0);
+
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current += 1;
+    if (e.dataTransfer.types.includes('Files')) {
+      setIsDragOver(true);
+    }
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current -= 1;
+    if (dragCounterRef.current <= 0) {
+      dragCounterRef.current = 0;
+      setIsDragOver(false);
+    }
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current = 0;
+    setIsDragOver(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0 && onDropFiles) {
+      onDropFiles(files);
+    }
+  }, [onDropFiles]);
 
   function statusLabel(health: HealthResponse | null): string {
     if (!health) return t('status.connecting');
@@ -122,7 +173,25 @@ export default function ChatLayout({
         role="separator"
         aria-orientation="vertical"
       />
-      <section className="chat-panel">
+      <section
+        className="chat-panel"
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        {isDragOver && (
+          <div className="drop-overlay">
+            <div className="drop-overlay__content">
+              <svg viewBox="0 0 24 24" aria-hidden="true" width="48" height="48">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+              <span>{t('composer.dropFilesHere')}</span>
+            </div>
+          </div>
+        )}
         <header className="chat-header">
           <div className="chat-header__title">
             <span className="local-badge">{t('chat.localBadge')}</span>
@@ -175,15 +244,21 @@ export default function ChatLayout({
           streamingText={streamingText}
           onEditLastMessage={onEditLastMessage}
           onRegenerate={onRegenerate}
+          activeToolCalls={activeToolCalls}
         />
         <Composer
           busy={busy}
+          modelLoading={modelLoading}
           enterToSend={enterToSend}
           activeModelKey={health?.active_model_key}
           onSendText={onSendText}
           onSendFile={onSendFile}
           onSendFiles={onSendFiles}
           onStop={onStop}
+          droppedFiles={droppedFiles}
+          onDroppedFilesConsumed={onDroppedFilesConsumed}
+          restoreComposer={restoreComposer}
+          onRestoreComposerConsumed={onRestoreComposerConsumed}
         />
       </section>
     </main>

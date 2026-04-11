@@ -7,6 +7,7 @@ import LegalModal from './components/LegalModal';
 import ModelSelectorModal from './components/ModelSelectorModal';
 import SettingsPanel from './components/SettingsPanel';
 import { useI18n } from './lib/i18n';
+import type { ToolCallInfo } from './types';
 import {
   acceptLegal,
   deleteAllConversations,
@@ -23,7 +24,7 @@ import {
   streamUploadMessage,
   streamMultiUploadMessage,
 } from './lib/api';
-import { loadEnterToSendPreference, loadLastModelKey, loadCustomInstructions, saveEnterToSendPreference, saveLastModelKey, saveCustomInstructions } from './lib/preferences';
+import { loadEnterToSendPreference, loadLastModelKey, loadCustomInstructions, loadWebAccess, loadLocalFiles, loadAllowedFolders, saveEnterToSendPreference, saveLastModelKey, saveCustomInstructions, saveWebAccess, saveLocalFiles, saveAllowedFolders } from './lib/preferences';
 import { loadPreferredVoiceName } from './lib/speech';
 import type { ChatStreamEvent, Conversation, HealthResponse, ModelKey } from './types';
 
@@ -61,11 +62,17 @@ export default function App() {
   const [preferredVoice, setPreferredVoice] = useState(loadPreferredVoiceName());
   const [enterToSend, setEnterToSend] = useState(loadEnterToSendPreference());
   const [customInstructions, setCustomInstructions] = useState(loadCustomInstructions());
+  const [webAccess, setWebAccess] = useState(loadWebAccess());
+  const [localFiles, setLocalFiles] = useState(loadLocalFiles());
+  const [allowedFolders, setAllowedFolders] = useState(loadAllowedFolders());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
   const [apiPanelOpen, setApiPanelOpen] = useState(false);
   const [legalDocument, setLegalDocument] = useState<'terms' | 'privacy' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [droppedFiles, setDroppedFiles] = useState<File[]>([]);
+  const [restoreComposer, setRestoreComposer] = useState<{ text: string; files: File[] } | null>(null);
+  const [activeToolCalls, setActiveToolCalls] = useState<ToolCallInfo[]>([]);
   const abortControllerRef = useRef<AbortController | null>(null);
   const streamingTextRef = useRef('');
   const activeConversationIdRef = useRef<string | null>(null);
@@ -237,8 +244,19 @@ export default function App() {
       setBusy(true);
       setStreamingText('');
       streamingTextRef.current = '';
+      setActiveToolCalls([]);
       setError(null);
       await streamTextMessage(effectiveId, text, (event: ChatStreamEvent) => {
+        if (event.type === 'tool_start') {
+          setActiveToolCalls((prev) => [...prev, { name: event.name, arguments: event.arguments, done: false }]);
+          return;
+        }
+        if (event.type === 'tool_done') {
+          setActiveToolCalls((prev) => prev.map((tc) =>
+            tc.name === event.name && !tc.done ? { ...tc, done: true } : tc,
+          ));
+          return;
+        }
         if (event.type === 'conversation') {
           upsertConversation(event.conversation);
           setCurrentConversationId(event.conversation.id);
@@ -254,9 +272,10 @@ export default function App() {
 
         upsertConversation(event.conversation);
         setCurrentConversationId(event.conversation.id);
+        setActiveToolCalls([]);
         setStreamingText('');
         streamingTextRef.current = '';
-      }, controller.signal, locale, customInstructions);
+      }, controller.signal, locale, customInstructions, webAccess, localFiles, allowedFolders);
       await refreshHealth().catch(() => null);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -279,6 +298,7 @@ export default function App() {
         }
       } else {
         setError(err instanceof Error ? err.message : t('error.sendMessage'));
+        setRestoreComposer({ text, files: [] });
         setStreamingText('');
         streamingTextRef.current = '';
       }
@@ -300,8 +320,19 @@ export default function App() {
       setBusy(true);
       setStreamingText('');
       streamingTextRef.current = '';
+      setActiveToolCalls([]);
       setError(null);
       await streamUploadMessage(effectiveId, text, file, (event: ChatStreamEvent) => {
+        if (event.type === 'tool_start') {
+          setActiveToolCalls((prev) => [...prev, { name: event.name, arguments: event.arguments, done: false }]);
+          return;
+        }
+        if (event.type === 'tool_done') {
+          setActiveToolCalls((prev) => prev.map((tc) =>
+            tc.name === event.name && !tc.done ? { ...tc, done: true } : tc,
+          ));
+          return;
+        }
         if (event.type === 'conversation') {
           upsertConversation(event.conversation);
           setCurrentConversationId(event.conversation.id);
@@ -317,9 +348,10 @@ export default function App() {
 
         upsertConversation(event.conversation);
         setCurrentConversationId(event.conversation.id);
+        setActiveToolCalls([]);
         setStreamingText('');
         streamingTextRef.current = '';
-      }, controller.signal, locale, customInstructions);
+      }, controller.signal, locale, customInstructions, webAccess, localFiles, allowedFolders);
       await refreshHealth().catch(() => null);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -340,6 +372,7 @@ export default function App() {
         }
       } else {
         setError(err instanceof Error ? err.message : t('error.sendFile'));
+        setRestoreComposer({ text, files: [file] });
         setStreamingText('');
         streamingTextRef.current = '';
       }
@@ -361,8 +394,19 @@ export default function App() {
       setBusy(true);
       setStreamingText('');
       streamingTextRef.current = '';
+      setActiveToolCalls([]);
       setError(null);
       await streamMultiUploadMessage(effectiveId, text, files, (event: ChatStreamEvent) => {
+        if (event.type === 'tool_start') {
+          setActiveToolCalls((prev) => [...prev, { name: event.name, arguments: event.arguments, done: false }]);
+          return;
+        }
+        if (event.type === 'tool_done') {
+          setActiveToolCalls((prev) => prev.map((tc) =>
+            tc.name === event.name && !tc.done ? { ...tc, done: true } : tc,
+          ));
+          return;
+        }
         if (event.type === 'conversation') {
           upsertConversation(event.conversation);
           setCurrentConversationId(event.conversation.id);
@@ -378,9 +422,10 @@ export default function App() {
 
         upsertConversation(event.conversation);
         setCurrentConversationId(event.conversation.id);
+        setActiveToolCalls([]);
         setStreamingText('');
         streamingTextRef.current = '';
-      }, controller.signal, locale, customInstructions);
+      }, controller.signal, locale, customInstructions, webAccess, localFiles, allowedFolders);
       await refreshHealth().catch(() => null);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -401,6 +446,7 @@ export default function App() {
         }
       } else {
         setError(err instanceof Error ? err.message : t('error.sendFile'));
+        setRestoreComposer({ text, files });
         setStreamingText('');
         streamingTextRef.current = '';
       }
@@ -431,8 +477,19 @@ export default function App() {
       setBusy(true);
       setStreamingText('');
       streamingTextRef.current = '';
+      setActiveToolCalls([]);
       setError(null);
       await streamEditLastMessage(currentConversationId, newText, (event: ChatStreamEvent) => {
+        if (event.type === 'tool_start') {
+          setActiveToolCalls((prev) => [...prev, { name: event.name, arguments: event.arguments, done: false }]);
+          return;
+        }
+        if (event.type === 'tool_done') {
+          setActiveToolCalls((prev) => prev.map((tc) =>
+            tc.name === event.name && !tc.done ? { ...tc, done: true } : tc,
+          ));
+          return;
+        }
         if (event.type === 'conversation') {
           upsertConversation(event.conversation);
           activeConversationIdRef.current = event.conversation.id;
@@ -444,9 +501,10 @@ export default function App() {
           return;
         }
         upsertConversation(event.conversation);
+        setActiveToolCalls([]);
         setStreamingText('');
         streamingTextRef.current = '';
-      }, controller.signal, locale, customInstructions);
+      }, controller.signal, locale, customInstructions, webAccess, localFiles, allowedFolders);
       await refreshHealth().catch(() => null);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -492,8 +550,19 @@ export default function App() {
       setBusy(true);
       setStreamingText('');
       streamingTextRef.current = '';
+      setActiveToolCalls([]);
       setError(null);
       await streamRegenerate(currentConversationId, (event: ChatStreamEvent) => {
+        if (event.type === 'tool_start') {
+          setActiveToolCalls((prev) => [...prev, { name: event.name, arguments: event.arguments, done: false }]);
+          return;
+        }
+        if (event.type === 'tool_done') {
+          setActiveToolCalls((prev) => prev.map((tc) =>
+            tc.name === event.name && !tc.done ? { ...tc, done: true } : tc,
+          ));
+          return;
+        }
         if (event.type === 'conversation') {
           upsertConversation(event.conversation);
           activeConversationIdRef.current = event.conversation.id;
@@ -505,9 +574,10 @@ export default function App() {
           return;
         }
         upsertConversation(event.conversation);
+        setActiveToolCalls([]);
         setStreamingText('');
         streamingTextRef.current = '';
-      }, controller.signal, locale, customInstructions);
+      }, controller.signal, locale, customInstructions, webAccess, localFiles, allowedFolders);
       await refreshHealth().catch(() => null);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -547,6 +617,21 @@ export default function App() {
     setCustomInstructions(value);
   }
 
+  function handleChangeWebAccess(value: boolean) {
+    saveWebAccess(value);
+    setWebAccess(value);
+  }
+
+  function handleChangeLocalFiles(value: boolean) {
+    saveLocalFiles(value);
+    setLocalFiles(value);
+  }
+
+  function handleChangeAllowedFolders(folders: string[]) {
+    saveAllowedFolders(folders);
+    setAllowedFolders(folders);
+  }
+
   async function handleSelectModel(modelKey: ModelKey) {
     try {
       setError(null);
@@ -573,7 +658,8 @@ export default function App() {
     }
   }
 
-  const interfaceBusy = busy || health?.model_status === 'loading';
+  const modelLoading = health?.model_status === 'loading';
+  const interfaceBusy = busy || modelLoading;
 
   if (legalAccepted === null) {
     return null;
@@ -591,10 +677,16 @@ export default function App() {
         preferredVoice={preferredVoice}
         enterToSend={enterToSend}
         customInstructions={customInstructions}
+        webAccess={webAccess}
+        localFiles={localFiles}
+        allowedFolders={allowedFolders}
         onClose={() => setSettingsOpen(false)}
         onChangePreferredVoice={setPreferredVoice}
         onToggleEnterToSend={handleToggleEnterToSend}
         onChangeCustomInstructions={handleChangeCustomInstructions}
+        onChangeWebAccess={handleChangeWebAccess}
+        onChangeLocalFiles={handleChangeLocalFiles}
+        onChangeAllowedFolders={handleChangeAllowedFolders}
         onDeleteAll={handleDeleteAllConversations}
       />
       <ModelSelectorModal
@@ -608,6 +700,7 @@ export default function App() {
       <LegalModal document={legalDocument} onClose={() => setLegalDocument(null)} />
       <ChatLayout
         busy={interfaceBusy}
+        modelLoading={!!modelLoading}
         enterToSend={enterToSend}
         conversations={conversations}
         currentConversation={currentConversation}
@@ -626,9 +719,15 @@ export default function App() {
         onSendText={handleSendText}
         onSendFile={handleSendFile}
         onSendFiles={handleSendFiles}
+        onDropFiles={(files) => setDroppedFiles(files)}
+        droppedFiles={droppedFiles}
+        onDroppedFilesConsumed={() => setDroppedFiles([])}
+        restoreComposer={restoreComposer}
+        onRestoreComposerConsumed={() => setRestoreComposer(null)}
         onStop={handleStop}
         onEditLastMessage={handleEditLastMessage}
         onRegenerate={handleRegenerate}
+        activeToolCalls={activeToolCalls}
       />
     </>
   );

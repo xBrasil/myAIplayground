@@ -29,7 +29,7 @@ export default function Sidebar({
     <aside className="sidebar">
       <div className="sidebar-header">
         <div className="sidebar-brand">
-          <img src="/favicon-32x32.png" alt="" className="sidebar-brand__logo" width={32} height={32} />
+          <img src="/android-chrome-192x192.png" alt="" className="sidebar-brand__logo" width={32} height={32} />
           <div className="sidebar-brand__text">
             <strong>My AI Playground</strong>
             <a href="https://rmsaraiva.com/" target="_blank" rel="noopener noreferrer" className="sidebar-brand__author">RMSaraiva.com</a>

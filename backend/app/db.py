@@ -37,3 +37,6 @@ def create_db_and_tables() -> None:
     if "model_key" not in columns:
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE messages ADD COLUMN model_key VARCHAR(16)"))
+    if "tool_calls_json" not in columns:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE messages ADD COLUMN tool_calls_json TEXT"))
