@@ -13,6 +13,7 @@ interface ChatLayoutProps {
   conversations: Conversation[];
   currentConversation: Conversation | null;
   streamingText: string;
+  streamingConversationId: string | null;
   preferredVoice: string;
   health: HealthResponse | null;
   error: string | null;
@@ -36,6 +37,8 @@ interface ChatLayoutProps {
   restoreComposer?: { text: string; files: File[] } | null;
   onRestoreComposerConsumed?: () => void;
   activeToolCalls?: ToolCallInfo[];
+  searchQuery: string;
+  onSearchQueryChange: (query: string) => void;
 }
 
 export default function ChatLayout({
@@ -46,6 +49,7 @@ export default function ChatLayout({
   conversations,
   currentConversation,
   streamingText,
+  streamingConversationId,
   preferredVoice,
   health,
   error,
@@ -69,6 +73,8 @@ export default function ChatLayout({
   restoreComposer,
   onRestoreComposerConsumed,
   activeToolCalls,
+  searchQuery,
+  onSearchQueryChange,
 }: ChatLayoutProps) {
   const { t } = useI18n();
   const [isDragOver, setIsDragOver] = useState(false);
@@ -162,6 +168,9 @@ export default function ChatLayout({
       <Sidebar
         conversations={conversations}
         currentConversationId={currentConversation?.id || null}
+        streamingConversationId={streamingConversationId}
+        searchQuery={searchQuery}
+        onSearchQueryChange={onSearchQueryChange}
         onSelectConversation={onSelectConversation}
         onNewConversation={onNewConversation}
         onDeleteConversation={onDeleteConversation}
@@ -248,6 +257,7 @@ export default function ChatLayout({
           onEditLastMessage={onEditLastMessage}
           onRegenerate={onRegenerate}
           activeToolCalls={activeToolCalls}
+          searchQuery={searchQuery}
         />
         <Composer
           busy={busy}

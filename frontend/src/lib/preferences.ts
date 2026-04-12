@@ -5,6 +5,7 @@ const CUSTOM_INSTRUCTIONS_ENABLED_KEY = 'gemma-local-studio.custom-instructions-
 const WEB_ACCESS_KEY = 'gemma-local-studio.web-access';
 const LOCAL_FILES_KEY = 'gemma-local-studio.local-files';
 const ALLOWED_FOLDERS_KEY = 'gemma-local-studio.allowed-folders';
+const LOCATION_SHARING_KEY = 'gemma-local-studio.location-sharing';
 
 export function loadEnterToSendPreference(): boolean {
   const stored = window.localStorage.getItem(ENTER_TO_SEND_KEY);
@@ -71,4 +72,12 @@ export function loadAllowedFolders(): string[] {
 
 export function saveAllowedFolders(folders: string[]): void {
   window.localStorage.setItem(ALLOWED_FOLDERS_KEY, JSON.stringify(folders));
+}
+
+export function loadLocationSharing(): boolean {
+  return window.localStorage.getItem(LOCATION_SHARING_KEY) === 'true';
+}
+
+export function saveLocationSharing(value: boolean): void {
+  window.localStorage.setItem(LOCATION_SHARING_KEY, String(value));
 }

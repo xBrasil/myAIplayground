@@ -249,6 +249,23 @@ input {
   color: var(--text-tertiary);
 }
 
+.sidebar-item__streaming-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-right: 6px;
+  vertical-align: middle;
+  flex-shrink: 0;
+  animation: pulse-dot 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.75); }
+}
+
 .sidebar-item__delete {
   display: none;
   align-items: center;
@@ -347,6 +364,95 @@ input {
   font-size: 10px;
   color: var(--text-tertiary);
   opacity: 0.5;
+}
+
+.sidebar-footer__search-btn {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-surface);
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+.sidebar-footer__search-btn:hover {
+  background: var(--bg-surface-hover);
+}
+
+.sidebar-footer__search-btn svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: var(--text-primary);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Sidebar search bar */
+.sidebar-search {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px 6px;
+  flex-shrink: 0;
+}
+
+.sidebar-search__input {
+  flex: 1;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+  padding: 5px 8px;
+  outline: none;
+}
+
+.sidebar-search__input:focus {
+  border-color: var(--accent);
+}
+
+.sidebar-search__close {
+  background: transparent;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+}
+
+.sidebar-search__close svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.sidebar-search__close:hover {
+  color: var(--text-primary);
+}
+
+.sidebar-search__empty {
+  padding: 24px 16px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* Search highlight in messages */
+mark.search-highlight {
+  background: var(--accent);
+  color: var(--bg-app);
+  border-radius: 2px;
+  padding: 0 1px;
 }
 
 /* ============================================================

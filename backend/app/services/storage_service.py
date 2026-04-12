@@ -14,6 +14,38 @@ class StorageService:
     def __init__(self) -> None:
         self._settings = get_settings()
 
+    def search_conversations(self, db: Session, query: str) -> list[dict]:
+        """Search conversations by title and message content.
+        Returns title matches first, then content-only matches."""
+        term = f"%{query}%"
+        # Title matches
+        title_stmt = (
+            self._conversation_statement()
+            .where(Conversation.title.ilike(term))
+            .order_by(Conversation.updated_at.desc())
+        )
+        title_results = list(db.scalars(title_stmt).unique())
+        title_ids = {c.id for c in title_results}
+
+        # Content matches (excluding already-matched-by-title)
+        content_stmt = (
+            self._conversation_statement()
+            .where(
+                Message.content.ilike(term),
+                Conversation.id == Message.conversation_id,
+                Conversation.id.notin_(title_ids) if title_ids else True,
+            )
+            .order_by(Conversation.updated_at.desc())
+        )
+        content_results = list(db.scalars(content_stmt).unique())
+
+        results: list[dict] = []
+        for conv in title_results:
+            results.append({"conversation": conv, "match_type": "title"})
+        for conv in content_results:
+            results.append({"conversation": conv, "match_type": "content"})
+        return results
+
     def _conversation_statement(self):
         return select(Conversation).options(selectinload(Conversation.messages))
 
@@ -53,6 +85,7 @@ class StorageService:
         attachment_path: str | None = None,
         tool_calls_json: str | None = None,
         custom_instructions_snapshot: str | None = None,
+        custom_instructions_risk_score: int | None = None,
     ) -> Message:
         message = Message(
             id=str(uuid4()),
@@ -65,6 +98,7 @@ class StorageService:
             attachment_path=attachment_path,
             tool_calls_json=tool_calls_json,
             custom_instructions_snapshot=custom_instructions_snapshot,
+            custom_instructions_risk_score=custom_instructions_risk_score,
         )
         db.add(message)
         conv = db.get(Conversation, conversation_id)

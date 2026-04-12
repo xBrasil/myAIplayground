@@ -24,7 +24,7 @@ import {
   streamUploadMessage,
   streamMultiUploadMessage,
 } from './lib/api';
-import { loadEnterToSendPreference, loadLastModelKey, loadCustomInstructions, loadCustomInstructionsEnabled, loadWebAccess, loadLocalFiles, loadAllowedFolders, saveEnterToSendPreference, saveLastModelKey, saveCustomInstructions, saveCustomInstructionsEnabled, saveWebAccess, saveLocalFiles, saveAllowedFolders } from './lib/preferences';
+import { loadEnterToSendPreference, loadLastModelKey, loadCustomInstructions, loadCustomInstructionsEnabled, loadWebAccess, loadLocalFiles, loadAllowedFolders, loadLocationSharing, saveEnterToSendPreference, saveLastModelKey, saveCustomInstructions, saveCustomInstructionsEnabled, saveWebAccess, saveLocalFiles, saveAllowedFolders, saveLocationSharing } from './lib/preferences';
 import { loadPreferredVoiceName } from './lib/speech';
 import type { ChatStreamEvent, Conversation, HealthResponse, ModelKey } from './types';
 
@@ -66,6 +66,8 @@ export default function App() {
   const [webAccess, setWebAccess] = useState(loadWebAccess());
   const [localFiles, setLocalFiles] = useState(loadLocalFiles());
   const [allowedFolders, setAllowedFolders] = useState(loadAllowedFolders());
+  const [locationSharing, setLocationSharing] = useState(loadLocationSharing());
+  const [userLocation, setUserLocation] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
   const [apiPanelOpen, setApiPanelOpen] = useState(false);
@@ -75,9 +77,31 @@ export default function App() {
   const [restoreComposer, setRestoreComposer] = useState<{ text: string; files: File[] } | null>(null);
   const [activeToolCalls, setActiveToolCalls] = useState<ToolCallInfo[]>([]);
   const [streamingConversationId, setStreamingConversationId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const abortControllerRef = useRef<AbortController | null>(null);
   const streamingTextRef = useRef('');
   const activeConversationIdRef = useRef<string | null>(null);
+
+  // Fetch geolocation when location sharing is enabled
+  useEffect(() => {
+    if (!locationSharing) {
+      setUserLocation(null);
+      return;
+    }
+    if (!navigator.geolocation) {
+      setUserLocation(null);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setUserLocation(`${position.coords.latitude.toFixed(4)},${position.coords.longitude.toFixed(4)}`);
+      },
+      () => {
+        setUserLocation(null);
+      },
+      { enableHighAccuracy: false, timeout: 10000 },
+    );
+  }, [locationSharing]);
 
   async function refreshHealth() {
     const nextHealth = await fetchHealth();
@@ -238,7 +262,7 @@ export default function App() {
     abortControllerRef.current = controller;
     const effectiveId = isDraft(currentConversationId) ? null : currentConversationId;
     activeConversationIdRef.current = effectiveId;
-    setStreamingConversationId(effectiveId);
+    setStreamingConversationId(currentConversationId);
     // Remove draft from list once we're sending
     if (isDraft(currentConversationId)) {
       setConversations((prev) => prev.filter((c) => c.id !== DRAFT_ID));
@@ -279,7 +303,7 @@ export default function App() {
         setActiveToolCalls([]);
         setStreamingText('');
         streamingTextRef.current = '';
-      }, controller.signal, locale, effectiveCustomInstructions, webAccess, localFiles, allowedFolders);
+      }, controller.signal, locale, effectiveCustomInstructions, webAccess, localFiles, allowedFolders, userLocation);
       await refreshHealth().catch(() => null);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -318,7 +342,7 @@ export default function App() {
     abortControllerRef.current = controller;
     const effectiveId = isDraft(currentConversationId) ? null : currentConversationId;
     activeConversationIdRef.current = effectiveId;
-    setStreamingConversationId(effectiveId);
+    setStreamingConversationId(currentConversationId);
     if (isDraft(currentConversationId)) {
       setConversations((prev) => prev.filter((c) => c.id !== DRAFT_ID));
     }
@@ -358,7 +382,7 @@ export default function App() {
         setActiveToolCalls([]);
         setStreamingText('');
         streamingTextRef.current = '';
-      }, controller.signal, locale, effectiveCustomInstructions, webAccess, localFiles, allowedFolders);
+      }, controller.signal, locale, effectiveCustomInstructions, webAccess, localFiles, allowedFolders, userLocation);
       await refreshHealth().catch(() => null);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -395,7 +419,7 @@ export default function App() {
     abortControllerRef.current = controller;
     const effectiveId = isDraft(currentConversationId) ? null : currentConversationId;
     activeConversationIdRef.current = effectiveId;
-    setStreamingConversationId(effectiveId);
+    setStreamingConversationId(currentConversationId);
     if (isDraft(currentConversationId)) {
       setConversations((prev) => prev.filter((c) => c.id !== DRAFT_ID));
     }
@@ -435,7 +459,7 @@ export default function App() {
         setActiveToolCalls([]);
         setStreamingText('');
         streamingTextRef.current = '';
-      }, controller.signal, locale, effectiveCustomInstructions, webAccess, localFiles, allowedFolders);
+      }, controller.signal, locale, effectiveCustomInstructions, webAccess, localFiles, allowedFolders, userLocation);
       await refreshHealth().catch(() => null);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -517,7 +541,7 @@ export default function App() {
         setActiveToolCalls([]);
         setStreamingText('');
         streamingTextRef.current = '';
-      }, controller.signal, locale, effectiveCustomInstructions, webAccess, localFiles, allowedFolders);
+      }, controller.signal, locale, effectiveCustomInstructions, webAccess, localFiles, allowedFolders, userLocation);
       await refreshHealth().catch(() => null);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -593,7 +617,7 @@ export default function App() {
         setActiveToolCalls([]);
         setStreamingText('');
         streamingTextRef.current = '';
-      }, controller.signal, locale, effectiveCustomInstructions, webAccess, localFiles, allowedFolders);
+      }, controller.signal, locale, effectiveCustomInstructions, webAccess, localFiles, allowedFolders, userLocation);
       await refreshHealth().catch(() => null);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -652,6 +676,11 @@ export default function App() {
   function handleChangeAllowedFolders(folders: string[]) {
     saveAllowedFolders(folders);
     setAllowedFolders(folders);
+  }
+
+  function handleChangeLocationSharing(value: boolean) {
+    saveLocationSharing(value);
+    setLocationSharing(value);
   }
 
   async function handleSelectModel(modelKey: ModelKey) {
@@ -716,6 +745,8 @@ export default function App() {
         onChangeWebAccess={handleChangeWebAccess}
         onChangeLocalFiles={handleChangeLocalFiles}
         onChangeAllowedFolders={handleChangeAllowedFolders}
+        locationSharing={locationSharing}
+        onChangeLocationSharing={handleChangeLocationSharing}
         onDeleteAll={handleDeleteAllConversations}
       />
       <ModelSelectorModal
@@ -735,6 +766,7 @@ export default function App() {
         conversations={conversations}
         currentConversation={currentConversation}
         streamingText={effectiveStreamingText}
+        streamingConversationId={streamingConversationId}
         preferredVoice={preferredVoice}
         health={health}
         error={error}
@@ -758,6 +790,8 @@ export default function App() {
         onEditLastMessage={handleEditLastMessage}
         onRegenerate={handleRegenerate}
         activeToolCalls={effectiveToolCalls}
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
       />
     </>
   );

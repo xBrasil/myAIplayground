@@ -58,6 +58,13 @@ export default function Composer({ busy, modelLoading, enterToSend, activeModelK
     autoResize();
   }, [text, autoResize]);
 
+  // Refocus textarea when the model finishes generating
+  useEffect(() => {
+    if (!busy && textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  }, [busy]);
+
   // Merge externally dropped files into selectedFiles
   useEffect(() => {
     if (droppedFiles && droppedFiles.length > 0) {
@@ -182,6 +189,7 @@ export default function Composer({ busy, modelLoading, enterToSend, activeModelK
 
   async function handleSubmit() {
     if (busy) return;
+    textareaRef.current?.focus();
     if (recordedAudioFile) {
       stopPreview();
       const audioFile = recordedAudioFile;
@@ -535,7 +543,7 @@ export default function Composer({ busy, modelLoading, enterToSend, activeModelK
         <div className="composer-inner">
           <textarea
             ref={textareaRef}
-            disabled={busy}
+            readOnly={busy}
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={handleKeyDown}

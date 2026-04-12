@@ -22,6 +22,11 @@
   "sidebar.renamePrompt": "Rename conversation:",
   "sidebar.terms": "Terms",
   "sidebar.privacy": "Privacy",
+  "sidebar.generating": "Generating response",
+  "sidebar.search": "Search conversations",
+  "sidebar.searchPlaceholder": "Search messages...",
+  "sidebar.searchNoResults": "No results found",
+  "sidebar.closeSearch": "Close search",
 
   "chat.newConversation": "New conversation",
   "chat.localBadge": "Local only",
@@ -141,6 +146,10 @@
   "settings.localFilesRemoveFolder": "Remove this folder",
   "settings.localFilesFolderPlaceholder": "C:\\Users\\you\\Documents",
   "settings.localFilesAddFolder": "Add",
+
+  "settings.locationSharing": "Location sharing",
+  "settings.locationSharingHelp": "When enabled, your approximate location (city-level) is shared with the model to provide location-aware responses such as weather, local time, or nearby places.",
+  "settings.locationSharingToggle": "Share my location with the model",
 
   "progress.processing": "Processing",
 

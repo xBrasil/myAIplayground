@@ -43,3 +43,6 @@ def create_db_and_tables() -> None:
     if "custom_instructions_snapshot" not in columns:
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE messages ADD COLUMN custom_instructions_snapshot TEXT"))
+    if "custom_instructions_risk_score" not in columns:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE messages ADD COLUMN custom_instructions_risk_score INTEGER"))

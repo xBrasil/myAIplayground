@@ -22,6 +22,11 @@
   "sidebar.renamePrompt": "Renomear conversa:",
   "sidebar.terms": "Termos",
   "sidebar.privacy": "Privacidade",
+  "sidebar.generating": "Gerando resposta",
+  "sidebar.search": "Pesquisar conversas",
+  "sidebar.searchPlaceholder": "Pesquisar mensagens...",
+  "sidebar.searchNoResults": "Nenhum resultado encontrado",
+  "sidebar.closeSearch": "Fechar pesquisa",
 
   "chat.newConversation": "Nova conversa",
   "chat.localBadge": "Conversa local",
@@ -141,6 +146,10 @@
   "settings.localFilesRemoveFolder": "Remover esta pasta",
   "settings.localFilesFolderPlaceholder": "C:\\Users\\voce\\Documentos",
   "settings.localFilesAddFolder": "Adicionar",
+
+  "settings.locationSharing": "Compartilhamento de localização",
+  "settings.locationSharingHelp": "Quando ativado, sua localização aproximada (nível de cidade) é compartilhada com o modelo para fornecer respostas baseadas em localização, como clima, hora local ou locais próximos.",
+  "settings.locationSharingToggle": "Compartilhar minha localização com o modelo",
 
   "progress.processing": "Processando",
 

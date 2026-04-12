@@ -22,6 +22,11 @@
   "sidebar.renamePrompt": "Renombrar conversación:",
   "sidebar.terms": "Términos",
   "sidebar.privacy": "Privacidad",
+  "sidebar.generating": "Generando respuesta",
+  "sidebar.search": "Buscar conversaciones",
+  "sidebar.searchPlaceholder": "Buscar mensajes...",
+  "sidebar.searchNoResults": "No se encontraron resultados",
+  "sidebar.closeSearch": "Cerrar búsqueda",
 
   "chat.newConversation": "Nueva conversación",
   "chat.localBadge": "Solo local",
@@ -141,7 +146,9 @@
   "settings.localFilesRemoveFolder": "Eliminar esta carpeta",
   "settings.localFilesFolderPlaceholder": "C:\\Users\\usted\\Documentos",
   "settings.localFilesAddFolder": "Agregar",
-
+  "settings.locationSharing": "Compartir ubicación",
+  "settings.locationSharingHelp": "Cuando está activado, tu ubicación aproximada (nivel de ciudad) se comparte con el modelo para proporcionar respuestas basadas en ubicación, como el clima, la hora local o lugares cercanos.",
+  "settings.locationSharingToggle": "Compartir mi ubicación con el modelo",
   "progress.processing": "Procesando",
 
   "legal.termsTitle": "Términos de Uso",

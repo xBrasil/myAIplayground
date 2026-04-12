@@ -1,10 +1,16 @@
+import { useEffect, useRef, useState } from 'react';
+
 import { APP_VERSION } from '../app-info';
 import { useI18n } from '../lib/i18n';
+import { searchConversations, type SearchResult } from '../lib/api';
 import type { Conversation } from '../types';
 
 interface SidebarProps {
   conversations: Conversation[];
   currentConversationId: string | null;
+  streamingConversationId: string | null;
+  searchQuery: string;
+  onSearchQueryChange: (query: string) => void;
   onSelectConversation: (conversationId: string) => void;
   onNewConversation: () => void;
   onDeleteConversation: (conversationId: string) => Promise<void>;
@@ -16,6 +22,9 @@ interface SidebarProps {
 export default function Sidebar({
   conversations,
   currentConversationId,
+  streamingConversationId,
+  searchQuery,
+  onSearchQueryChange,
   onSelectConversation,
   onNewConversation,
   onDeleteConversation,
@@ -24,6 +33,40 @@ export default function Sidebar({
   onOpenLegal,
 }: SidebarProps) {
   const { t, locale } = useI18n();
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchInput, setSearchInput] = useState('');
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (searchOpen && searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, [searchOpen]);
+
+  useEffect(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    if (!searchInput.trim()) {
+      setSearchResults([]);
+      onSearchQueryChange('');
+      return;
+    }
+    searchTimerRef.current = setTimeout(() => {
+      onSearchQueryChange(searchInput.trim());
+      void searchConversations(searchInput.trim()).then(setSearchResults);
+    }, 300);
+    return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current); };
+  }, [searchInput]);
+
+  function handleCloseSearch() {
+    setSearchOpen(false);
+    setSearchInput('');
+    setSearchResults([]);
+    onSearchQueryChange('');
+  }
+
+  const displayList = searchInput.trim() ? searchResults.map((r) => r.conversation) : conversations;
 
   return (
     <aside className="sidebar">
@@ -49,26 +92,47 @@ export default function Sidebar({
         </button>
       </div>
 
+      {searchOpen && (
+        <div className="sidebar-search">
+          <input
+            ref={searchInputRef}
+            type="text"
+            className="sidebar-search__input"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder={t('sidebar.searchPlaceholder')}
+            onKeyDown={(e) => { if (e.key === 'Escape') handleCloseSearch(); }}
+          />
+          <button type="button" className="sidebar-search__close" onClick={handleCloseSearch} aria-label={t('sidebar.closeSearch')}>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+          </button>
+        </div>
+      )}
+
       <div className="sidebar-list">
-        {conversations.map((conversation) => {
+        {displayList.map((conversation) => {
           const isDraft = conversation.id === 'draft';
+          const isStreaming = conversation.id === streamingConversationId;
           const displayTitle = conversation.title || t('chat.newConversation');
           return (
           <div
             key={conversation.id}
-            className={`sidebar-item ${conversation.id === currentConversationId ? 'active' : ''}`}
+            className={`sidebar-item ${conversation.id === currentConversationId ? 'active' : ''} ${isStreaming ? 'streaming' : ''}`}
           >
             <button
               type="button"
               className="sidebar-item__select"
               onClick={() => onSelectConversation(conversation.id)}
             >
-              <span className="sidebar-item__title">{displayTitle}</span>
+              <span className="sidebar-item__title">
+                {isStreaming && <span className="sidebar-item__streaming-dot" aria-label={t('sidebar.generating')} />}
+                {displayTitle}
+              </span>
               <span className="sidebar-item__date">
                 {new Date(conversation.updated_at).toLocaleDateString(locale)}
               </span>
             </button>
-            {!isDraft && (
+            {!isDraft && !searchInput.trim() && (
             <>
             <button
               type="button"
@@ -110,11 +174,26 @@ export default function Sidebar({
           </div>
           );
         })}
+        {searchInput.trim() && displayList.length === 0 && (
+          <div className="sidebar-search__empty">{t('sidebar.searchNoResults')}</div>
+        )}
       </div>
 
       <div className="sidebar-footer">
         <button type="button" onClick={() => onOpenLegal('terms')}>{t('sidebar.terms')}</button>
         <button type="button" onClick={() => onOpenLegal('privacy')}>{t('sidebar.privacy')}</button>
+        <button
+          type="button"
+          className="sidebar-footer__search-btn"
+          onClick={() => setSearchOpen(!searchOpen)}
+          aria-label={t('sidebar.search')}
+          title={t('sidebar.search')}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+        </button>
         <span className="sidebar-footer__version">v{APP_VERSION}</span>
       </div>
     </aside>

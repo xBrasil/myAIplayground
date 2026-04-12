@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Build a release zip for My AI Playground.
+"""Build a release zip (and optionally a Windows installer) for My AI Playground.
 
 Usage:
-    python scripts/release.py          # output → releases/my-ai-playground-<date>-<hash>.zip
+    python scripts/release.py                   # zip only
+    python scripts/release.py --installer       # zip + Inno Setup installer
     python scripts/release.py -o out.zip
 """
 
 import argparse
 import datetime
 import os
+import shutil
 import subprocess
 import sys
 import zipfile
@@ -145,10 +147,79 @@ def build_zip(output: Path) -> None:
     print(f"Created {output} ({size_mb:.1f} MB, {len(files)} files)")
 
 
+# ---------------------------------------------------------------------------
+# Inno Setup installer
+# ---------------------------------------------------------------------------
+
+INNO_SEARCH_PATHS = [
+    Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")) / "Inno Setup 6" / "ISCC.exe",
+    Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "Inno Setup 6" / "ISCC.exe",
+    Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Inno Setup 6" / "ISCC.exe",
+]
+
+
+def find_iscc() -> Path | None:
+    """Locate Inno Setup compiler (ISCC.exe)."""
+    # Check PATH first
+    iscc = shutil.which("iscc") or shutil.which("ISCC")
+    if iscc:
+        return Path(iscc)
+    # Check common install locations
+    for p in INNO_SEARCH_PATHS:
+        if p.exists():
+            return p
+    return None
+
+
+def build_installer() -> None:
+    """Build a Windows installer using Inno Setup."""
+    iscc = find_iscc()
+    if not iscc:
+        print(
+            "ERROR: Inno Setup 6 (ISCC.exe) not found.\n"
+            "  Download from: https://jrsoftware.org/isdl.php\n"
+            "  Or install via: winget install JRSoftware.InnoSetup",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    iss_file = REPO_ROOT / "scripts" / "installer.iss"
+    if not iss_file.exists():
+        print(f"ERROR: {iss_file} not found", file=sys.stderr)
+        sys.exit(1)
+
+    version = read_version().split()[0]  # strip "(dev)" etc.
+    repo_dir = str(REPO_ROOT).replace("/", "\\")
+
+    cmd = [
+        str(iscc),
+        f"/DAppVer={version}",
+        f"/DRepoDir={repo_dir}",
+        str(iss_file),
+    ]
+
+    print(f"Building installer with Inno Setup...")
+    print(f"  ISCC: {iscc}")
+    print(f"  Version: {version}")
+    result = subprocess.run(cmd, cwd=REPO_ROOT)
+    if result.returncode != 0:
+        print("ERROR: Inno Setup compilation failed", file=sys.stderr)
+        sys.exit(1)
+
+    output = REPO_ROOT / "releases" / f"my-ai-playground-v{version}-setup.exe"
+    if output.exists():
+        size_mb = output.stat().st_size / (1024 * 1024)
+        print(f"Created {output} ({size_mb:.1f} MB)")
+    else:
+        print(f"Installer expected at {output}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Package My AI Playground release")
     parser.add_argument("-o", "--output", type=Path, default=None,
                         help="Output zip path (default: releases/my-ai-playground-<date>-<hash>.zip)")
+    parser.add_argument("--installer", action="store_true",
+                        help="Also build a Windows installer (.exe) using Inno Setup 6")
     args = parser.parse_args()
 
     if args.output is None:
@@ -158,6 +229,9 @@ def main() -> None:
         args.output = REPO_ROOT / "releases" / f"{name}.zip"
 
     build_zip(args.output)
+
+    if args.installer:
+        build_installer()
 
 
 if __name__ == "__main__":

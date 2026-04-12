@@ -50,6 +50,32 @@ export async function fetchHealth(): Promise<HealthResponse> {
   return response.json();
 }
 
+export async function evaluateCustomInstructionsRisk(customInstructions: string): Promise<number> {
+  const response = await fetch(`${API_BASE}/chat/evaluate-risk`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ custom_instructions: customInstructions }),
+  });
+  if (!response.ok) {
+    return 0;
+  }
+  const data = await response.json();
+  return data.risk_score ?? 0;
+}
+
+export interface SearchResult {
+  conversation: Conversation;
+  match_type: 'title' | 'content';
+}
+
+export async function searchConversations(query: string): Promise<SearchResult[]> {
+  const response = await fetch(`${API_BASE}/chat/search?q=${encodeURIComponent(query)}`);
+  if (!response.ok) {
+    return [];
+  }
+  return response.json();
+}
+
 export async function fetchConversations(): Promise<Conversation[]> {
   const response = await fetch(`${API_BASE}/conversations`);
   if (!response.ok) {
@@ -157,11 +183,12 @@ export async function streamTextMessage(
   enableWebAccess: boolean = false,
   enableLocalFiles: boolean = false,
   allowedFolders: string[] = [],
+  userLocation: string | null = null,
 ): Promise<void> {
   const response = await fetch(`${API_BASE}/chat/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ conversation_id: conversationId, message, locale, custom_instructions: customInstructions || undefined, enable_web_access: enableWebAccess, enable_local_files: enableLocalFiles, allowed_folders: allowedFolders.length ? allowedFolders : undefined }),
+    body: JSON.stringify({ conversation_id: conversationId, message, locale, custom_instructions: customInstructions || undefined, enable_web_access: enableWebAccess, enable_local_files: enableLocalFiles, allowed_folders: allowedFolders.length ? allowedFolders : undefined, user_location: userLocation || undefined }),
     signal,
   });
   if (!response.ok || !response.body) {
@@ -240,6 +267,7 @@ export async function streamUploadMessage(
   enableWebAccess: boolean = false,
   enableLocalFiles: boolean = false,
   allowedFolders: string[] = [],
+  userLocation: string | null = null,
 ): Promise<void> {
   const formData = new FormData();
   formData.append('message', getUploadMessage(message, file));
@@ -251,6 +279,7 @@ export async function streamUploadMessage(
   if (enableWebAccess) formData.append('enable_web_access', 'true');
   if (enableLocalFiles) formData.append('enable_local_files', 'true');
   if (allowedFolders.length) formData.append('allowed_folders', JSON.stringify(allowedFolders));
+  if (userLocation) formData.append('user_location', userLocation);
   formData.append('file', file);
 
   const response = await fetch(`${API_BASE}/chat/upload/stream`, {
@@ -302,6 +331,7 @@ export async function streamMultiUploadMessage(
   enableWebAccess: boolean = false,
   enableLocalFiles: boolean = false,
   allowedFolders: string[] = [],
+  userLocation: string | null = null,
 ): Promise<void> {
   const formData = new FormData();
   formData.append('message', message.trim());
@@ -313,6 +343,7 @@ export async function streamMultiUploadMessage(
   if (enableWebAccess) formData.append('enable_web_access', 'true');
   if (enableLocalFiles) formData.append('enable_local_files', 'true');
   if (allowedFolders.length) formData.append('allowed_folders', JSON.stringify(allowedFolders));
+  if (userLocation) formData.append('user_location', userLocation);
   for (const file of files) {
     formData.append('files', file);
   }
@@ -389,11 +420,12 @@ export async function streamEditLastMessage(
   enableWebAccess: boolean = false,
   enableLocalFiles: boolean = false,
   allowedFolders: string[] = [],
+  userLocation: string | null = null,
 ): Promise<void> {
   const response = await fetch(`${API_BASE}/chat/${conversationId}/edit-last/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, locale, custom_instructions: customInstructions || undefined, enable_web_access: enableWebAccess, enable_local_files: enableLocalFiles, allowed_folders: allowedFolders.length ? allowedFolders : undefined }),
+    body: JSON.stringify({ message, locale, custom_instructions: customInstructions || undefined, enable_web_access: enableWebAccess, enable_local_files: enableLocalFiles, allowed_folders: allowedFolders.length ? allowedFolders : undefined, user_location: userLocation || undefined }),
     signal,
   });
   if (!response.ok || !response.body) {
@@ -427,11 +459,12 @@ export async function streamRegenerate(
   enableWebAccess: boolean = false,
   enableLocalFiles: boolean = false,
   allowedFolders: string[] = [],
+  userLocation: string | null = null,
 ): Promise<void> {
   const response = await fetch(`${API_BASE}/chat/${conversationId}/regenerate/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ locale, custom_instructions: customInstructions || undefined, enable_web_access: enableWebAccess, enable_local_files: enableLocalFiles, allowed_folders: allowedFolders.length ? allowedFolders : undefined }),
+    body: JSON.stringify({ locale, custom_instructions: customInstructions || undefined, enable_web_access: enableWebAccess, enable_local_files: enableLocalFiles, allowed_folders: allowedFolders.length ? allowedFolders : undefined, user_location: userLocation || undefined }),
     signal,
   });
   if (!response.ok || !response.body) {

@@ -31,3 +31,4 @@ Thumbs.db
 *.log
 
 releases/
+.github/prompts/todo-dev.prompt.md
