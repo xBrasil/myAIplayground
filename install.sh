@@ -44,7 +44,7 @@ for cmd in python3 python; do
     PY_VER=$("$cmd" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>/dev/null || echo "0.0")
     PY_MAJOR=$(echo "$PY_VER" | cut -d. -f1)
     PY_MINOR=$(echo "$PY_VER" | cut -d. -f2)
-    if [ "$PY_MAJOR" -ge 3 ] && [ "$PY_MINOR" -ge 11 ]; then
+    if [ "$PY_MAJOR" -gt 3 ] || { [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -ge 11 ]; }; then
       PYTHON_CMD="$cmd"
       break
     fi
@@ -72,6 +72,13 @@ if ! command -v npm &>/dev/null; then
   else
     echo "  macOS: brew install node"
   fi
+  exit 1
+fi
+NODE_VER=$(node -v | sed 's/^v//')
+NODE_MAJOR=$(echo "$NODE_VER" | cut -d. -f1)
+if [ "$NODE_MAJOR" -lt 20 ]; then
+  err "Node.js 20+ is required (found v$NODE_VER). Please upgrade:"
+  echo "  https://nodejs.org"
   exit 1
 fi
 ok "Node.js: $(node --version), npm: $(npm --version)"

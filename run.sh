@@ -83,7 +83,7 @@ if check_http "$FRONTEND_URL"; then
 else
   step "Starting frontend..."
   cd "$FRONTEND_DIR"
-  npx vite --host=127.0.0.1 --port=5173 --strictPort \
+  npm run dev -- --host=127.0.0.1 --port=5173 --strictPort \
     >"$FRONTEND_LOG" 2>"$FRONTEND_ERR_LOG" &
   FRONTEND_PID=$!
   cd "$REPO_ROOT"

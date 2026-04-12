@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { useI18n, type Locale } from '../lib/i18n';
 import VoiceSettings from './VoiceSettings';
@@ -21,6 +21,8 @@ interface SettingsPanelProps {
   onChangeWebAccess: (value: boolean) => void;
   onChangeLocalFiles: (value: boolean) => void;
   onChangeAllowedFolders: (folders: string[]) => void;
+  locationSharing: boolean;
+  onChangeLocationSharing: (value: boolean) => void;
   onDeleteAll: () => Promise<void>;
 }
 
@@ -42,6 +44,8 @@ export default function SettingsPanel({
   onChangeWebAccess,
   onChangeLocalFiles,
   onChangeAllowedFolders,
+  locationSharing,
+  onChangeLocationSharing,
   onDeleteAll,
 }: SettingsPanelProps) {
   const { t, locale, setLocale } = useI18n();
@@ -49,6 +53,7 @@ export default function SettingsPanel({
   const [confirmationText, setConfirmationText] = useState('');
   const [newFolderPath, setNewFolderPath] = useState('');
   const canDeleteAll = useMemo(() => confirmationText === deleteConfirmation && !busy, [confirmationText, busy, deleteConfirmation]);
+  const mouseDownOnBackdropRef = useRef(false);
 
   useEffect(() => {
     if (!open) {
@@ -62,7 +67,17 @@ export default function SettingsPanel({
   }
 
   return (
-    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onMouseDown={(e) => { mouseDownOnBackdropRef.current = e.target === e.currentTarget; }}
+      onMouseUp={(e) => {
+        if (mouseDownOnBackdropRef.current && e.target === e.currentTarget) {
+          onClose();
+        }
+        mouseDownOnBackdropRef.current = false;
+      }}
+    >
       <section className="modal-card settings-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
         <header className="modal-header">
           <h3>{t('settings.title')}</h3>
@@ -247,6 +262,21 @@ export default function SettingsPanel({
                 </div>
               </>
             )}
+          </section>
+
+          <section className="settings-section">
+            <h4>{t('settings.locationSharing')}</h4>
+            <p className="settings-help">
+              {t('settings.locationSharingHelp')}
+            </p>
+            <label className="toggle-row">
+              <span>{t('settings.locationSharingToggle')}</span>
+              <input
+                type="checkbox"
+                checked={locationSharing}
+                onChange={(event) => onChangeLocationSharing(event.target.checked)}
+              />
+            </label>
           </section>
 
           <section className="settings-section">

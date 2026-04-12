@@ -27,6 +27,7 @@ class MessageRead(BaseModel):
     attachment_name: str | None
     attachment_path: str | None
     custom_instructions_snapshot: str | None = None
+    custom_instructions_risk_score: int | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -91,6 +92,7 @@ class ChatRequest(BaseModel):
     enable_web_access: bool = False
     enable_local_files: bool = False
     allowed_folders: list[str] = Field(default_factory=list)
+    user_location: str | None = None
 
 
 class ChatResponse(BaseModel):
@@ -107,6 +109,14 @@ class DeleteConversationResponse(BaseModel):
 
 class DeleteAllConversationsRequest(BaseModel):
     confirmation_text: str = Field(min_length=1)
+
+
+class RiskEvaluationRequest(BaseModel):
+    custom_instructions: str = Field(min_length=1, max_length=4000)
+
+
+class RiskEvaluationResponse(BaseModel):
+    risk_score: int
 
 
 class ModelSelectionRequest(BaseModel):

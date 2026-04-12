@@ -38,6 +38,9 @@
 | **Leitura de respostas** | Text-to-Speech via Web Speech API com preferência para vozes Microsoft |
 | **Markdown rico** | Renderização com GFM, blocos de código com syntax highlight, matemática KaTeX |
 | **Edição de mensagens** | Editar mensagens enviadas e regenerar respostas |
+| **Pesquisa de mensagens** | Busque conversas por título ou conteúdo — destaque automático dos termos encontrados |
+| **Localização** | Compartilhamento opcional de geolocalização para respostas mais contextualizadas (desativado por padrão) |
+| **Avaliação de risco** | Instruções personalizadas são avaliadas automaticamente pelo LLM; alerta exibido apenas quando o risco é significativo |
 | **i18n** | Português (BR), English (US), Español e Français — detecta automaticamente o idioma do navegador |
 | **Tema escuro** | UI minimalista e responsiva com design dark-mode |
 | **Janela deslizante** | Gestão automática de contexto: truncamento de conteúdo longo, descarte de mensagens antigas e retry em estouro |
@@ -47,15 +50,35 @@
 
 ## Interface
 
-<!-- Substitua os placeholders abaixo pelas capturas de tela reais -->
-<!-- Sugestões de como tirar cada screenshot: veja docs/screenshots/README.md -->
+<p align="center">
+  <img src="docs/screenshots/chat-dark-mode.jpeg" alt="Chat em tema escuro" width="720" /><br/>
+  <em>Interface principal com tema escuro — conversa com o modelo Gemma 4 E4B</em>
+</p>
 
-| | |
-|---|---|
-| ![Chat em tema escuro](docs/screenshots/chat-dark-mode.png) | ![Entrada multimodal com imagem](docs/screenshots/multimodal-image.png) |
-| Chat principal com tema escuro | Envio e análise de imagens |
-| ![Seletor de modelos](docs/screenshots/model-selector.png) | ![Painel de ajustes](docs/screenshots/settings-panel.png) |
-| Seletor de modelos com capacidades | Painel de ajustes completo |
+<p align="center">
+  <img src="docs/screenshots/multimodal-image.jpeg" alt="Entrada multimodal com imagem" width="720" /><br/>
+  <em>Envio de imagem com análise visual pelo modelo</em>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/streaming-response.jpeg" alt="Resposta em streaming" width="720" /><br/>
+  <em>Resposta em tempo real — tokens aparecem conforme são gerados</em>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/model-selector.jpeg" alt="Seletor de modelos" width="720" /><br/>
+  <em>Seletor de modelos com descrições de capacidade e limitações</em>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/settings-panel.jpeg" alt="Painel de ajustes" width="720" /><br/>
+  <em>Painel de ajustes — idioma, voz, instruções personalizadas, acesso web, arquivos locais</em>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/web-search.jpeg" alt="Pesquisa na web" width="720" /><br/>
+  <em>Pesquisa na web com citação de fontes numeradas</em>
+</p>
 
 ---
 
@@ -94,6 +117,14 @@ O My AI Playground roda modelos de IA localmente no seu hardware. Os requisitos 
 ---
 
 ## Início rápido (Windows)
+
+### Opção A — Instalador gráfico
+
+Na [página de releases](https://github.com/xBrasil/myAIplayground/releases) está disponível um instalador `.exe` para Windows (criado com [Inno Setup](https://jrsoftware.org/isinfo.php)). O assistente de instalação copia os arquivos, cria atalhos no Menu Iniciar e na Área de Trabalho, e opcionalmente executa a configuração de dependências ao final.
+
+> **Nota:** Python 3.11+ e Node.js 20+ ainda precisam estar instalados no sistema.
+
+### Opção B — Via scripts
 
 ### Pré-requisitos
 
@@ -258,6 +289,8 @@ As variáveis de ambiente ficam em `backend/.env` (criado automaticamente pelo i
 
 ## Modelos de IA (Gemma)
 
+> **Aviso:** Este projeto **não é afiliado, patrocinado nem endossado pelo Google ou pela Alphabet Inc.** "Gemma" é uma marca do Google. Os modelos Gemma são utilizados sob os termos de licenciamento disponibilizados pelo Google.
+
 Os modelos de IA utilizados por esta aplicação (família **Google Gemma**) **não são distribuídos** com este repositório. Eles são baixados diretamente do [Hugging Face](https://huggingface.co/) mediante solicitação do usuário e estão sujeitos aos [Termos de Uso do Gemma](https://ai.google.dev/gemma/terms) do Google.
 
 Ao baixar e usar esses modelos, você concorda em cumprir os termos do Google, que incluem restrições à geração de conteúdo prejudicial, ilegal ou enganoso.
@@ -288,12 +321,15 @@ Criado por [Rodolfo Motta Saraiva](https://rmsaraiva.com/) como projeto pessoal 
 | [pillow-heif](https://github.com/bigcat88/pillow_heif) | BSD-3-Clause |
 | [svglib](https://github.com/deeplook/svglib) | LGPL-3.0 |
 | [reportlab](https://www.reportlab.com/dev/opensource/) | BSD-3-Clause |
+| [Google Gemma 4](https://ai.google.dev/gemma) (modelos de IA — não distribuídos) | [Gemma Terms of Use](https://ai.google.dev/gemma/terms) |
 
 ---
 
 ## English Summary
 
 **My AI Playground** is an open-source, desktop-local application for chatting with [Google Gemma](https://ai.google.dev/gemma) AI models running entirely on your machine. It features a modern web UI, multimodal input (text, images, audio, files), and conversation history stored only locally.
+
+> **Disclaimer:** This project is **not affiliated with, sponsored by, or endorsed by Google or Alphabet Inc.** "Gemma" is a trademark of Google. The Gemma models are used under the licensing terms provided by Google.
 
 ### System Requirements
 

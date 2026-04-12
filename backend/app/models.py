@@ -39,6 +39,7 @@ class Message(Base):
     attachment_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
     tool_calls_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     custom_instructions_snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)
+    custom_instructions_risk_score: Mapped[int | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
 
     conversation: Mapped[Conversation] = relationship(back_populates="messages")

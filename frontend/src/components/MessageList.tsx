@@ -45,6 +45,7 @@ interface MessageListProps {
   onEditLastMessage?: (newText: string) => void;
   onRegenerate?: () => void;
   activeToolCalls?: ToolCallInfo[];
+  searchQuery?: string;
 }
 
 function renderToolCallLabel(tc: ToolCallInfo, t: (key: string) => string) {
@@ -76,6 +77,7 @@ export default function MessageList({
   onEditLastMessage,
   onRegenerate,
   activeToolCalls = [],
+  searchQuery = '',
 }: MessageListProps) {
   const { t, locale } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -97,15 +99,19 @@ export default function MessageList({
   }, [messages]);
 
   // Compute the set of message indices that need a CI banner rendered before them.
-  // A banner appears before the first assistant message that has a given snapshot text.
+  // A banner appears before the first assistant message that has a given snapshot text,
+  // but ONLY if the risk score is above 50.
   const ciBannerBeforeIdx = useMemo(() => {
     const indices = new Set<number>();
     let lastSeenSnapshot: string | null = null;
     for (let i = 0; i < messages.length; i++) {
       const snap = messages[i].custom_instructions_snapshot;
+      const risk = messages[i].custom_instructions_risk_score;
       if (snap && snap !== lastSeenSnapshot) {
         lastSeenSnapshot = snap;
-        indices.add(i);
+        if (risk != null && risk > 50) {
+          indices.add(i);
+        }
       }
     }
     return indices;
@@ -137,6 +143,48 @@ export default function MessageList({
     window.addEventListener('click', handler);
     return () => window.removeEventListener('click', handler);
   }, [fileMenuId]);
+
+  // Highlight search query matches in messages
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    // Remove existing marks
+    container.querySelectorAll('mark.search-highlight').forEach((m) => {
+      const parent = m.parentNode;
+      if (parent) {
+        parent.replaceChild(document.createTextNode(m.textContent || ''), m);
+        parent.normalize();
+      }
+    });
+    if (!searchQuery.trim()) return;
+    const term = searchQuery.trim().toLowerCase();
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+    const matches: { node: Text; start: number; length: number }[] = [];
+    let node: Text | null;
+    while ((node = walker.nextNode() as Text | null)) {
+      const text = node.textContent || '';
+      let idx = text.toLowerCase().indexOf(term);
+      while (idx !== -1) {
+        matches.push({ node, start: idx, length: term.length });
+        idx = text.toLowerCase().indexOf(term, idx + term.length);
+      }
+    }
+    // Apply marks in reverse to preserve node offsets
+    for (let i = matches.length - 1; i >= 0; i--) {
+      const { node: textNode, start, length } = matches[i];
+      const range = document.createRange();
+      range.setStart(textNode, start);
+      range.setEnd(textNode, start + length);
+      const mark = document.createElement('mark');
+      mark.className = 'search-highlight';
+      range.surroundContents(mark);
+    }
+    // Scroll to first match
+    const firstMark = container.querySelector('mark.search-highlight');
+    if (firstMark) {
+      firstMark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [searchQuery, messages]);
 
   // Find last user and last assistant message indices
   const lastUserIdx = (() => {
@@ -222,7 +270,12 @@ export default function MessageList({
                 tabIndex={0}
                 onClick={() => setCiModalOpen(true)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') setCiModalOpen(true);
+                  if (e.key === 'Enter') {
+                    setCiModalOpen(true);
+                  } else if (e.key === ' ') {
+                    e.preventDefault();
+                    setCiModalOpen(true);
+                  }
                 }}
               >
                 ⚠ {t('chat.customInstructionsDisclaimer')}

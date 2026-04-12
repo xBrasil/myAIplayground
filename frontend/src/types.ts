@@ -18,6 +18,7 @@ export interface Message {
   attachment_path?: string | null;
   tool_calls?: ToolCallInfo[] | null;
   custom_instructions_snapshot?: string | null;
+  custom_instructions_risk_score?: number | null;
   created_at: string;
 }
 

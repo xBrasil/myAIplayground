@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.schemas import ChatRequest, ChatResponse
+from app.schemas import ChatRequest, ChatResponse, RiskEvaluationRequest, RiskEvaluationResponse
 from app.services.chat_service import chat_service
 from app.services.document_service import extract_text as extract_document_text
 from app.services.input_adapter_service import input_adapter_service
@@ -100,6 +100,7 @@ def _serialize_conversation(current_conversation) -> dict:
                 "attachment_path": message.attachment_path,
                 "tool_calls": json.loads(message.tool_calls_json) if message.tool_calls_json else None,
                 "custom_instructions_snapshot": message.custom_instructions_snapshot,
+                "custom_instructions_risk_score": message.custom_instructions_risk_score,
                 "created_at": _local_iso(message.created_at),
             }
             for message in current_conversation.messages
@@ -118,8 +119,29 @@ def _serialize_message(message) -> dict:
         "attachment_path": message.attachment_path,
         "tool_calls": json.loads(message.tool_calls_json) if message.tool_calls_json else None,
         "custom_instructions_snapshot": message.custom_instructions_snapshot,
+        "custom_instructions_risk_score": message.custom_instructions_risk_score,
         "created_at": _local_iso(message.created_at),
     }
+
+
+@router.post("/evaluate-risk", response_model=RiskEvaluationResponse)
+async def evaluate_risk(payload: RiskEvaluationRequest) -> RiskEvaluationResponse:
+    score = chat_service.evaluate_custom_instructions_risk(payload.custom_instructions)
+    return RiskEvaluationResponse(risk_score=score)
+
+
+@router.get("/search")
+async def search_conversations(q: str = "", db: Session = Depends(get_db)):
+    if not q.strip():
+        return []
+    results = storage_service.search_conversations(db, q.strip())
+    return [
+        {
+            "conversation": _serialize_conversation(r["conversation"]),
+            "match_type": r["match_type"],
+        }
+        for r in results
+    ]
 
 
 @router.post("", response_model=ChatResponse)
@@ -134,6 +156,7 @@ async def send_text_message(payload: ChatRequest, db: Session = Depends(get_db))
         enable_web_access=payload.enable_web_access,
         enable_local_files=payload.enable_local_files,
         allowed_folders=payload.allowed_folders,
+        user_location=payload.user_location,
     )
     return ChatResponse(conversation=conversation, reply=reply, model_loaded=chat_service.model_loaded)
 
@@ -150,6 +173,7 @@ async def stream_text_message(payload: ChatRequest, db: Session = Depends(get_db
         enable_web_access=payload.enable_web_access,
         enable_local_files=payload.enable_local_files,
         allowed_folders=payload.allowed_folders,
+        user_location=payload.user_location,
     )
 
     def event_stream():
@@ -194,6 +218,7 @@ async def send_upload_message(
     enable_web_access: bool = Form(default=False),
     enable_local_files: bool = Form(default=False),
     allowed_folders: str = Form(default=""),
+    user_location: str | None = Form(default=None),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ) -> ChatResponse:
@@ -224,6 +249,7 @@ async def send_upload_message(
         enable_web_access=enable_web_access,
         enable_local_files=enable_local_files,
         allowed_folders=parsed_folders,
+        user_location=user_location,
     )
     return ChatResponse(conversation=conversation, reply=reply, model_loaded=chat_service.model_loaded)
 
@@ -238,6 +264,7 @@ async def stream_upload_message(
     enable_web_access: bool = Form(default=False),
     enable_local_files: bool = Form(default=False),
     allowed_folders: str = Form(default=""),
+    user_location: str | None = Form(default=None),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
@@ -268,6 +295,7 @@ async def stream_upload_message(
         enable_web_access=enable_web_access,
         enable_local_files=enable_local_files,
         allowed_folders=parsed_folders,
+        user_location=user_location,
     )
 
     def event_stream():
@@ -312,6 +340,7 @@ async def stream_multi_upload_message(
     enable_web_access: bool = Form(default=False),
     enable_local_files: bool = Form(default=False),
     allowed_folders: str = Form(default=""),
+    user_location: str | None = Form(default=None),
     files: list[UploadFile] = File(...),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
@@ -363,6 +392,7 @@ async def stream_multi_upload_message(
         enable_web_access=enable_web_access,
         enable_local_files=enable_local_files,
         allowed_folders=parsed_folders,
+        user_location=user_location,
     )
 
     def event_stream():
@@ -478,6 +508,7 @@ class EditLastRequest(BaseModel):
     enable_web_access: bool = False
     enable_local_files: bool = False
     allowed_folders: list[str] = Field(default_factory=list)
+    user_location: str | None = None
 
 
 @router.post("/{conversation_id}/edit-last/stream")
@@ -508,7 +539,7 @@ async def edit_last_message_stream(
         chat_service._build_messages(
             conversation, locale=payload.locale, custom_instructions=payload.custom_instructions,
             enable_web_access=payload.enable_web_access, enable_local_files=payload.enable_local_files,
-            allowed_folders=payload.allowed_folders,
+            allowed_folders=payload.allowed_folders, user_location=payload.user_location,
         ),
         enable_thinking=False,
         tools=tools,
@@ -542,6 +573,7 @@ class RegenerateRequest(BaseModel):
     enable_web_access: bool = False
     enable_local_files: bool = False
     allowed_folders: list[str] = Field(default_factory=list)
+    user_location: str | None = None
 
 
 @router.post("/{conversation_id}/regenerate/stream")
@@ -567,7 +599,7 @@ async def regenerate_last_stream(
         chat_service._build_messages(
             conversation, locale=payload.locale, custom_instructions=payload.custom_instructions,
             enable_web_access=payload.enable_web_access, enable_local_files=payload.enable_local_files,
-            allowed_folders=payload.allowed_folders,
+            allowed_folders=payload.allowed_folders, user_location=payload.user_location,
         ),
         enable_thinking=False,
         tools=tools,

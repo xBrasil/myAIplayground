@@ -54,6 +54,9 @@ export default function SpeakButton({ text, preferredVoice }: SpeakButtonProps) 
     utterance.onerror = () => setSpeaking(false);
     setSpeaking(true);
     window.speechSynthesis.speak(utterance);
+    // Return focus to the composer textarea so the user can keep typing
+    const textarea = document.querySelector<HTMLTextAreaElement>('.composer-inner textarea');
+    textarea?.focus();
   }
 
   return (
