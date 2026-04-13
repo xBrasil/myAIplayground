@@ -22,10 +22,10 @@ if [ "${1:-}" = "--no-browser" ]; then
   NO_BROWSER=true
 fi
 
-step() { echo -e "\n\033[36m==> $1\033[0m"; }
-ok()   { echo -e "  \033[32m$1\033[0m"; }
-warn() { echo -e "  \033[33m$1\033[0m"; }
-err()  { echo -e "  \033[31m$1\033[0m"; }
+step() { echo -e "\n[$(date '+%H:%M:%S')] ==> $1"; }
+ok()   { echo -e "  [$(date '+%H:%M:%S')] \033[32m$1\033[0m"; }
+warn() { echo -e "  [$(date '+%H:%M:%S')] \033[33m$1\033[0m"; }
+err()  { echo -e "  [$(date '+%H:%M:%S')] \033[31m$1\033[0m"; }
 
 # ── Pre-flight checks ───────────────────────────────────────────
 if [ ! -f "$FRONTEND_DIR/package.json" ]; then
@@ -36,8 +36,8 @@ if [ ! -f "$VENV_PYTHON" ]; then
   err "Python venv not found. Run install.sh first."
   exit 1
 fi
-if [ ! -f "$BACKEND_DIR/.env" ]; then
-  err ".env not found. Run install.sh first."
+if [ ! -f "$DATA_DIR/.env" ]; then
+  err ".env not found in data/. Run install.sh first."
   exit 1
 fi
 mkdir -p "$DATA_DIR"
@@ -71,7 +71,7 @@ if check_http "$BACKEND_URL"; then
 else
   step "Starting backend..."
   cd "$BACKEND_DIR"
-  "$VENV_PYTHON" -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000 \
+  "$VENV_PYTHON" -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000 --log-config log_config.json \
     >"$BACKEND_LOG" 2>"$BACKEND_ERR_LOG" &
   BACKEND_PID=$!
   cd "$REPO_ROOT"
@@ -83,8 +83,10 @@ if check_http "$FRONTEND_URL"; then
 else
   step "Starting frontend..."
   cd "$FRONTEND_DIR"
-  npm run dev -- --host=127.0.0.1 --port=5173 --strictPort \
-    >"$FRONTEND_LOG" 2>"$FRONTEND_ERR_LOG" &
+  npm run dev -- --host=127.0.0.1 --port=5173 --strictPort 2>&1 |
+    while IFS= read -r line; do
+      printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$line"
+    done >"$FRONTEND_LOG" &
   FRONTEND_PID=$!
   cd "$REPO_ROOT"
 fi
@@ -143,18 +145,34 @@ if [ "$NO_BROWSER" = false ]; then
 fi
 
 echo ""
-ok "My AI Playground is running! Press Ctrl+C to stop."
+ok "My AI Playground is running!"
 echo "  Logs: $BACKEND_LOG | $FRONTEND_LOG"
 
-# ── Keep alive ───────────────────────────────────────────────────
-while true; do
-  if [ -n "$BACKEND_PID" ] && ! kill -0 "$BACKEND_PID" 2>/dev/null; then
-    err "Backend exited unexpectedly."
-    exit 1
-  fi
-  if [ -n "$FRONTEND_PID" ] && ! kill -0 "$FRONTEND_PID" 2>/dev/null; then
-    err "Frontend exited unexpectedly."
-    exit 1
-  fi
-  sleep 2
-done
+# ── Keep alive (background) ─────────────────────────────────────
+# The monitoring loop runs in the background so the terminal is freed.
+# If a child process dies, the trap handler cleans up everything.
+_monitor() {
+  while true; do
+    if [ -n "$BACKEND_PID" ] && ! kill -0 "$BACKEND_PID" 2>/dev/null; then
+      cleanup
+      exit 1
+    fi
+    if [ -n "$FRONTEND_PID" ] && ! kill -0 "$FRONTEND_PID" 2>/dev/null; then
+      cleanup
+      exit 1
+    fi
+    # Also check if backend API is still reachable (os._exit in a
+    # uvicorn --reload worker kills the child but the parent python
+    # process stays alive, so kill -0 never fails).
+    if ! check_http "$BACKEND_URL"; then
+      sleep 2
+      if ! check_http "$BACKEND_URL"; then
+        cleanup
+        exit 0
+      fi
+    fi
+    sleep 2
+  done
+}
+_monitor &
+disown

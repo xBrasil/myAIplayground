@@ -10,19 +10,20 @@ BACKEND_DIR="$REPO_ROOT/backend"
 VENV_DIR="$REPO_ROOT/.venv"
 VENV_PYTHON="$VENV_DIR/bin/python"
 ENV_EXAMPLE="$BACKEND_DIR/.env.example"
-ENV_FILE="$BACKEND_DIR/.env"
-LOG_FILE="$REPO_ROOT/install.log"
+ENV_FILE="$DATA_DIR/.env"
+LOG_FILE="$DATA_DIR/install.log"
 DATA_DIR="$REPO_ROOT/data"
 LLAMA_DIR="$DATA_DIR/llama-server"
 
+mkdir -p "$DATA_DIR"
 exec > >(tee -a "$LOG_FILE") 2>&1
 echo "── Install log: $LOG_FILE"
 echo "── Date: $(date '+%Y-%m-%d %H:%M:%S')"
 
-step() { echo -e "\n\033[36m==> $1\033[0m"; }
-ok()   { echo -e "  \033[32m$1\033[0m"; }
-warn() { echo -e "  \033[33m$1\033[0m"; }
-err()  { echo -e "  \033[31m$1\033[0m"; }
+step() { echo -e "\n[$(date '+%H:%M:%S')] ==> $1"; }
+ok()   { echo -e "  [$(date '+%H:%M:%S')] \033[32m$1\033[0m"; }
+warn() { echo -e "  [$(date '+%H:%M:%S')] \033[33m$1\033[0m"; }
+err()  { echo -e "  [$(date '+%H:%M:%S')] \033[31m$1\033[0m"; }
 
 # ── Detect OS ────────────────────────────────────────────────────
 OS="$(uname -s)"
@@ -65,7 +66,7 @@ fi
 ok "Python: $($PYTHON_CMD --version)"
 
 # Node.js / npm
-if ! command -v npm &>/dev/null; then
+if ! command -v node &>/dev/null || ! command -v npm &>/dev/null; then
   err "Node.js / npm not found. Please install it first:"
   if [ "$PLATFORM" = "linux" ]; then
     echo "  https://nodejs.org or: curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -"
@@ -214,6 +215,46 @@ if [ ! -f "$ENV_FILE" ]; then
   warn ".env created from .env.example (ENABLE_MODEL_LOADING=true)"
 else
   ok ".env already exists"
+fi
+
+# ── Done ────────────────────────────────────────────────────────
+
+# ── 6. Pre-download default model ───────────────────────────────
+step "Default model download"
+MODEL_SCRIPT="$REPO_ROOT/scripts/download_default_model.py"
+if [ -f "$VENV_PYTHON" ] && [ -f "$MODEL_SCRIPT" ]; then
+  if "$VENV_PYTHON" "$MODEL_SCRIPT"; then
+    ok "Default model downloaded successfully."
+  else
+    warn "Default model download failed (exit $?)."
+  fi
+else
+  warn "Skipped default model download."
+fi
+
+# ── 7. Desktop shortcut (Linux only) ────────────────────────────
+if [ "$PLATFORM" = "linux" ]; then
+  step "Creating desktop shortcut..."
+  DESKTOP_DIR="${XDG_DESKTOP_DIR:-$HOME/Desktop}"
+  DESKTOP_FILE="$DESKTOP_DIR/my-ai-playground.desktop"
+  ICON_PATH="$REPO_ROOT/frontend/public/favicon.ico"
+  if [ -d "$DESKTOP_DIR" ]; then
+    cat > "$DESKTOP_FILE" <<EOF
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=My AI Playground
+Comment=Local AI assistant
+Exec=$REPO_ROOT/run.sh
+Icon=$ICON_PATH
+Terminal=true
+Categories=Utility;
+EOF
+    chmod +x "$DESKTOP_FILE" 2>/dev/null || true
+    ok "Shortcut created: $DESKTOP_FILE"
+  else
+    warn "Desktop directory not found, skipping shortcut."
+  fi
 fi
 
 # ── Done ────────────────────────────────────────────────────────

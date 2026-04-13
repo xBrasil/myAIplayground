@@ -27,16 +27,17 @@ class StorageService:
         title_results = list(db.scalars(title_stmt).unique())
         title_ids = {c.id for c in title_results}
 
-        # Content matches (excluding already-matched-by-title)
+        # Content matches (excluding already-matched-by-title).
+        # Explicit JOIN avoids an implicit multi-FROM query and duplicate rows.
         content_stmt = (
             self._conversation_statement()
-            .where(
-                Message.content.ilike(term),
-                Conversation.id == Message.conversation_id,
-                Conversation.id.notin_(title_ids) if title_ids else True,
-            )
+            .join(Message, Message.conversation_id == Conversation.id)
+            .where(Message.content.ilike(term))
             .order_by(Conversation.updated_at.desc())
+            .distinct()
         )
+        if title_ids:
+            content_stmt = content_stmt.where(Conversation.id.notin_(title_ids))
         content_results = list(db.scalars(content_stmt).unique())
 
         results: list[dict] = []

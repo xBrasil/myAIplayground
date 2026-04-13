@@ -50,6 +50,10 @@ export async function fetchHealth(): Promise<HealthResponse> {
   return response.json();
 }
 
+export async function shutdownServer(): Promise<void> {
+  await fetch(`${API_BASE}/shutdown`, { method: 'POST' });
+}
+
 export async function evaluateCustomInstructionsRisk(customInstructions: string): Promise<number> {
   const response = await fetch(`${API_BASE}/chat/evaluate-risk`, {
     method: 'POST',

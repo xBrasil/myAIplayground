@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useI18n } from '../lib/i18n';
+import { persistSetting } from '../lib/settingsApi';
 import Composer from './Composer';
 import MessageList from './MessageList';
+import ServerStatusPanel from './ServerStatusPanel';
 import Sidebar from './Sidebar';
 import type { Conversation, HealthResponse, ToolCallInfo } from '../types';
 
@@ -78,6 +80,7 @@ export default function ChatLayout({
 }: ChatLayoutProps) {
   const { t } = useI18n();
   const [isDragOver, setIsDragOver] = useState(false);
+  const [statusPanelOpen, setStatusPanelOpen] = useState(false);
   const dragCounterRef = useRef(0);
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
@@ -146,7 +149,9 @@ export default function ChatLayout({
     };
     const onMouseUp = () => {
       if (isResizing.current) {
-        localStorage.setItem('sidebarWidth', String(sidebarWidthRef.current));
+        const v = String(sidebarWidthRef.current);
+        localStorage.setItem('sidebarWidth', v);
+        persistSetting('sidebarWidth', v);
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
       }
@@ -169,7 +174,6 @@ export default function ChatLayout({
         conversations={conversations}
         currentConversationId={currentConversation?.id || null}
         streamingConversationId={streamingConversationId}
-        searchQuery={searchQuery}
         onSearchQueryChange={onSearchQueryChange}
         onSelectConversation={onSelectConversation}
         onNewConversation={onNewConversation}
@@ -218,10 +222,15 @@ export default function ChatLayout({
             >
               {health?.available_models?.find((m) => m.key === health.active_model_key)?.label || '...'}
             </button>
-            <span className={`status-badge status-badge--${health?.model_status || 'idle'}`}>
+            <button
+              type="button"
+              className={`status-badge status-badge--${health?.model_status || 'idle'}`}
+              onClick={() => setStatusPanelOpen(true)}
+              title={t('serverPanel.title')}
+            >
               <span className="status-badge__dot" />
               {statusLabel(health)}
-            </span>
+            </button>
             <button
               type="button"
               className="header-api-btn"
@@ -249,6 +258,7 @@ export default function ChatLayout({
           </div>
         </header>
         {error ? <div className="error-banner">{error}</div> : null}
+        <ServerStatusPanel open={statusPanelOpen} health={health} onClose={() => setStatusPanelOpen(false)} />
         <MessageList
           messages={currentConversation?.messages || []}
           preferredVoice={preferredVoice}
@@ -264,6 +274,7 @@ export default function ChatLayout({
           modelLoading={modelLoading}
           enterToSend={enterToSend}
           activeModelKey={health?.active_model_key}
+          conversationId={currentConversation?.id ?? null}
           onSendText={onSendText}
           onSendFile={onSendFile}
           onSendFiles={onSendFiles}

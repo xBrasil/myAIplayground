@@ -99,6 +99,21 @@ class ModelService:
         self._log_file_handle = open(self._log_path, "w", encoding="utf-8", buffering=1)
         return self._log_file_handle
 
+    def _start_log_timestamper(self, pipe):
+        """Read lines from *pipe* and write them to the log file with timestamps."""
+        from datetime import datetime
+        fh = self._log_file_handle
+        try:
+            for raw in iter(pipe.readline, b""):
+                line = raw.decode("utf-8", errors="replace").rstrip("\n\r")
+                ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                fh.write(f"{ts} {line}\n")
+                fh.flush()
+        except Exception:
+            pass
+        finally:
+            pipe.close()
+
     def _close_log(self):
         if self._log_file_handle:
             try:
@@ -192,6 +207,25 @@ class ModelService:
         except Exception as exc:
             logger.warning("Não foi possível consultar /props: %s", exc)
 
+    def _warmup(self) -> None:
+        """Send a tiny completion request to pre-compile CUDA graphs / warm caches."""
+        try:
+            logger.info("Enviando warmup request...")
+            t0 = time.monotonic()
+            r = self._client.post(
+                f"{self._server_url}/v1/chat/completions",
+                json={
+                    "messages": [{"role": "user", "content": "hi"}],
+                    "max_tokens": 1,
+                },
+                timeout=120,
+            )
+            r.raise_for_status()
+            elapsed = time.monotonic() - t0
+            logger.info("Warmup concluído em %.1fs", elapsed)
+        except Exception as exc:
+            logger.warning("Warmup falhou (não-fatal): %s", exc)
+
     @property
     def context_size(self) -> int:
         """Return the actual context size or the profile's n_ctx as fallback."""
@@ -271,16 +305,22 @@ class ModelService:
             cmd = base_cmd + ["-c", ctx_value]
             logger.info("Iniciando llama-server: %s", " ".join(cmd))
 
-            log_handle = self._open_log()
+            self._open_log()
             logger.info("Log do llama-server: %s", self._log_path)
 
             self._server_process = subprocess.Popen(
                 cmd,
                 env=env,
-                stdout=log_handle,
+                stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 creationflags=creationflags,
             )
+            # Pipe stdout through a thread that prepends timestamps to each line
+            Thread(
+                target=self._start_log_timestamper,
+                args=(self._server_process.stdout,),
+                daemon=True,
+            ).start()
             self._has_vision = has_vision
 
             if self._wait_for_server_health():
@@ -290,6 +330,7 @@ class ModelService:
                         ctx_attempts[0], ctx_value,
                     )
                 self._query_props()
+                self._warmup()
                 return
 
             tail = self._read_log_tail()
@@ -308,11 +349,23 @@ class ModelService:
     def _download_gguf(self, repo_id: str, filename: str) -> str:
         if hf_hub_download is None:
             raise RuntimeError("huggingface_hub não está instalado.")
-        return hf_hub_download(
+        path = hf_hub_download(
             repo_id=repo_id,
             filename=filename,
             cache_dir=str(self._settings.resolved_model_cache_dir),
         )
+        # hf_hub_download returns a symlink under snapshots/ on Windows;
+        # llama-server's fopen() cannot follow Windows symlinks, and
+        # Path.resolve() raises WinError 448 on Python 3.13+ due to
+        # "untrusted mount point" security checks.  Use os.readlink()
+        # + normpath (pure string ops) to dereference without touching
+        # the filesystem security layer.
+        p = Path(path)
+        if p.is_symlink():
+            import os
+            target = os.readlink(p)
+            return os.path.normpath(os.path.join(str(p.parent), target))
+        return str(p)
 
     def _is_model_cached(self, profile: ModelProfile) -> bool:
         if try_to_load_from_cache is None:
@@ -435,21 +488,6 @@ class ModelService:
                 logger.warning("llama-server não encontrado, pulando carregamento.")
                 return
             self._load_selected_model(self._active_model_key)
-
-    def ensure_default_models_cached_async(self) -> None:
-        if hf_hub_download is None:
-            return
-
-        def worker() -> None:
-            for profile in self._profiles.values():
-                try:
-                    self._download_gguf(profile.gguf_repo, profile.gguf_file)
-                    if profile.mmproj_file:
-                        self._download_gguf(profile.gguf_repo, profile.mmproj_file)
-                except Exception:
-                    continue
-
-        Thread(target=worker, daemon=True).start()
 
     def get_selection_state(self) -> ModelSelectionResponse:
         return ModelSelectionResponse(

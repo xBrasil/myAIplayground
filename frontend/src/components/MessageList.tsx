@@ -245,6 +245,9 @@ export default function MessageList({
           </svg>
           <h2>{t('messages.emptyTitle')}</h2>
           <p>{t('messages.emptyHint')}</p>
+          <div className="empty-state__local-tip">
+            {t('messages.localTip')}
+          </div>
         </div>
       </div>
     );

@@ -1,3 +1,5 @@
+import { persistSetting } from './settingsApi';
+
 const ENTER_TO_SEND_KEY = 'gemma-local-studio.enter-to-send';
 const LAST_MODEL_KEY = 'gemma-local-studio.last-model';
 const CUSTOM_INSTRUCTIONS_KEY = 'gemma-local-studio.custom-instructions';
@@ -16,7 +18,9 @@ export function loadEnterToSendPreference(): boolean {
 }
 
 export function saveEnterToSendPreference(value: boolean): void {
-  window.localStorage.setItem(ENTER_TO_SEND_KEY, String(value));
+  const v = String(value);
+  window.localStorage.setItem(ENTER_TO_SEND_KEY, v);
+  persistSetting(ENTER_TO_SEND_KEY, v);
 }
 
 export function loadLastModelKey(): string | null {
@@ -25,6 +29,7 @@ export function loadLastModelKey(): string | null {
 
 export function saveLastModelKey(modelKey: string): void {
   window.localStorage.setItem(LAST_MODEL_KEY, modelKey);
+  persistSetting(LAST_MODEL_KEY, modelKey);
 }
 
 export function loadCustomInstructions(): string {
@@ -33,6 +38,7 @@ export function loadCustomInstructions(): string {
 
 export function saveCustomInstructions(value: string): void {
   window.localStorage.setItem(CUSTOM_INSTRUCTIONS_KEY, value);
+  persistSetting(CUSTOM_INSTRUCTIONS_KEY, value);
 }
 
 export function loadCustomInstructionsEnabled(): boolean {
@@ -40,7 +46,9 @@ export function loadCustomInstructionsEnabled(): boolean {
 }
 
 export function saveCustomInstructionsEnabled(value: boolean): void {
-  window.localStorage.setItem(CUSTOM_INSTRUCTIONS_ENABLED_KEY, String(value));
+  const v = String(value);
+  window.localStorage.setItem(CUSTOM_INSTRUCTIONS_ENABLED_KEY, v);
+  persistSetting(CUSTOM_INSTRUCTIONS_ENABLED_KEY, v);
 }
 
 export function loadWebAccess(): boolean {
@@ -48,7 +56,9 @@ export function loadWebAccess(): boolean {
 }
 
 export function saveWebAccess(value: boolean): void {
-  window.localStorage.setItem(WEB_ACCESS_KEY, String(value));
+  const v = String(value);
+  window.localStorage.setItem(WEB_ACCESS_KEY, v);
+  persistSetting(WEB_ACCESS_KEY, v);
 }
 
 export function loadLocalFiles(): boolean {
@@ -56,7 +66,9 @@ export function loadLocalFiles(): boolean {
 }
 
 export function saveLocalFiles(value: boolean): void {
-  window.localStorage.setItem(LOCAL_FILES_KEY, String(value));
+  const v = String(value);
+  window.localStorage.setItem(LOCAL_FILES_KEY, v);
+  persistSetting(LOCAL_FILES_KEY, v);
 }
 
 export function loadAllowedFolders(): string[] {
@@ -71,7 +83,9 @@ export function loadAllowedFolders(): string[] {
 }
 
 export function saveAllowedFolders(folders: string[]): void {
-  window.localStorage.setItem(ALLOWED_FOLDERS_KEY, JSON.stringify(folders));
+  const v = JSON.stringify(folders);
+  window.localStorage.setItem(ALLOWED_FOLDERS_KEY, v);
+  persistSetting(ALLOWED_FOLDERS_KEY, v);
 }
 
 export function loadLocationSharing(): boolean {
@@ -79,5 +93,7 @@ export function loadLocationSharing(): boolean {
 }
 
 export function saveLocationSharing(value: boolean): void {
-  window.localStorage.setItem(LOCATION_SHARING_KEY, String(value));
+  const v = String(value);
+  window.localStorage.setItem(LOCATION_SHARING_KEY, v);
+  persistSetting(LOCATION_SHARING_KEY, v);
 }

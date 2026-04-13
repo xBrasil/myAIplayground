@@ -165,6 +165,27 @@ class ChatService:
             return transcript or trimmed
         return trimmed
 
+    @staticmethod
+    def _sanitize_user_location(raw: str | None) -> str | None:
+        """Parse 'lat,lon' string; drop anything else to prevent prompt injection.
+
+        Accepts up to 64 chars. Returns a clean 'lat,lon' string (rounded to 2 decimals)
+        if valid coordinates are in range, otherwise None.
+        """
+        if not raw or len(raw) > 64:
+            return None
+        parts = raw.split(",")
+        if len(parts) != 2:
+            return None
+        try:
+            lat = float(parts[0].strip())
+            lon = float(parts[1].strip())
+        except ValueError:
+            return None
+        if not (-90.0 <= lat <= 90.0) or not (-180.0 <= lon <= 180.0):
+            return None
+        return f"{lat:.2f},{lon:.2f}"
+
     def _build_system_prompt(
         self,
         locale: str = "en-US",
@@ -184,9 +205,10 @@ class ChatService:
             f"Your knowledge cut-off date: January 2025. Information after this date may not be in your training data.\n"
             f"User's preferred language: {lang}. Always respond in {lang} unless the user explicitly requests a different language."
         )
-        if user_location:
+        safe_location = self._sanitize_user_location(user_location)
+        if safe_location:
             prompt += (
-                f"\nUser's approximate location (lat,lon): {user_location}. "
+                f"\nUser's approximate location (lat,lon): {safe_location}. "
                 "Use this to provide contextually relevant responses when appropriate "
                 "(e.g., local recommendations, weather, nearby services). "
                 "Do not explicitly mention the coordinates unless the user asks."
