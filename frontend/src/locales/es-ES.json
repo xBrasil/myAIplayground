@@ -327,7 +327,7 @@
   "script.run.startingBackend": "Iniciando backend (log: data\\backend.log)",
   "script.run.frontendAlreadyRunning": "Frontend ya está en ejecución; reutilizando instancia existente",
   "script.run.startingFrontend": "Iniciando frontend (log: data\\frontend.log)",
-  "script.run.waitingServices": "Esperando servicios...",
+  "script.run.waitingServices": "Esperando servicios, por favor NO cierre esta ventana...",
   "script.run.openingBrowser": "Abriendo navegador",
   "script.run.allReady": "Todo listo. Presione Ctrl+C para detener.",
   "script.run.logsInfo": "Logs: data\\backend.log, data\\frontend.log",

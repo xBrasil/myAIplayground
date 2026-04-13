@@ -18,13 +18,13 @@ function Write-Step {
     $ts = Get-Date -Format 'HH:mm:ss'
     $line = "[$ts] ==> $Message"
     Write-Host "`n$line" -ForegroundColor Cyan
-    Add-Content -Path $logFile -Value $line -Encoding UTF8
+    try { Add-Content -Path $logFile -Value $line -Encoding UTF8 -ErrorAction SilentlyContinue } catch { }
 }
 
 function Write-Status {
     param([string]$Message, [string]$ForegroundColor = "White")
     Write-Host "  $Message" -ForegroundColor $ForegroundColor
-    Add-Content -Path $logFile -Value "  $Message" -Encoding UTF8
+    try { Add-Content -Path $logFile -Value "  $Message" -Encoding UTF8 -ErrorAction SilentlyContinue } catch { }
 }
 
 function Test-Admin {
@@ -38,6 +38,14 @@ function Refresh-Path {
     $machine = [Environment]::GetEnvironmentVariable("Path", "Machine")
     $user    = [Environment]::GetEnvironmentVariable("Path", "User")
     $env:PATH = "$machine;$user"
+}
+
+function Assert-ExitCode {
+    # Throw if the last native command exited with a non-zero code
+    param([string]$Action)
+    if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) {
+        throw "$Action failed (exit code $LASTEXITCODE)"
+    }
 }
 
 function Install-WithWinget {
@@ -175,13 +183,16 @@ if (-not (Test-Path $venvPython)) {
     } else {
         & $pythonBootstrap[0] -m venv $venvDir
     }
+    Assert-ExitCode "python -m venv"
 }
 
 Write-Step (T 'script.install.updatingPip')
 & $venvPython -m pip install --upgrade pip
+Assert-ExitCode "pip upgrade"
 
 Write-Step (T 'script.install.backendDeps')
 & $venvPython -m pip install -r (Join-Path $backendDir "requirements.txt")
+Assert-ExitCode "pip install requirements"
 
 # ---- 3. llama.cpp server (pre-built binary) ----
 
@@ -321,7 +332,13 @@ if (-not $llamaInstalled) {
 
 Write-Step (T 'script.install.frontendDeps')
 Push-Location $frontendDir
-try { & npm install } finally { Pop-Location }
+try {
+    & npm install
+    # npm often exits non-zero for deprecation/audit warnings — warn but don't abort
+    if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) {
+        Write-Status "npm install exited with code $LASTEXITCODE (may be warnings)" -ForegroundColor Yellow
+    }
+} finally { Pop-Location }
 
 # ---- 5. Data dirs + .env ----
 
@@ -421,8 +438,14 @@ Write-Status (T 'script.install.useRunCmd') -ForegroundColor Green
 Write-Status (T 'script.install.logSaved' @{path=$logFile}) -ForegroundColor DarkGray
 
 } catch {
-    # Log the terminating error so the Inno memo + install.log show what went wrong
-    try { Write-Status "ERROR: $_" -ForegroundColor Red } catch {}
+    # Log the terminating error so the Inno memo + install.log show what went wrong.
+    # Use Write-Host (always works) + direct .NET file append (resilient to file locks
+    # from Inno Setup polling the log with LoadStringsFromFile / fmShareDenyWrite).
+    $errorMsg = "  ERROR: $_"
+    Write-Host $errorMsg -ForegroundColor Red
+    try {
+        [System.IO.File]::AppendAllText($logFile, "`r`n$errorMsg`r`n", [System.Text.Encoding]::UTF8)
+    } catch { }
     exit 1
 }
 

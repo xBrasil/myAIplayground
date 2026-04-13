@@ -8,6 +8,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 BASE_DIR = Path(__file__).resolve().parents[2]
 PROJECT_DIR = BASE_DIR.parent
 
+# Origins allowed for CORS and sensitive endpoints (e.g. /shutdown).
+ALLOWED_ORIGINS = ["http://127.0.0.1:5173", "http://localhost:5173"]
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=PROJECT_DIR / "data" / ".env", env_file_encoding="utf-8", extra="ignore")

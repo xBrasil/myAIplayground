@@ -301,10 +301,13 @@ export default function App() {
   }
 
   async function handleSendText(text: string) {
+    // Don't abort the previous stream – let it finish in the background so its
+    // conversation keeps its response.  We just take over the shared UI state.
     const controller = new AbortController();
     abortControllerRef.current = controller;
     userNavigatedAwayRef.current = false;
     const effectiveId = isDraft(currentConversationId) ? null : currentConversationId;
+    let handlerConvId: string | null = effectiveId;
     activeConversationIdRef.current = effectiveId;
     setStreamingConversationId(currentConversationId);
     // Show user message immediately (optimistic update)
@@ -325,71 +328,81 @@ export default function App() {
       setActiveToolCalls([]);
       setError(null);
       await streamTextMessage(effectiveId, text, (event: ChatStreamEvent) => {
+        const isOwner = abortControllerRef.current === controller;
         if (event.type === 'tool_start') {
-          setActiveToolCalls((prev) => [...prev, { name: event.name, arguments: event.arguments, done: false }]);
+          if (isOwner) setActiveToolCalls((prev) => [...prev, { name: event.name, arguments: event.arguments, done: false }]);
           return;
         }
         if (event.type === 'tool_done') {
-          setActiveToolCalls((prev) => prev.map((tc) =>
+          if (isOwner) setActiveToolCalls((prev) => prev.map((tc) =>
             tc.name === event.name && !tc.done ? { ...tc, done: true } : tc,
           ));
           return;
         }
         if (event.type === 'conversation') {
           upsertConversation(event.conversation);
-          if (!userNavigatedAwayRef.current) {
-            setCurrentConversationId(event.conversation.id);
+          handlerConvId = event.conversation.id;
+          if (isOwner) {
+            if (!userNavigatedAwayRef.current) {
+              setCurrentConversationId(event.conversation.id);
+            }
+            activeConversationIdRef.current = event.conversation.id;
+            setStreamingConversationId(event.conversation.id);
           }
-          activeConversationIdRef.current = event.conversation.id;
-          setStreamingConversationId(event.conversation.id);
           return;
         }
 
         if (event.type === 'delta') {
-          streamingTextRef.current += event.delta;
-          setStreamingText((current) => current + event.delta);
+          if (isOwner) {
+            streamingTextRef.current += event.delta;
+            setStreamingText((current) => current + event.delta);
+          }
           return;
         }
 
         upsertConversation(event.conversation);
-        if (!userNavigatedAwayRef.current) {
-          setCurrentConversationId(event.conversation.id);
+        if (isOwner) {
+          if (!userNavigatedAwayRef.current) {
+            setCurrentConversationId(event.conversation.id);
+          }
+          setActiveToolCalls([]);
+          setStreamingText('');
+          streamingTextRef.current = '';
         }
-        setActiveToolCalls([]);
-        setStreamingText('');
-        streamingTextRef.current = '';
       }, controller.signal, locale, effectiveCustomInstructions, webAccess, localFiles, allowedFolders, userLocation);
       await refreshHealth().catch(() => null);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
-        const partial = streamingTextRef.current.trim();
-        const convId = activeConversationIdRef.current;
-        setStreamingText('');
-        streamingTextRef.current = '';
-        if (partial && convId) {
-          // Show partial immediately
-          setConversations((prev) =>
-            prev.map((c) =>
-              c.id === convId
-                ? { ...c, messages: [...c.messages, { id: `partial-${Date.now()}`, role: 'assistant' as const, content: partial, input_type: 'text' as const, created_at: new Date().toISOString() }] }
-                : c,
-            ),
-          );
-          // Persist to backend, then reload to get real IDs
-          await savePartial(convId, partial).catch(() => null);
-          await reloadConversations().catch(() => null);
+        if (abortControllerRef.current === controller) {
+          const partial = streamingTextRef.current.trim();
+          setStreamingText('');
+          streamingTextRef.current = '';
+          if (partial && handlerConvId) {
+            setConversations((prev) =>
+              prev.map((c) =>
+                c.id === handlerConvId
+                  ? { ...c, messages: [...c.messages, { id: `partial-${Date.now()}`, role: 'assistant' as const, content: partial, input_type: 'text' as const, created_at: new Date().toISOString() }] }
+                  : c,
+              ),
+            );
+            await savePartial(handlerConvId, partial).catch(() => null);
+          }
         }
-      } else {
-        removeOptimisticMessages(activeConversationIdRef.current ?? currentConversationId);
+      } else if (abortControllerRef.current === controller) {
+        removeOptimisticMessages(handlerConvId ?? currentConversationId);
         setError(err instanceof Error ? err.message : t('error.sendMessage'));
         setRestoreComposer({ text, files: [] });
         setStreamingText('');
         streamingTextRef.current = '';
+      } else {
+        removeOptimisticMessages(handlerConvId);
       }
     } finally {
-      abortControllerRef.current = null;
-      setStreamingConversationId(null);
-      setBusy(false);
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+        setStreamingConversationId(null);
+        setBusy(false);
+      }
     }
   }
 
@@ -398,6 +411,7 @@ export default function App() {
     abortControllerRef.current = controller;
     userNavigatedAwayRef.current = false;
     const effectiveId = isDraft(currentConversationId) ? null : currentConversationId;
+    let handlerConvId: string | null = effectiveId;
     activeConversationIdRef.current = effectiveId;
     setStreamingConversationId(currentConversationId);
     // Show user message immediately (optimistic update)
@@ -418,69 +432,81 @@ export default function App() {
       setActiveToolCalls([]);
       setError(null);
       await streamUploadMessage(effectiveId, text, file, (event: ChatStreamEvent) => {
+        const isOwner = abortControllerRef.current === controller;
         if (event.type === 'tool_start') {
-          setActiveToolCalls((prev) => [...prev, { name: event.name, arguments: event.arguments, done: false }]);
+          if (isOwner) setActiveToolCalls((prev) => [...prev, { name: event.name, arguments: event.arguments, done: false }]);
           return;
         }
         if (event.type === 'tool_done') {
-          setActiveToolCalls((prev) => prev.map((tc) =>
+          if (isOwner) setActiveToolCalls((prev) => prev.map((tc) =>
             tc.name === event.name && !tc.done ? { ...tc, done: true } : tc,
           ));
           return;
         }
         if (event.type === 'conversation') {
           upsertConversation(event.conversation);
-          if (!userNavigatedAwayRef.current) {
-            setCurrentConversationId(event.conversation.id);
+          handlerConvId = event.conversation.id;
+          if (isOwner) {
+            if (!userNavigatedAwayRef.current) {
+              setCurrentConversationId(event.conversation.id);
+            }
+            activeConversationIdRef.current = event.conversation.id;
+            setStreamingConversationId(event.conversation.id);
           }
-          activeConversationIdRef.current = event.conversation.id;
-          setStreamingConversationId(event.conversation.id);
           return;
         }
 
         if (event.type === 'delta') {
-          streamingTextRef.current += event.delta;
-          setStreamingText((current) => current + event.delta);
+          if (isOwner) {
+            streamingTextRef.current += event.delta;
+            setStreamingText((current) => current + event.delta);
+          }
           return;
         }
 
         upsertConversation(event.conversation);
-        if (!userNavigatedAwayRef.current) {
-          setCurrentConversationId(event.conversation.id);
+        if (isOwner) {
+          if (!userNavigatedAwayRef.current) {
+            setCurrentConversationId(event.conversation.id);
+          }
+          setActiveToolCalls([]);
+          setStreamingText('');
+          streamingTextRef.current = '';
         }
-        setActiveToolCalls([]);
-        setStreamingText('');
-        streamingTextRef.current = '';
       }, controller.signal, locale, effectiveCustomInstructions, webAccess, localFiles, allowedFolders, userLocation);
       await refreshHealth().catch(() => null);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
-        const partial = streamingTextRef.current.trim();
-        const convId = activeConversationIdRef.current;
-        setStreamingText('');
-        streamingTextRef.current = '';
-        if (partial && convId) {
-          setConversations((prev) =>
-            prev.map((c) =>
-              c.id === convId
-                ? { ...c, messages: [...c.messages, { id: `partial-${Date.now()}`, role: 'assistant' as const, content: partial, input_type: 'text' as const, created_at: new Date().toISOString() }] }
-                : c,
-            ),
-          );
-          await savePartial(convId, partial).catch(() => null);
-          await reloadConversations().catch(() => null);
+        if (abortControllerRef.current === controller) {
+          const partial = streamingTextRef.current.trim();
+          setStreamingText('');
+          streamingTextRef.current = '';
+          if (partial && handlerConvId) {
+            setConversations((prev) =>
+              prev.map((c) =>
+                c.id === handlerConvId
+                  ? { ...c, messages: [...c.messages, { id: `partial-${Date.now()}`, role: 'assistant' as const, content: partial, input_type: 'text' as const, created_at: new Date().toISOString() }] }
+                  : c,
+              ),
+            );
+            await savePartial(handlerConvId, partial).catch(() => null);
+          }
         }
-      } else {
-        removeOptimisticMessages(activeConversationIdRef.current ?? currentConversationId);
+      } else if (abortControllerRef.current === controller) {
+        removeOptimisticMessages(handlerConvId ?? currentConversationId);
         setError(err instanceof Error ? err.message : t('error.sendFile'));
         setRestoreComposer({ text, files: [file] });
         setStreamingText('');
         streamingTextRef.current = '';
+      } else {
+        removeOptimisticMessages(handlerConvId);
       }
     } finally {
-      abortControllerRef.current = null;
-      setStreamingConversationId(null);
-      setBusy(false);
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+        setStreamingConversationId(null);
+        setBusy(false);
+      }
     }
   }
 
@@ -489,6 +515,7 @@ export default function App() {
     abortControllerRef.current = controller;
     userNavigatedAwayRef.current = false;
     const effectiveId = isDraft(currentConversationId) ? null : currentConversationId;
+    let handlerConvId: string | null = effectiveId;
     activeConversationIdRef.current = effectiveId;
     setStreamingConversationId(currentConversationId);
     // Show user message immediately (optimistic update)
@@ -510,65 +537,77 @@ export default function App() {
       setActiveToolCalls([]);
       setError(null);
       await streamMultiUploadMessage(effectiveId, text, files, (event: ChatStreamEvent) => {
+        const isOwner = abortControllerRef.current === controller;
         if (event.type === 'tool_start') {
-          setActiveToolCalls((prev) => [...prev, { name: event.name, arguments: event.arguments, done: false }]);
+          if (isOwner) setActiveToolCalls((prev) => [...prev, { name: event.name, arguments: event.arguments, done: false }]);
           return;
         }
         if (event.type === 'tool_done') {
-          setActiveToolCalls((prev) => prev.map((tc) =>
+          if (isOwner) setActiveToolCalls((prev) => prev.map((tc) =>
             tc.name === event.name && !tc.done ? { ...tc, done: true } : tc,
           ));
           return;
         }
         if (event.type === 'conversation') {
           upsertConversation(event.conversation);
-          if (!userNavigatedAwayRef.current) setCurrentConversationId(event.conversation.id);
-          activeConversationIdRef.current = event.conversation.id;
-          setStreamingConversationId(event.conversation.id);
+          handlerConvId = event.conversation.id;
+          if (isOwner) {
+            if (!userNavigatedAwayRef.current) setCurrentConversationId(event.conversation.id);
+            activeConversationIdRef.current = event.conversation.id;
+            setStreamingConversationId(event.conversation.id);
+          }
           return;
         }
 
         if (event.type === 'delta') {
-          streamingTextRef.current += event.delta;
-          setStreamingText((current) => current + event.delta);
+          if (isOwner) {
+            streamingTextRef.current += event.delta;
+            setStreamingText((current) => current + event.delta);
+          }
           return;
         }
 
         upsertConversation(event.conversation);
-        if (!userNavigatedAwayRef.current) setCurrentConversationId(event.conversation.id);
-        setActiveToolCalls([]);
-        setStreamingText('');
-        streamingTextRef.current = '';
+        if (isOwner) {
+          if (!userNavigatedAwayRef.current) setCurrentConversationId(event.conversation.id);
+          setActiveToolCalls([]);
+          setStreamingText('');
+          streamingTextRef.current = '';
+        }
       }, controller.signal, locale, effectiveCustomInstructions, webAccess, localFiles, allowedFolders, userLocation);
       await refreshHealth().catch(() => null);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
-        const partial = streamingTextRef.current.trim();
-        const convId = activeConversationIdRef.current;
-        setStreamingText('');
-        streamingTextRef.current = '';
-        if (partial && convId) {
-          setConversations((prev) =>
-            prev.map((c) =>
-              c.id === convId
-                ? { ...c, messages: [...c.messages, { id: `partial-${Date.now()}`, role: 'assistant' as const, content: partial, input_type: 'text' as const, created_at: new Date().toISOString() }] }
-                : c,
-            ),
-          );
-          await savePartial(convId, partial).catch(() => null);
-          await reloadConversations().catch(() => null);
+        if (abortControllerRef.current === controller) {
+          const partial = streamingTextRef.current.trim();
+          setStreamingText('');
+          streamingTextRef.current = '';
+          if (partial && handlerConvId) {
+            setConversations((prev) =>
+              prev.map((c) =>
+                c.id === handlerConvId
+                  ? { ...c, messages: [...c.messages, { id: `partial-${Date.now()}`, role: 'assistant' as const, content: partial, input_type: 'text' as const, created_at: new Date().toISOString() }] }
+                  : c,
+              ),
+            );
+            await savePartial(handlerConvId, partial).catch(() => null);
+          }
         }
-      } else {
-        removeOptimisticMessages(activeConversationIdRef.current ?? currentConversationId);
+      } else if (abortControllerRef.current === controller) {
+        removeOptimisticMessages(handlerConvId ?? currentConversationId);
         setError(err instanceof Error ? err.message : t('error.sendFile'));
         setRestoreComposer({ text, files });
         setStreamingText('');
         streamingTextRef.current = '';
+      } else {
+        removeOptimisticMessages(handlerConvId);
       }
     } finally {
-      abortControllerRef.current = null;
-      setStreamingConversationId(null);
-      setBusy(false);
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+        setStreamingConversationId(null);
+        setBusy(false);
+      }
     }
   }
 
@@ -579,8 +618,8 @@ export default function App() {
 
   async function handleEditLastMessage(newText: string) {
     if (!currentConversationId) return;
-    // Abort any ongoing generation first
-    if (abortControllerRef.current) {
+    // Only abort if the active stream belongs to this same conversation
+    if (abortControllerRef.current && activeConversationIdRef.current === currentConversationId) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
       setStreamingText('');
@@ -613,66 +652,75 @@ export default function App() {
       setActiveToolCalls([]);
       setError(null);
       await streamEditLastMessage(currentConversationId, newText, (event: ChatStreamEvent) => {
+        const isOwner = abortControllerRef.current === controller;
         if (event.type === 'tool_start') {
-          setActiveToolCalls((prev) => [...prev, { name: event.name, arguments: event.arguments, done: false }]);
+          if (isOwner) setActiveToolCalls((prev) => [...prev, { name: event.name, arguments: event.arguments, done: false }]);
           return;
         }
         if (event.type === 'tool_done') {
-          setActiveToolCalls((prev) => prev.map((tc) =>
+          if (isOwner) setActiveToolCalls((prev) => prev.map((tc) =>
             tc.name === event.name && !tc.done ? { ...tc, done: true } : tc,
           ));
           return;
         }
         if (event.type === 'conversation') {
           upsertConversation(event.conversation);
-          activeConversationIdRef.current = event.conversation.id;
-          setStreamingConversationId(event.conversation.id);
+          if (isOwner) {
+            activeConversationIdRef.current = event.conversation.id;
+            setStreamingConversationId(event.conversation.id);
+          }
           return;
         }
         if (event.type === 'delta') {
-          streamingTextRef.current += event.delta;
-          setStreamingText((current) => current + event.delta);
+          if (isOwner) {
+            streamingTextRef.current += event.delta;
+            setStreamingText((current) => current + event.delta);
+          }
           return;
         }
         upsertConversation(event.conversation);
-        setActiveToolCalls([]);
-        setStreamingText('');
-        streamingTextRef.current = '';
+        if (isOwner) {
+          setActiveToolCalls([]);
+          setStreamingText('');
+          streamingTextRef.current = '';
+        }
       }, controller.signal, locale, effectiveCustomInstructions, webAccess, localFiles, allowedFolders, userLocation);
       await refreshHealth().catch(() => null);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
-        const partial = streamingTextRef.current.trim();
-        const convId = activeConversationIdRef.current;
-        setStreamingText('');
-        streamingTextRef.current = '';
-        if (partial && convId) {
-          setConversations((prev) =>
-            prev.map((c) =>
-              c.id === convId
-                ? { ...c, messages: [...c.messages, { id: `partial-${Date.now()}`, role: 'assistant' as const, content: partial, input_type: 'text' as const, created_at: new Date().toISOString() }] }
-                : c,
-            ),
-          );
-          await savePartial(convId, partial).catch(() => null);
-          await reloadConversations().catch(() => null);
+        if (abortControllerRef.current === controller) {
+          const partial = streamingTextRef.current.trim();
+          setStreamingText('');
+          streamingTextRef.current = '';
+          if (partial && currentConversationId) {
+            setConversations((prev) =>
+              prev.map((c) =>
+                c.id === currentConversationId
+                  ? { ...c, messages: [...c.messages, { id: `partial-${Date.now()}`, role: 'assistant' as const, content: partial, input_type: 'text' as const, created_at: new Date().toISOString() }] }
+                  : c,
+              ),
+            );
+            await savePartial(currentConversationId, partial).catch(() => null);
+          }
         }
-      } else {
+      } else if (abortControllerRef.current === controller) {
         setError(err instanceof Error ? err.message : t('error.editMessage'));
         setStreamingText('');
         streamingTextRef.current = '';
       }
     } finally {
-      abortControllerRef.current = null;
-      setStreamingConversationId(null);
-      setBusy(false);
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+        setStreamingConversationId(null);
+        setBusy(false);
+      }
     }
   }
 
   async function handleRegenerate() {
     if (!currentConversationId) return;
-    // Abort any ongoing generation first
-    if (abortControllerRef.current) {
+    // Only abort if the active stream belongs to this same conversation
+    if (abortControllerRef.current && activeConversationIdRef.current === currentConversationId) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
       setStreamingText('');
@@ -689,59 +737,68 @@ export default function App() {
       setActiveToolCalls([]);
       setError(null);
       await streamRegenerate(currentConversationId, (event: ChatStreamEvent) => {
+        const isOwner = abortControllerRef.current === controller;
         if (event.type === 'tool_start') {
-          setActiveToolCalls((prev) => [...prev, { name: event.name, arguments: event.arguments, done: false }]);
+          if (isOwner) setActiveToolCalls((prev) => [...prev, { name: event.name, arguments: event.arguments, done: false }]);
           return;
         }
         if (event.type === 'tool_done') {
-          setActiveToolCalls((prev) => prev.map((tc) =>
+          if (isOwner) setActiveToolCalls((prev) => prev.map((tc) =>
             tc.name === event.name && !tc.done ? { ...tc, done: true } : tc,
           ));
           return;
         }
         if (event.type === 'conversation') {
           upsertConversation(event.conversation);
-          activeConversationIdRef.current = event.conversation.id;
-          setStreamingConversationId(event.conversation.id);
+          if (isOwner) {
+            activeConversationIdRef.current = event.conversation.id;
+            setStreamingConversationId(event.conversation.id);
+          }
           return;
         }
         if (event.type === 'delta') {
-          streamingTextRef.current += event.delta;
-          setStreamingText((current) => current + event.delta);
+          if (isOwner) {
+            streamingTextRef.current += event.delta;
+            setStreamingText((current) => current + event.delta);
+          }
           return;
         }
         upsertConversation(event.conversation);
-        setActiveToolCalls([]);
-        setStreamingText('');
-        streamingTextRef.current = '';
+        if (isOwner) {
+          setActiveToolCalls([]);
+          setStreamingText('');
+          streamingTextRef.current = '';
+        }
       }, controller.signal, locale, effectiveCustomInstructions, webAccess, localFiles, allowedFolders, userLocation);
       await refreshHealth().catch(() => null);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
-        const partial = streamingTextRef.current.trim();
-        const convId = activeConversationIdRef.current;
-        setStreamingText('');
-        streamingTextRef.current = '';
-        if (partial && convId) {
-          setConversations((prev) =>
-            prev.map((c) =>
-              c.id === convId
-                ? { ...c, messages: [...c.messages, { id: `partial-${Date.now()}`, role: 'assistant' as const, content: partial, input_type: 'text' as const, created_at: new Date().toISOString() }] }
-                : c,
-            ),
-          );
-          await savePartial(convId, partial).catch(() => null);
-          await reloadConversations().catch(() => null);
+        if (abortControllerRef.current === controller) {
+          const partial = streamingTextRef.current.trim();
+          setStreamingText('');
+          streamingTextRef.current = '';
+          if (partial && currentConversationId) {
+            setConversations((prev) =>
+              prev.map((c) =>
+                c.id === currentConversationId
+                  ? { ...c, messages: [...c.messages, { id: `partial-${Date.now()}`, role: 'assistant' as const, content: partial, input_type: 'text' as const, created_at: new Date().toISOString() }] }
+                  : c,
+              ),
+            );
+            await savePartial(currentConversationId, partial).catch(() => null);
+          }
         }
-      } else {
+      } else if (abortControllerRef.current === controller) {
         setError(err instanceof Error ? err.message : t('error.regenerate'));
         setStreamingText('');
         streamingTextRef.current = '';
       }
     } finally {
-      abortControllerRef.current = null;
-      setStreamingConversationId(null);
-      setBusy(false);
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+        setStreamingConversationId(null);
+        setBusy(false);
+      }
     }
   }
 

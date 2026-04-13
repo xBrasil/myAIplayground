@@ -1,4 +1,5 @@
 import json
+import os
 import tempfile
 from pathlib import Path
 from threading import Lock
@@ -34,9 +35,8 @@ def _write_settings(data: dict[str, Any]) -> None:
     # Write to a temp file then atomically replace to avoid corruption
     fd, tmp = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
     try:
-        import os as _os
-        _os.write(fd, json.dumps(data, indent=2, ensure_ascii=False).encode("utf-8"))
-        _os.close(fd)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
         Path(tmp).replace(path)
     except BaseException:
         Path(tmp).unlink(missing_ok=True)

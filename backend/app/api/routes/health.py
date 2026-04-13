@@ -3,11 +3,9 @@ import threading
 
 from fastapi import APIRouter, HTTPException, Request
 
-from app.core.config import get_settings
+from app.core.config import ALLOWED_ORIGINS, get_settings
 from app.schemas import HealthResponse
 from app.services.model_service import model_service
-
-_ALLOWED_ORIGINS = {"http://127.0.0.1:5173", "http://localhost:5173"}
 
 router = APIRouter(tags=["health"])
 
@@ -41,7 +39,7 @@ def shutdown(request: Request) -> dict:
     """
     origin = request.headers.get("origin") or ""
     referer = request.headers.get("referer") or ""
-    if origin not in _ALLOWED_ORIGINS and not any(referer.startswith(o) for o in _ALLOWED_ORIGINS):
+    if origin not in ALLOWED_ORIGINS and not any(referer.startswith(o) for o in ALLOWED_ORIGINS):
         raise HTTPException(status_code=403, detail="Forbidden")
 
     def _deferred_exit() -> None:
