@@ -288,6 +288,18 @@ export default function App() {
     }
   }
 
+  /** Remove any optimistic messages (not yet persisted) from a conversation. */
+  function removeOptimisticMessages(convId: string | null) {
+    if (!convId) return;
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === convId
+          ? { ...c, messages: c.messages.filter((m) => !m.id.startsWith('optimistic-')) }
+          : c,
+      ),
+    );
+  }
+
   async function handleSendText(text: string) {
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -368,6 +380,7 @@ export default function App() {
           await reloadConversations().catch(() => null);
         }
       } else {
+        removeOptimisticMessages(activeConversationIdRef.current ?? currentConversationId);
         setError(err instanceof Error ? err.message : t('error.sendMessage'));
         setRestoreComposer({ text, files: [] });
         setStreamingText('');
@@ -458,6 +471,7 @@ export default function App() {
           await reloadConversations().catch(() => null);
         }
       } else {
+        removeOptimisticMessages(activeConversationIdRef.current ?? currentConversationId);
         setError(err instanceof Error ? err.message : t('error.sendFile'));
         setRestoreComposer({ text, files: [file] });
         setStreamingText('');
@@ -545,6 +559,7 @@ export default function App() {
           await reloadConversations().catch(() => null);
         }
       } else {
+        removeOptimisticMessages(activeConversationIdRef.current ?? currentConversationId);
         setError(err instanceof Error ? err.message : t('error.sendFile'));
         setRestoreComposer({ text, files });
         setStreamingText('');

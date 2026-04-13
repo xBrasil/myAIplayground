@@ -54,27 +54,27 @@
   <img src="docs/screenshots/chat-dark-mode.jpeg" alt="Chat em tema escuro" width="720" /><br/>
   <em>Interface principal com tema escuro — conversa com o modelo Gemma 4 E4B</em>
 </p>
-
+<br>
 <p align="center">
   <img src="docs/screenshots/multimodal-image.jpeg" alt="Entrada multimodal com imagem" width="720" /><br/>
   <em>Envio de imagem com análise visual pelo modelo</em>
 </p>
-
+<br>
 <p align="center">
   <img src="docs/screenshots/streaming-response.jpeg" alt="Resposta em streaming" width="720" /><br/>
   <em>Resposta em tempo real — tokens aparecem conforme são gerados</em>
 </p>
-
+<br>
 <p align="center">
   <img src="docs/screenshots/model-selector.jpeg" alt="Seletor de modelos" width="720" /><br/>
   <em>Seletor de modelos com descrições de capacidade e limitações</em>
 </p>
-
+<br>
 <p align="center">
   <img src="docs/screenshots/settings-panel.jpeg" alt="Painel de ajustes" width="720" /><br/>
   <em>Painel de ajustes — idioma, voz, instruções personalizadas, acesso web, arquivos locais</em>
 </p>
-
+<br>
 <p align="center">
   <img src="docs/screenshots/web-search.jpeg" alt="Pesquisa na web" width="720" /><br/>
   <em>Pesquisa na web com citação de fontes numeradas</em>
@@ -112,7 +112,7 @@ O My AI Playground roda modelos de IA localmente no seu hardware. Os requisitos 
 | **VRAM (GPU)** | 16 GB+ (NVIDIA com CUDA) |
 | **Disco** | ~15 GB para o modelo |
 
-> **Nota:** sem VRAM suficiente, o llama.cpp fará offloading para a RAM do sistema (modo CPU/parcial), resultando em inferência significativamente mais lenta. Se você receber erros de **Out of Memory (OOM)**, experimente um modelo menor ou reduza `N_CTX` no arquivo `backend/.env`.
+> **Nota:** sem VRAM suficiente, o llama.cpp fará offloading para a RAM do sistema (modo CPU/parcial), resultando em inferência significativamente mais lenta. Se você receber erros de **Out of Memory (OOM)**, experimente um modelo menor ou reduza `N_CTX` no arquivo `data/.env`.
 
 ---
 
@@ -122,7 +122,7 @@ O My AI Playground roda modelos de IA localmente no seu hardware. Os requisitos 
 
 Na [página de releases](https://github.com/xBrasil/myAIplayground/releases) está disponível um instalador `.exe` para Windows (criado com [Inno Setup](https://jrsoftware.org/isinfo.php)). O assistente de instalação copia os arquivos, cria atalhos no Menu Iniciar e na Área de Trabalho, e opcionalmente executa a configuração de dependências ao final.
 
-> **Nota:** Python 3.11+ e Node.js 20+ são instalados automaticamente via `winget` se ainda não estiverem presentes — desde que o instalador seja executado como Administrador. Sem privilégios de admin, instale-os manualmente antes.
+> **Nota:** Python 3.11+ e Node.js 20+ são instalados automaticamente via `winget` quando estiverem faltando. Se você escolher a instalação per-user (sem rodar o instalador como Administrador), um prompt do UAC aparecerá no momento certo para elevar apenas essa etapa — o restante do setup continua rodando no seu usuário. Requer `winget` (App Installer) disponível no Windows; caso contrário, instale Python/Node manualmente antes.
 
 ### Opção B — Via scripts
 
@@ -140,11 +140,11 @@ install.cmd
 ```
 
 O instalador:
-- Detecta e instala Python e Node.js automaticamente via `winget` (se executado como Administrador)
+- Detecta e instala Python e Node.js automaticamente via `winget` (solicitando elevação UAC se necessário)
 - Cria o ambiente virtual `.venv` e instala dependências do backend
 - Instala dependências npm do frontend
 - Baixa o binário mais recente do `llama-server` (CUDA ou CPU, conforme sua GPU)
-- Cria `backend/.env` a partir de `.env.example`
+- Cria `data/.env` a partir de `backend/.env.example`
 
 #### Execução
 
@@ -350,7 +350,7 @@ Criado por [Rodolfo Motta Saraiva](https://rmsaraiva.com/) como projeto pessoal 
 | Gemma 4 E4B (4B) | 16 GB | 6 GB | ~5 GB |
 | Gemma 4 26B-A4B (26B MoE) | 32 GB | 16 GB+ | ~15 GB |
 
-> Without sufficient VRAM, llama.cpp will offload layers to system RAM (CPU mode), resulting in significantly slower inference. If you encounter **OOM errors**, try a smaller model or reduce `N_CTX` in `backend/.env`.
+> Without sufficient VRAM, llama.cpp will offload layers to system RAM (CPU mode), resulting in significantly slower inference. If you encounter **OOM errors**, try a smaller model or reduce `N_CTX` in `data/.env`.
 
 ### Installation
 
@@ -366,7 +366,7 @@ Criado por [Rodolfo Motta Saraiva](https://rmsaraiva.com/) como projeto pessoal 
 
 A signed `.exe` installer (built with [Inno Setup](https://jrsoftware.org/isinfo.php)) is available on the [releases page](https://github.com/xBrasil/myAIplayground/releases). The wizard copies files, creates Start Menu and Desktop shortcuts, and optionally runs the dependency setup at the end.
 
-> **Note:** Python 3.11+ and Node.js 20+ are installed automatically via `winget` if missing — provided the installer is run as Administrator. Without admin privileges, install them manually first.
+> **Note:** Python 3.11+ and Node.js 20+ are installed automatically via `winget` when missing. If you chose the per-user install (without running as Administrator), a UAC prompt will appear at that moment to elevate just that step — the rest of the setup keeps running under your user account. Requires `winget` (App Installer) available on Windows; otherwise install Python/Node manually beforehand.
 
 #### Windows — via scripts
 
@@ -375,11 +375,11 @@ install.cmd
 ```
 
 The installer:
-- Detects and installs Python and Node.js automatically via `winget` (when run as Administrator)
+- Detects and installs Python and Node.js automatically via `winget` (prompting for UAC elevation if needed)
 - Creates the `.venv` virtual environment and installs backend dependencies
 - Installs frontend npm dependencies
 - Downloads the latest `llama-server` binary (CUDA or CPU, according to your GPU)
-- Creates `backend/.env` from `.env.example`
+- Creates `data/.env` from `backend/.env.example`
 
 Launch with:
 

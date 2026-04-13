@@ -54,6 +54,29 @@ function Install-WithWinget {
     return $proc.ExitCode -eq 0
 }
 
+function Invoke-ElevatedWinget {
+    param([array]$Packages)
+    if ($Packages.Count -eq 0) { return $true }
+
+    $names = ($Packages | ForEach-Object { $_.FriendlyName }) -join ', '
+    Write-Status (T 'script.install.elevationRequired' @{names=$names}) -ForegroundColor Yellow
+
+    $cmds = foreach ($p in $Packages) {
+        "winget install --id $($p.Id) --accept-source-agreements --accept-package-agreements -e"
+    }
+    $inline = ($cmds -join '; ') + '; exit $LASTEXITCODE'
+    $psArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', $inline)
+
+    try {
+        $proc = Start-Process -FilePath "powershell.exe" -ArgumentList $psArgs `
+                -Verb RunAs -Wait -PassThru
+    } catch [System.ComponentModel.Win32Exception] {
+        throw (T 'script.install.elevationDenied' @{names=$names})
+    }
+    Refresh-Path
+    return $proc.ExitCode -eq 0
+}
+
 function Get-PythonBootstrapCommand {
     $py = Get-Command py -ErrorAction SilentlyContinue
     if ($py) { return @($py.Source, "-3") }
@@ -90,31 +113,31 @@ try {
 
 Write-Step (T 'script.install.prereqs')
 
-# Python
+# Python + Node.js / npm — detect missing first, then install grouped (single UAC prompt when needed)
 $pythonBootstrap = Get-PythonBootstrapCommand
-if (-not $pythonBootstrap) {
-    if ($isAdmin -and $hasWinget) {
-        Install-WithWinget -PackageId "Python.Python.3.12" -FriendlyName "Python 3.12"
-        $pythonBootstrap = Get-PythonBootstrapCommand
-        if (-not $pythonBootstrap) { throw (T 'script.install.pythonNotFoundAfterInstall') }
-    } else {
-        throw (T 'script.install.pythonNotFound')
+$hasNpm = $null -ne (Get-Command npm -ErrorAction SilentlyContinue)
+$missing = @()
+if (-not $pythonBootstrap) { $missing += @{ Id='Python.Python.3.12'; FriendlyName='Python 3.12' } }
+if (-not $hasNpm)          { $missing += @{ Id='OpenJS.NodeJS.LTS'; FriendlyName='Node.js LTS' } }
+
+if ($missing.Count -gt 0) {
+    $missingNames = ($missing | ForEach-Object { $_.FriendlyName }) -join ', '
+    if (-not $hasWinget) {
+        throw (T 'script.install.prereqsMissingNoWinget' @{names=$missingNames})
     }
+    if (-not $isAdmin) {
+        Write-Status (T 'script.install.elevationMayBeNeeded') -ForegroundColor Yellow
+    }
+    if ($isAdmin) {
+        foreach ($p in $missing) { Install-WithWinget -PackageId $p.Id -FriendlyName $p.FriendlyName | Out-Null }
+    } else {
+        Invoke-ElevatedWinget -Packages $missing | Out-Null
+    }
+    $pythonBootstrap = Get-PythonBootstrapCommand
+    if (-not $pythonBootstrap) { throw (T 'script.install.pythonNotFoundAfterInstall') }
+    if ($null -eq (Get-Command npm -ErrorAction SilentlyContinue)) { throw (T 'script.install.npmNotFoundAfterInstall') }
 }
 Write-Status "  $(T 'script.install.pythonOk')" -ForegroundColor Green
-
-# Node.js / npm
-if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
-    if ($isAdmin -and $hasWinget) {
-        Install-WithWinget -PackageId "OpenJS.NodeJS.LTS" -FriendlyName "Node.js LTS"
-        Refresh-Path
-        if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
-            throw (T 'script.install.npmNotFoundAfterInstall')
-        }
-    } else {
-        throw (T 'script.install.nodeNotFound')
-    }
-}
 Write-Status "  $(T 'script.install.nodeOk')" -ForegroundColor Green
 
 # GPU detection — try WMI first, fall back to nvidia-smi on PATH
@@ -397,6 +420,12 @@ if (-not $llamaInstalled) {
 Write-Status (T 'script.install.useRunCmd') -ForegroundColor Green
 Write-Status (T 'script.install.logSaved' @{path=$logFile}) -ForegroundColor DarkGray
 
-} finally {
-    # no-op: transcript replaced by direct UTF-8 file writes
+} catch {
+    # Log the terminating error so the Inno memo + install.log show what went wrong
+    try { Write-Status "ERROR: $_" -ForegroundColor Red } catch {}
+    exit 1
 }
+
+# Explicit success exit — avoids the script inheriting a stray $LASTEXITCODE
+# from an earlier native command that succeeded but left a non-zero code.
+exit 0
