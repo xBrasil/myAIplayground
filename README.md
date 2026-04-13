@@ -122,18 +122,18 @@ O My AI Playground roda modelos de IA localmente no seu hardware. Os requisitos 
 
 Na [página de releases](https://github.com/xBrasil/myAIplayground/releases) está disponível um instalador `.exe` para Windows (criado com [Inno Setup](https://jrsoftware.org/isinfo.php)). O assistente de instalação copia os arquivos, cria atalhos no Menu Iniciar e na Área de Trabalho, e opcionalmente executa a configuração de dependências ao final.
 
-> **Nota:** Python 3.11+ e Node.js 20+ ainda precisam estar instalados no sistema.
+> **Nota:** Python 3.11+ e Node.js 20+ são instalados automaticamente via `winget` se ainda não estiverem presentes — desde que o instalador seja executado como Administrador. Sem privilégios de admin, instale-os manualmente antes.
 
 ### Opção B — Via scripts
 
-### Pré-requisitos
+#### Pré-requisitos
 
 - **Windows 10/11** (64 bits)
 - **Python 3.11+**
 - **Node.js 20+**
 - **GPU NVIDIA** com drivers atualizados (recomendado; funciona sem GPU em modo CPU)
 
-### Instalação
+#### Instalação
 
 ```powershell
 install.cmd
@@ -146,7 +146,7 @@ O instalador:
 - Baixa o binário mais recente do `llama-server` (CUDA ou CPU, conforme sua GPU)
 - Cria `backend/.env` a partir de `.env.example`
 
-### Execução
+#### Execução
 
 ```powershell
 run.cmd
@@ -241,9 +241,9 @@ myAIplayground/
 │       └── locales/      # pt-BR.json, en-US.json, es-ES.json, fr-FR.json
 ├── backend/           # FastAPI (API + serviços)
 │   └── app/
-│       ├── api/routes/   # chat, conversations, health, models
+│       ├── api/routes/   # chat, conversations, health, legal, models, settings
 │       ├── core/         # config (pydantic-settings)
-│       └── services/     # chat, model, storage, input_adapter, document, web, filesystem
+│       └── services/     # chat, model, storage, input_adapter, document, web, filesystem, whisper
 ├── data/              # Dados locais (ignorados pelo git)
 │   ├── app.db            # SQLite com conversas e mensagens
 │   ├── uploads/          # Arquivos enviados nas conversas
@@ -260,26 +260,11 @@ myAIplayground/
 
 ---
 
-## Configuração
-
-As variáveis de ambiente ficam em `backend/.env` (criado automaticamente pelo instalador). Principais opções:
-
-| Variável | Padrão | Descrição |
-|---|---|---|
-| `ENABLE_MODEL_LOADING` | `true` | Habilita download e carregamento automático de modelos |
-| `DEFAULT_MODEL_KEY` | `e4b` | Modelo padrão (`e2b`, `e4b`, `26b`) |
-| `N_CTX` | `0` (auto) | Tamanho do contexto do llama-server (`0` = usar perfil do modelo: 128K E2B/E4B, 256K 26B) |
-| `N_GPU_LAYERS` | `-1` | Camadas na GPU (`-1` = todas) |
-| `FLASH_ATTN` | `true` | Flash Attention (mais rápido em GPUs compatíveis) |
-| `WHISPER_MODEL_SIZE` | `base` | Tamanho do modelo Whisper (`tiny`, `base`, `small`, `medium`, `large`) |
-| `DEFAULT_SYSTEM_PROMPT` | `You are a helpful local assistant.` | System prompt padrão |
-
----
-
 ## Privacidade
 
 - As conversas são salvas apenas em `data/app.db` (local).
 - Arquivos enviados ficam em `data/uploads/` (local).
+- Os ajustes do aplicativo (idioma, voz, instruções personalizadas, pastas permitidas etc.) ficam em `data/settings.json` (local).
 - O download inicial dos modelos vem do Hugging Face. Após isso, tudo roda offline.
 - **Pesquisa web**: quando ativada nos Ajustes, o modelo pode fazer buscas no DuckDuckGo e acessar páginas web. Essas requisições saem da sua máquina. Desative nos Ajustes para modo totalmente offline.
 - **Acesso a arquivos locais**: quando ativado nos Ajustes, o modelo pode ler arquivos **somente** das pastas que você permitiu explicitamente. Acesso é READ-ONLY e protegido contra travessia de diretório.
@@ -331,6 +316,32 @@ Criado por [Rodolfo Motta Saraiva](https://rmsaraiva.com/) como projeto pessoal 
 
 > **Disclaimer:** This project is **not affiliated with, sponsored by, or endorsed by Google or Alphabet Inc.** "Gemma" is a trademark of Google. The Gemma models are used under the licensing terms provided by Google.
 
+### Features
+
+- **Multimodal chat** — text, images, audio and files in a single conversation; multiple attachments per message. Image formats: PNG, JPEG, WebP, GIF, SVG, HEIC/HEIF, AVIF, BMP, ICO, TIFF.
+- **Gemma models** — Gemma 4 E2B, E4B and 26B-A4B via GGUF; switch models at any time from the UI.
+- **Text files** — 60+ code and data extensions (`.py`, `.ts`, `.json`, `.csv`, `.xml`, `.yaml`, `.sql`, `.rs`, `.go`…) read as plain text.
+- **Documents** — PDF, Word (`.docx`), Excel (`.xlsx`) and PowerPoint (`.pptx`) with automatic text extraction.
+- **Web search** — DuckDuckGo search and page reading; the model cites sources with numbered references (`[1]`, `[2]`…).
+- **Local filesystem access** — the model can list and read files from folders you explicitly allow (read-only, directory-traversal protected).
+- **Local image vision** — on vision-capable models (Gemma 4 E2B/E4B), the model can see and describe images from allowed folders.
+- **Tool calling** — the model calls tools (web, filesystem, vision) automatically; calls are persisted and rendered auditably in the history.
+- **Custom instructions** — user-defined system prompt applied to all conversations.
+- **Local inference** — llama.cpp server with CUDA, flash attention, per-model context (128K–256K tokens).
+- **Streaming** — responses rendered token by token in real time.
+- **Auto-continuation** — long responses continue automatically when the token limit is reached (up to 5 rounds).
+- **Voice recording** — record, pause, resume and stop before sending; audio converted to 16 kHz WAV with a countdown timer.
+- **Transcription** — Whisper (faster-whisper) converts audio to text locally.
+- **Text-to-Speech** — Web Speech API with preference for Microsoft voices.
+- **Rich Markdown** — GFM rendering, syntax-highlighted code blocks, KaTeX math.
+- **Message editing** — edit sent messages and regenerate responses.
+- **Message search** — search conversations by title or content with term highlighting.
+- **Location** — optional geolocation sharing for more context-aware answers (off by default).
+- **Risk evaluation** — custom instructions are evaluated automatically by the LLM; alerts shown only when risk is significant.
+- **i18n** — Portuguese (BR), English (US), Spanish and French; auto-detects browser language.
+- **Dark theme** — minimalist responsive UI.
+- **Sliding window** — automatic context management: long-content truncation, old-message eviction and retry on overflow.
+
 ### System Requirements
 
 | Model | RAM | VRAM (NVIDIA CUDA) | Disk |
@@ -341,27 +352,75 @@ Criado por [Rodolfo Motta Saraiva](https://rmsaraiva.com/) como projeto pessoal 
 
 > Without sufficient VRAM, llama.cpp will offload layers to system RAM (CPU mode), resulting in significantly slower inference. If you encounter **OOM errors**, try a smaller model or reduce `N_CTX` in `backend/.env`.
 
+### Installation
+
+#### Prerequisites
+
+- **Python 3.11+** (on Linux/macOS, the `venv` module — `python3-venv` on Ubuntu/Debian)
+- **Node.js 20+**
+- **NVIDIA GPU** with up-to-date drivers (recommended; runs on CPU otherwise)
+- **Windows 10/11 (64-bit)**, modern Linux, or macOS (arm64/x64)
+- On Linux/macOS: `curl` and `unzip`
+
+#### Windows — graphical installer
+
+A signed `.exe` installer (built with [Inno Setup](https://jrsoftware.org/isinfo.php)) is available on the [releases page](https://github.com/xBrasil/myAIplayground/releases). The wizard copies files, creates Start Menu and Desktop shortcuts, and optionally runs the dependency setup at the end.
+
+> **Note:** Python 3.11+ and Node.js 20+ are installed automatically via `winget` if missing — provided the installer is run as Administrator. Without admin privileges, install them manually first.
+
+#### Windows — via scripts
+
+```powershell
+install.cmd
+```
+
+The installer:
+- Detects and installs Python and Node.js automatically via `winget` (when run as Administrator)
+- Creates the `.venv` virtual environment and installs backend dependencies
+- Installs frontend npm dependencies
+- Downloads the latest `llama-server` binary (CUDA or CPU, according to your GPU)
+- Creates `backend/.env` from `.env.example`
+
+Launch with:
+
+```powershell
+run.cmd
+```
+
+#### Linux / macOS
+
+```bash
+chmod +x install.sh run.sh
+./install.sh
+./run.sh
+```
+
+The installer performs the same steps as the Windows version: creates `.venv`, installs dependencies, downloads `llama-server` and prepares `.env`. The script auto-detects macOS (arm64/x64) and Linux to pick the correct `llama-server` binary. Press `Ctrl+C` to stop.
+
+#### What the launcher does
+
+- Starts backend (FastAPI on port 8000) and frontend (Vite on port 5173)
+- Waits for both to be ready and opens the UI in your browser
+- Reuses already-running services — safe to run more than once
+- Logs saved to `data/backend.log` and `data/frontend.log`
+
+> **Tip:** the first use of each model triggers a GGUF download from Hugging Face. Models are cached in `data/model-cache/`.
+
+### Privacy
+
+- Conversations are stored in a local SQLite database (`data/app.db`).
+- Uploaded files stay in `data/uploads/`.
+- App settings (language, voice, custom instructions, allowed folders, etc.) are stored in `data/settings.json`.
+- Initial model downloads come from Hugging Face. After that, everything runs offline.
+- **Web search**: when enabled in Settings, the model can query DuckDuckGo and fetch pages. Those requests leave your machine — disable it for fully offline mode.
+- **Local filesystem access**: when enabled, the model can read files **only** from folders you explicitly allowed. Access is read-only and protected against directory traversal.
+- Text-to-Speech uses the browser's `speechSynthesis` API; local vs. online behavior depends on the selected voice and system settings.
+- No analytics or telemetry.
+
 ### Key points
 
 - **100% local inference** — all AI processing runs on your hardware via [llama.cpp](https://github.com/ggml-org/llama.cpp) (GGUF format). No data is sent to cloud services during normal chat use.
-- **Privacy by design** — conversations are stored in a local SQLite database (`data/app.db`). Uploaded files stay in `data/uploads/`. No analytics or telemetry.
 - **Gemma models are not included** — they are downloaded from [Hugging Face](https://huggingface.co/) at the user's request and are subject to [Google's Gemma Terms of Use](https://ai.google.dev/gemma/terms).
 - **Stack**: React 19 + TypeScript + Vite (frontend), FastAPI + SQLAlchemy (backend), llama.cpp server (inference), faster-whisper (speech-to-text).
 - **License**: [Apache License 2.0](LICENSE) — Copyright 2026 Rodolfo Motta Saraiva.
 
-For setup instructions, see the Portuguese sections above or the [setup guide](docs/setup-windows.md).
-
-### Quick Start
-
-**Windows:**
-```powershell
-install.cmd   # one-time setup
-run.cmd        # launch
-```
-
-**Linux / macOS:**
-```bash
-chmod +x install.sh run.sh
-./install.sh   # one-time setup
-./run.sh       # launch
-```
