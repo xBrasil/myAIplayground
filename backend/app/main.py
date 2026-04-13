@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import chat, conversations, health, legal, models
 from app.api.routes import settings as settings_routes
-from app.core.config import get_settings
+from app.core.config import ALLOWED_ORIGINS, get_settings
 from app.db import create_db_and_tables
 from app.services.model_service import model_service
 
@@ -27,7 +27,7 @@ app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1:5173", "http://localhost:5173"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

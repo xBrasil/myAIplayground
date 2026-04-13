@@ -193,6 +193,7 @@ var
   PI: TProcessInformation;
   LogFile, CmdLine, PrevText: String;
   ExitCode: Cardinal;
+  NotepadResult: Integer;
   Created: BOOL;
 begin
   if CurStep = ssPostInstall then begin
@@ -215,8 +216,8 @@ begin
     OutputMemo.WantReturns := False;
     OutputMemo.Font.Name := 'Consolas';
     OutputMemo.Font.Size := 8;
-    OutputMemo.Color := clBlack;
-    OutputMemo.Font.Color := $00C0C0C0;  // light grey text
+    OutputMemo.Color := $00F0F0F0;     // light grey background
+    OutputMemo.Font.Color := clBlack;  // dark text
 
     // Launch install.ps1 as a non-blocking process
     CmdLine := ExpandConstant('powershell.exe -ExecutionPolicy Bypass -File "{app}\scripts\install.ps1"');
@@ -262,6 +263,9 @@ begin
     if ExitCode <> 0 then begin
       MsgBox(FmtMessage(CustomMessage('SetupFailed'), [IntToStr(ExitCode), LogFile]),
              mbError, MB_OK);
+      // Open the log in Notepad so the user can inspect what went wrong
+      if FileExists(LogFile) then
+        ShellExec('open', 'notepad.exe', LogFile, '', SW_SHOWNORMAL, ewNoWait, NotepadResult);
     end;
   end;
 end;

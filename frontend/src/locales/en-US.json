@@ -329,7 +329,7 @@
   "script.run.startingBackend": "Starting backend (log: data\\backend.log)",
   "script.run.frontendAlreadyRunning": "Frontend already running; reusing existing instance",
   "script.run.startingFrontend": "Starting frontend (log: data\\frontend.log)",
-  "script.run.waitingServices": "Waiting for services...",
+  "script.run.waitingServices": "Waiting for services, please DO NOT close this window...",
   "script.run.openingBrowser": "Opening browser",
   "script.run.allReady": "All ready. Press Ctrl+C to stop.",
   "script.run.logsInfo": "Logs: data\\backend.log, data\\frontend.log",
