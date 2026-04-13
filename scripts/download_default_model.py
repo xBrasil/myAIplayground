@@ -2,7 +2,7 @@
 
 Invoked by scripts/install.ps1 so the app is ready to chat — fully offline —
 as soon as the UI opens after install. Reads DEFAULT_MODEL_KEY and the matching
-GGUF_REPO_* / GGUF_FILE_* / MMPROJ_FILE_* from backend/.env (via app settings).
+GGUF_REPO_* / GGUF_FILE_* / MMPROJ_FILE_* from data/.env (via app settings).
 Exit 0 on success, non-zero on failure.
 """
 
