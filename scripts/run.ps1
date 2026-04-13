@@ -14,7 +14,8 @@ Initialize-I18n -RepoRoot $repoRoot
 
 function Write-Step {
     param([string]$Message)
-    Write-Host "`n==> $Message" -ForegroundColor Cyan
+    $ts = Get-Date -Format 'HH:mm:ss'
+    Write-Host "`n[$ts] ==> $Message" -ForegroundColor Cyan
 }
 
 function Test-HttpReady {
@@ -45,7 +46,7 @@ if (-not (Test-Path (Join-Path $frontendDir "package.json"))) {
 if (-not (Test-Path $venvPython)) {
     throw (T 'script.run.venvNotFound')
 }
-if (-not (Test-Path (Join-Path $backendDir ".env"))) {
+if (-not (Test-Path (Join-Path $dataDir ".env"))) {
     throw (T 'script.run.envNotFound')
 }
 
@@ -93,7 +94,7 @@ if ($backendAlreadyRunning) {
 } else {
     Write-Step (T 'script.run.startingBackend')
     $backendProc = Start-Process -FilePath $venvPython `
-        -ArgumentList "-m", "uvicorn", "app.main:app", "--reload", "--host", "127.0.0.1", "--port", "8000" `
+        -ArgumentList "-m", "uvicorn", "app.main:app", "--reload", "--host", "127.0.0.1", "--port", "8000", "--log-config", "log_config.json" `
         -WorkingDirectory $backendDir `
         -NoNewWindow -PassThru `
         -RedirectStandardOutput $backendLog `
@@ -107,12 +108,17 @@ if ($frontendAlreadyRunning) {
     Write-Step (T 'script.run.frontendAlreadyRunning')
 } else {
     Write-Step (T 'script.run.startingFrontend')
-    $frontendProc = Start-Process -FilePath "cmd.exe" `
-        -ArgumentList "/c", "npm run dev -- --host=127.0.0.1 --port=5173 --strictPort" `
+    # Wrap in powershell to prepend timestamps to each line
+    $frontendCmd = @"
+& cmd.exe /c 'npm run dev -- --host=127.0.0.1 --port=5173 --strictPort' 2>&1 |
+    ForEach-Object { "`$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') `$_" } |
+    Out-File -FilePath "$frontendLog" -Encoding utf8
+"@
+    $encodedFrontendCmd = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($frontendCmd))
+    $frontendProc = Start-Process -FilePath "powershell.exe" `
+        -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", $encodedFrontendCmd `
         -WorkingDirectory $frontendDir `
-        -NoNewWindow -PassThru `
-        -RedirectStandardOutput $frontendLog `
-        -RedirectStandardError (Join-Path $dataDir "frontend-err.log")
+        -NoNewWindow -PassThru
     $script:children += $frontendProc
 }
 
@@ -161,6 +167,16 @@ if (-not $NoBrowser) {
 Write-Host "`n$(T 'script.run.allReady')" -ForegroundColor Green
 Write-Host "$(T 'script.run.logsInfo')`n" -ForegroundColor DarkGray
 
+# --- Minimize console window ---
+Add-Type -Name ConsoleUtil -Namespace Win32 -MemberDefinition @'
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    [DllImport("kernel32.dll")] public static extern IntPtr GetConsoleWindow();
+'@ -ErrorAction SilentlyContinue
+$hwnd = [Win32.ConsoleUtil]::GetConsoleWindow()
+if ($hwnd -ne [IntPtr]::Zero) {
+    [Win32.ConsoleUtil]::ShowWindow($hwnd, 6) | Out-Null  # SW_MINIMIZE
+}
+
 # --- Keep alive ---
 try {
     while ($true) {
@@ -170,6 +186,17 @@ try {
                 Write-Host "`n$(T 'script.run.processExited' @{name=$name; code="$($p.ExitCode)"})" -ForegroundColor Red
                 Stop-Children
                 exit $p.ExitCode
+            }
+        }
+        # Also check if backend API is still reachable (os._exit in a
+        # uvicorn --reload worker kills the child but the parent python
+        # process stays alive, so HasExited never becomes True).
+        if (-not (Test-HttpReady -Url $backendUrl)) {
+            Start-Sleep -Seconds 2
+            if (-not (Test-HttpReady -Url $backendUrl)) {
+                Write-Host "`n$(T 'script.run.processExited' @{name='Backend'; code='0'})" -ForegroundColor Red
+                Stop-Children
+                exit 0
             }
         }
         Start-Sleep -Seconds 2

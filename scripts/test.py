@@ -15,7 +15,9 @@ Usage:
 """
 
 import json
+import os
 import py_compile
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -158,6 +160,53 @@ def check_python_syntax() -> None:
         ok(f"All {len(py_files)} Python files compile OK")
 
 
+# ── 5. Inno Setup compiler available ────────────────────────────────
+
+INNO_SEARCH_PATHS = [
+    Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")) / "Inno Setup 6" / "ISCC.exe",
+    Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "Inno Setup 6" / "ISCC.exe",
+    Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Inno Setup 6" / "ISCC.exe",
+]
+
+
+def find_iscc() -> Path | None:
+    iscc = shutil.which("iscc") or shutil.which("ISCC")
+    if iscc:
+        return Path(iscc)
+    for p in INNO_SEARCH_PATHS:
+        if p.exists():
+            return p
+    return None
+
+
+def check_inno_setup() -> None:
+    section("Inno Setup compiler")
+    if sys.platform != "win32":
+        ok("Skipped (not Windows)")
+        return
+    iss_file = REPO_ROOT / "scripts" / "installer.iss"
+    if not iss_file.exists():
+        fail("scripts/installer.iss not found")
+        return
+    iscc = find_iscc()
+    if not iscc:
+        fail("Inno Setup 6 (ISCC.exe) not found — install via: winget install JRSoftware.InnoSetup")
+        return
+    # Dry-run compile check (no output file)
+    result = subprocess.run(
+        [str(iscc), "/Qp", f"/DRepoDir={REPO_ROOT}", "/DAppVer=0.0.0",
+         "/O-",  # discard output — just check compilation
+         str(iss_file)],
+        capture_output=True, text=True, cwd=REPO_ROOT,
+    )
+    if result.returncode != 0:
+        fail("Inno Setup compilation check failed")
+        for line in (result.stdout + result.stderr).splitlines()[:15]:
+            print(f"    {line}")
+    else:
+        ok(f"installer.iss compiles OK (ISCC: {iscc})")
+
+
 # ── Main ────────────────────────────────────────────────────────────
 
 def main() -> int:
@@ -171,6 +220,7 @@ def main() -> int:
     check_typescript()
     check_vite_build()
     check_python_syntax()
+    check_inno_setup()
 
     print()
     if failures:

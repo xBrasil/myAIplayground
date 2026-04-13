@@ -1,3 +1,6 @@
+import os
+import threading
+
 from fastapi import APIRouter
 
 from app.core.config import get_settings
@@ -24,3 +27,23 @@ def healthcheck() -> HealthResponse:
         model_loading_enabled=settings.enable_model_loading,
         available_models=model_service.available_models(),
     )
+
+
+@router.post("/shutdown")
+def shutdown() -> dict:
+    """Gracefully stop the backend server.
+
+    Explicitly stops llama-server first (os._exit bypasses atexit handlers),
+    then exits after a short delay so the HTTP response reaches the client.
+    The launcher script (run.ps1 / run.sh) detects the backend exit and
+    cleans up the frontend and any remaining child processes.
+    """
+
+    def _deferred_exit() -> None:
+        import time
+        time.sleep(0.5)
+        model_service._shutdown()
+        os._exit(0)
+
+    threading.Thread(target=_deferred_exit, daemon=True).start()
+    return {"ok": True}

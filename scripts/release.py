@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Build a release zip (and optionally a Windows installer) for My AI Playground.
+"""Build a release zip and Windows installer for My AI Playground.
 
 Usage:
-    python scripts/release.py                   # zip only
-    python scripts/release.py --installer       # zip + Inno Setup installer
+    python scripts/release.py          # zip + Inno Setup installer
     python scripts/release.py -o out.zip
 """
 
@@ -31,6 +30,7 @@ INCLUDE = [
     "scripts/i18n.ps1",
     "scripts/install.ps1",
     "scripts/run.ps1",
+    "scripts/download_default_model.py",
 ]
 
 # Patterns to EXCLUDE (checked against relative path parts)
@@ -172,7 +172,11 @@ def find_iscc() -> Path | None:
 
 
 def build_installer() -> None:
-    """Build a Windows installer using Inno Setup."""
+    """Build a Windows installer using Inno Setup. Skips on non-Windows."""
+    if sys.platform != "win32":
+        print("Skipping Windows installer (not running on Windows)")
+        return
+
     iscc = find_iscc()
     if not iscc:
         print(
@@ -218,8 +222,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Package My AI Playground release")
     parser.add_argument("-o", "--output", type=Path, default=None,
                         help="Output zip path (default: releases/my-ai-playground-<date>-<hash>.zip)")
-    parser.add_argument("--installer", action="store_true",
-                        help="Also build a Windows installer (.exe) using Inno Setup 6")
+    parser.add_argument("--no-installer", action="store_true",
+                        help="Skip building the Windows installer (.exe)")
     args = parser.parse_args()
 
     if args.output is None:
@@ -230,7 +234,7 @@ def main() -> None:
 
     build_zip(args.output)
 
-    if args.installer:
+    if not args.no_installer:
         build_installer()
 
 

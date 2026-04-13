@@ -1,3 +1,5 @@
+import { persistSetting } from './settingsApi';
+
 const STORAGE_KEY = 'gemma-local-studio.voice';
 const DEFAULT_VOICE = 'Microsoft Antonio';
 
@@ -36,6 +38,7 @@ export function loadPreferredVoiceName(): string {
 
 export function savePreferredVoiceName(name: string): void {
   window.localStorage.setItem(STORAGE_KEY, name);
+  persistSetting(STORAGE_KEY, name);
 }
 
 export function listVoices(): SpeechSynthesisVoice[] {

@@ -92,7 +92,7 @@ class ChatRequest(BaseModel):
     enable_web_access: bool = False
     enable_local_files: bool = False
     allowed_folders: list[str] = Field(default_factory=list)
-    user_location: str | None = None
+    user_location: str | None = Field(default=None, max_length=64)
 
 
 class ChatResponse(BaseModel):

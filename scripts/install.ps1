@@ -15,7 +15,16 @@ Initialize-I18n -RepoRoot $repoRoot
 
 function Write-Step {
     param([string]$Message)
-    Write-Host "`n==> $Message" -ForegroundColor Cyan
+    $ts = Get-Date -Format 'HH:mm:ss'
+    $line = "[$ts] ==> $Message"
+    Write-Host "`n$line" -ForegroundColor Cyan
+    Add-Content -Path $logFile -Value $line -Encoding UTF8
+}
+
+function Write-Status {
+    param([string]$Message, [string]$ForegroundColor = "White")
+    Write-Host "  $Message" -ForegroundColor $ForegroundColor
+    Add-Content -Path $logFile -Value "  $Message" -Encoding UTF8
 }
 
 function Test-Admin {
@@ -60,16 +69,20 @@ $backendDir  = Join-Path $repoRoot "backend"
 $venvDir     = Join-Path $repoRoot ".venv"
 $venvPython  = Join-Path $venvDir "Scripts\python.exe"
 $envExample  = Join-Path $backendDir ".env.example"
-$envFile     = Join-Path $backendDir ".env"
-$logFile     = Join-Path $repoRoot "install.log"
+$envFile     = Join-Path $repoRoot "data\.env"
+$logFile     = Join-Path $repoRoot "data\install.log"
 $isAdmin     = Test-Admin
 $isWindows   = $env:OS -eq "Windows_NT"
 $hasWinget   = (Get-Command winget -ErrorAction SilentlyContinue) -ne $null
 
-Start-Transcript -Path $logFile -Force | Out-Null
-Write-Host (T 'script.install.logInfo' @{path=$logFile}) -ForegroundColor DarkGray
-Write-Host (T 'script.install.dateInfo' @{date=(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')}) -ForegroundColor DarkGray
-if ($isAdmin) { Write-Host (T 'script.install.runningAsAdmin') -ForegroundColor Green }
+# Ensure data/ exists before starting the log file
+New-Item -ItemType Directory -Force -Path (Join-Path $repoRoot "data") | Out-Null
+
+# Create/clear the log file in UTF-8 so Inno Setup's LoadStringsFromFile can read it
+Set-Content -Path $logFile -Value "" -Encoding UTF8
+Write-Status (T 'script.install.logInfo' @{path=$logFile}) -ForegroundColor DarkGray
+Write-Status (T 'script.install.dateInfo' @{date=(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')}) -ForegroundColor DarkGray
+if ($isAdmin) { Write-Status (T 'script.install.runningAsAdmin') -ForegroundColor Green }
 
 try {
 
@@ -88,7 +101,7 @@ if (-not $pythonBootstrap) {
         throw (T 'script.install.pythonNotFound')
     }
 }
-Write-Host "  $(T 'script.install.pythonOk')" -ForegroundColor Green
+Write-Status "  $(T 'script.install.pythonOk')" -ForegroundColor Green
 
 # Node.js / npm
 if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
@@ -102,14 +115,32 @@ if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
         throw (T 'script.install.nodeNotFound')
     }
 }
-Write-Host "  $(T 'script.install.nodeOk')" -ForegroundColor Green
+Write-Status "  $(T 'script.install.nodeOk')" -ForegroundColor Green
 
-# GPU detection
-$hasNvidiaGpu = (-not $SkipCudaTorch) -and (Get-Command nvidia-smi -ErrorAction SilentlyContinue)
+# GPU detection — try WMI first, fall back to nvidia-smi on PATH
+$hasNvidiaGpu = $false
+if (-not $SkipCudaTorch) {
+    try {
+        $nvidiaGpus = @(Get-CimInstance Win32_VideoController -ErrorAction Stop |
+            Where-Object { $_.Name -match 'NVIDIA' })
+        $hasNvidiaGpu = $nvidiaGpus.Count -gt 0
+    } catch {
+        # WMI/CIM unavailable — fall back to nvidia-smi
+        $smiCmd = Get-Command nvidia-smi -ErrorAction SilentlyContinue
+        if (-not $smiCmd) {
+            foreach ($p in @(
+                "$env:SystemRoot\System32\nvidia-smi.exe",
+                "$env:ProgramFiles\NVIDIA Corporation\NVSMI\nvidia-smi.exe"
+            )) { if (Test-Path $p) { $hasNvidiaGpu = $true; break } }
+        } else {
+            $hasNvidiaGpu = $true
+        }
+    }
+}
 if ($hasNvidiaGpu) {
-    Write-Host "  $(T 'script.install.gpuDetected')" -ForegroundColor Green
+    Write-Status "  $(T 'script.install.gpuDetected')" -ForegroundColor Green
 } else {
-    Write-Host "  $(T 'script.install.gpuNotDetected')" -ForegroundColor Yellow
+    Write-Status "  $(T 'script.install.gpuNotDetected')" -ForegroundColor Yellow
 }
 
 # ---- 2. Python venv + backend deps ----
@@ -142,10 +173,23 @@ $cudaDllPattern = $null
 if ($isWindows) {
     if ($hasNvidiaGpu) {
         # Detect CUDA driver version to pick the right binary
-        $smiOutput = & nvidia-smi 2>&1 | Out-String
+        $nvidiaSmiCmd = Get-Command nvidia-smi -ErrorAction SilentlyContinue
+        $nvidiaSmi = if ($nvidiaSmiCmd) { $nvidiaSmiCmd.Source } else { $null }
+        if (-not $nvidiaSmi) {
+            # nvidia-smi is NOT on PATH inside the Inno Setup process; search known locations
+            foreach ($candidate in @(
+                "$env:SystemRoot\System32\nvidia-smi.exe",
+                "$env:ProgramFiles\NVIDIA Corporation\NVSMI\nvidia-smi.exe"
+            )) {
+                if (Test-Path $candidate) { $nvidiaSmi = $candidate; break }
+            }
+        }
         $cudaMajor = 12  # default fallback
-        if ($smiOutput -match 'CUDA Version:\s+(\d+)') {
-            $cudaMajor = [int]$Matches[1]
+        if ($nvidiaSmi) {
+            $smiOutput = & $nvidiaSmi 2>&1 | Out-String
+            if ($smiOutput -match 'CUDA Version:\s+(\d+)') {
+                $cudaMajor = [int]$Matches[1]
+            }
         }
         if ($cudaMajor -ge 13) {
             $assetPattern = "*-bin-win-cuda-13*-x64*"
@@ -154,10 +198,10 @@ if ($isWindows) {
             $assetPattern = "*-bin-win-cuda-12*-x64*"
             $cudaDllPattern = "*cudart*-win-cuda-12*-x64*"
         }
-        Write-Host "  $(T 'script.install.gpuCudaDriver' @{version="$cudaMajor"})" -ForegroundColor Green
+        Write-Status "  $(T 'script.install.gpuCudaDriver' @{version="$cudaMajor"})" -ForegroundColor Green
     } else {
         $assetPattern = "*-bin-win-cpu-x64*"
-        Write-Host "  $(T 'script.install.noCpuFallback')" -ForegroundColor Yellow
+        Write-Status "  $(T 'script.install.noCpuFallback')" -ForegroundColor Yellow
     }
 } elseif ($IsMacOS) {
     $assetPattern = "*-bin-macos-arm64*"
@@ -181,13 +225,15 @@ $currentVersion = if (Test-Path $llamaVersionFile) {
 $serverExe = if ($isWindows) { Join-Path $llamaServerDir "llama-server.exe" } else { Join-Path $llamaServerDir "llama-server" }
 
 if ((Test-Path $serverExe) -and $currentVersion) {
-    Write-Host "  $(T 'script.install.llamaAlreadyInstalled' @{version=$currentVersion})" -ForegroundColor Green
+    Write-Status "  $(T 'script.install.llamaAlreadyInstalled' @{version=$currentVersion})" -ForegroundColor Green
     $llamaInstalled = $true
 }
 
 if (-not $llamaInstalled) {
-    Write-Host "  $(T 'script.install.queryingVersion')" -ForegroundColor Cyan
+    Write-Status "  $(T 'script.install.queryingVersion')" -ForegroundColor Cyan
     try {
+        # Ensure TLS 1.2+ (PowerShell 5.1 defaults to TLS 1.0, which GitHub rejects)
+        [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
         $releaseInfo = Invoke-RestMethod -Uri "https://api.github.com/repos/ggml-org/llama.cpp/releases/latest" `
             -Headers @{ "User-Agent" = "myAIplayground-installer" }
         $latestTag = $releaseInfo.tag_name
@@ -198,7 +244,7 @@ if (-not $llamaInstalled) {
             throw (T 'script.install.noBinaryFound' @{pattern=$assetPattern})
         }
 
-        Write-Host "  $(T 'script.install.downloading' @{name=$binAsset.name; version=$latestTag})" -ForegroundColor Cyan
+        Write-Status "  $(T 'script.install.downloading' @{name=$binAsset.name; version=$latestTag})" -ForegroundColor Cyan
 
         # Create clean target directory
         if (Test-Path $llamaServerDir) { Remove-Item $llamaServerDir -Recurse -Force }
@@ -214,7 +260,7 @@ if (-not $llamaInstalled) {
         if ($cudaDllPattern) {
             $cudaAsset = $releaseInfo.assets | Where-Object { $_.name -like $cudaDllPattern } | Select-Object -First 1
             if ($cudaAsset) {
-                Write-Host "  $(T 'script.install.downloadingCudaDlls' @{name=$cudaAsset.name})" -ForegroundColor Cyan
+                Write-Status "  $(T 'script.install.downloadingCudaDlls' @{name=$cudaAsset.name})" -ForegroundColor Cyan
                 $cudaZipPath = Join-Path $env:TEMP $cudaAsset.name
                 Invoke-WebRequest -Uri $cudaAsset.browser_download_url -OutFile $cudaZipPath -UseBasicParsing
                 Expand-Archive -Path $cudaZipPath -DestinationPath $llamaServerDir -Force
@@ -241,10 +287,10 @@ if (-not $llamaInstalled) {
         $latestTag | Out-File -FilePath $llamaVersionFile -Encoding UTF8 -NoNewline
         $llamaInstalled = $true
         $variant = if ($cudaDllPattern) { "CUDA" } else { "CPU" }
-        Write-Host "  $(T 'script.install.llamaInstalledOk' @{version=$latestTag; variant=$variant})" -ForegroundColor Green
+        Write-Status "  $(T 'script.install.llamaInstalledOk' @{version=$latestTag; variant=$variant})" -ForegroundColor Green
     } catch {
-        Write-Host "  $(T 'script.install.llamaDownloadError' @{error="$_"})" -ForegroundColor Red
-        Write-Host "  $(T 'script.install.llamaManualDownload')" -ForegroundColor Red
+        Write-Status "  $(T 'script.install.llamaDownloadError' @{error="$_"})" -ForegroundColor Red
+        Write-Status "  $(T 'script.install.llamaManualDownload')" -ForegroundColor Red
     }
 }
 
@@ -266,12 +312,31 @@ if (-not (Test-Path $envFile)) {
     $envContent = Get-Content $envExample -Raw
     $envContent = $envContent -replace "ENABLE_MODEL_LOADING=false", "ENABLE_MODEL_LOADING=true"
     Set-Content -Path $envFile -Value $envContent -Encoding UTF8
-    Write-Host (T 'script.install.envCreated') -ForegroundColor Yellow
+    Write-Status (T 'script.install.envCreated') -ForegroundColor Yellow
 } else {
-    Write-Host (T 'script.install.envExists') -ForegroundColor DarkYellow
+    Write-Status (T 'script.install.envExists') -ForegroundColor DarkYellow
 }
 
-# ---- 6. Desktop shortcut ----
+# ---- 6. Pre-download default model (so UI works offline on first launch) ----
+
+Write-Step (T 'script.install.defaultModel')
+$modelScript = Join-Path $repoRoot "scripts\download_default_model.py"
+if ((Test-Path $venvPython) -and (Test-Path $modelScript)) {
+    try {
+        & $venvPython $modelScript
+        if ($LASTEXITCODE -eq 0) {
+            Write-Status "  $(T 'script.install.defaultModelOk')" -ForegroundColor Green
+        } else {
+            Write-Status "  $(T 'script.install.defaultModelFailed' @{error="exit $LASTEXITCODE"})" -ForegroundColor Yellow
+        }
+    } catch {
+        Write-Status "  $(T 'script.install.defaultModelFailed' @{error="$_"})" -ForegroundColor Yellow
+    }
+} else {
+    Write-Status "  $(T 'script.install.defaultModelSkipped')" -ForegroundColor DarkYellow
+}
+
+# ---- 7. Desktop shortcut ----
 
 Write-Step (T 'script.install.creatingShortcut')
 try {
@@ -290,9 +355,9 @@ try {
     }
     $shortcut.Save()
     [System.Runtime.InteropServices.Marshal]::ReleaseComObject($shell) | Out-Null
-    Write-Host "  $(T 'script.install.shortcutCreated' @{path=$shortcutPath})" -ForegroundColor Green
+    Write-Status "  $(T 'script.install.shortcutCreated' @{path=$shortcutPath})" -ForegroundColor Green
 } catch {
-    Write-Host "  $(T 'script.install.shortcutFailed' @{error="$_"})" -ForegroundColor Yellow
+    Write-Status "  $(T 'script.install.shortcutFailed' @{error="$_"})" -ForegroundColor Yellow
 }
 
 # ---- 7. Taskbar pin ----
@@ -315,23 +380,23 @@ try {
         }
         $shortcut.Save()
         [System.Runtime.InteropServices.Marshal]::ReleaseComObject($shell) | Out-Null
-        Write-Host "  $(T 'script.install.taskbarPinned')" -ForegroundColor Green
+        Write-Status "  $(T 'script.install.taskbarPinned')" -ForegroundColor Green
     } else {
-        Write-Host "  $(T 'script.install.taskbarDirNotFound')" -ForegroundColor Yellow
+        Write-Status "  $(T 'script.install.taskbarDirNotFound')" -ForegroundColor Yellow
     }
 } catch {
-    Write-Host "  $(T 'script.install.taskbarFailed' @{error="$_"})" -ForegroundColor Yellow
+    Write-Status "  $(T 'script.install.taskbarFailed' @{error="$_"})" -ForegroundColor Yellow
 }
 
 # ---- Done ----
 
 Write-Step (T 'script.install.done')
 if (-not $llamaInstalled) {
-    Write-Host (T 'script.install.llamaWarning') -ForegroundColor Red
+    Write-Status (T 'script.install.llamaWarning') -ForegroundColor Red
 }
-Write-Host (T 'script.install.useRunCmd') -ForegroundColor Green
-Write-Host (T 'script.install.logSaved' @{path=$logFile}) -ForegroundColor DarkGray
+Write-Status (T 'script.install.useRunCmd') -ForegroundColor Green
+Write-Status (T 'script.install.logSaved' @{path=$logFile}) -ForegroundColor DarkGray
 
 } finally {
-    Stop-Transcript | Out-Null
+    # no-op: transcript replaced by direct UTF-8 file writes
 }

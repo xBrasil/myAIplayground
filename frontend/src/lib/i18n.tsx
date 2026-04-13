@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { persistSetting } from './settingsApi';
 
 import ptBR from '../locales/pt-BR.json';
 import enUS from '../locales/en-US.json';
@@ -46,6 +47,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   const setLocale = useCallback((next: Locale) => {
     localStorage.setItem(STORAGE_KEY, next);
+    persistSetting(STORAGE_KEY, next);
     setLocaleState(next);
   }, []);
 

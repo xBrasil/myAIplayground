@@ -26,7 +26,7 @@ import {
 } from './lib/api';
 import { loadEnterToSendPreference, loadLastModelKey, loadCustomInstructions, loadCustomInstructionsEnabled, loadWebAccess, loadLocalFiles, loadAllowedFolders, loadLocationSharing, saveEnterToSendPreference, saveLastModelKey, saveCustomInstructions, saveCustomInstructionsEnabled, saveWebAccess, saveLocalFiles, saveAllowedFolders, saveLocationSharing } from './lib/preferences';
 import { loadPreferredVoiceName } from './lib/speech';
-import type { ChatStreamEvent, Conversation, HealthResponse, ModelKey } from './types';
+import type { ChatStreamEvent, Conversation, HealthResponse, InputType, Message, ModelKey } from './types';
 
 const DRAFT_ID = 'draft';
 
@@ -37,6 +37,17 @@ function isDraft(id: string | null): boolean {
 function makeDraftConversation(): Conversation {
   const now = new Date().toISOString();
   return { id: DRAFT_ID, title: '', created_at: now, updated_at: now, messages: [] };
+}
+
+/** Create a temporary user message for optimistic UI display. */
+function makeOptimisticMessage(content: string, inputType: InputType = 'text'): Message {
+  return {
+    id: `optimistic-${Date.now()}`,
+    role: 'user',
+    content,
+    input_type: inputType,
+    created_at: new Date().toISOString(),
+  };
 }
 
 async function computeTermsHash(terms: string[], privacy: string[]): Promise<string> {
@@ -58,6 +69,7 @@ export default function App() {
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [health, setHealth] = useState<HealthResponse | null>(null);
+  const wasConnectedRef = useRef(false);
   const [streamingText, setStreamingText] = useState('');
   const [preferredVoice, setPreferredVoice] = useState(loadPreferredVoiceName());
   const [enterToSend, setEnterToSend] = useState(loadEnterToSendPreference());
@@ -81,6 +93,8 @@ export default function App() {
   const abortControllerRef = useRef<AbortController | null>(null);
   const streamingTextRef = useRef('');
   const activeConversationIdRef = useRef<string | null>(null);
+  /** Set to true when the user manually navigates away from a streaming conversation. */
+  const userNavigatedAwayRef = useRef(false);
 
   // Fetch geolocation when location sharing is enabled
   useEffect(() => {
@@ -94,7 +108,8 @@ export default function App() {
     }
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        setUserLocation(`${position.coords.latitude.toFixed(4)},${position.coords.longitude.toFixed(4)}`);
+        // 1 decimal ≈ 11 km — matches the "city-level" promise in the settings copy.
+        setUserLocation(`${position.coords.latitude.toFixed(1)},${position.coords.longitude.toFixed(1)}`);
       },
       () => {
         setUserLocation(null);
@@ -104,14 +119,24 @@ export default function App() {
   }, [locationSharing]);
 
   async function refreshHealth() {
-    const nextHealth = await fetchHealth();
-    setHealth(nextHealth);
-    return nextHealth;
+    try {
+      const nextHealth = await fetchHealth();
+      wasConnectedRef.current = true;
+      setHealth(nextHealth);
+      return nextHealth;
+    } catch {
+      // Mark as disconnected only if we were previously connected
+      if (wasConnectedRef.current) {
+        setHealth(null);
+      }
+      return null;
+    }
   }
 
   function upsertConversation(nextConversation: Conversation) {
     setConversations((current) => {
-      const remaining = current.filter((conversation) => conversation.id !== nextConversation.id);
+      // Also remove the optimistic draft — the real conversation replaces it.
+      const remaining = current.filter((c) => c.id !== nextConversation.id && c.id !== DRAFT_ID);
       return [nextConversation, ...remaining];
     });
   }
@@ -149,14 +174,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (health?.model_status !== 'loading') {
-      return;
-    }
-
+    // Fast polling (2s) while the model is loading; slower (10s) otherwise
+    // to detect disconnections promptly.
+    const interval = health?.model_status === 'loading' ? 2000 : 10000;
     const intervalId = window.setInterval(() => {
-      void refreshHealth().catch(() => null);
-    }, 2000);
-
+      void refreshHealth();
+    }, interval);
     return () => window.clearInterval(intervalId);
   }, [health?.model_status]);
 
@@ -198,6 +221,14 @@ export default function App() {
       return [draft, ...withoutDraft];
     });
     setCurrentConversationId(DRAFT_ID);
+  }
+
+  function handleSelectConversation(conversationId: string) {
+    // If the user is switching away from a streaming conversation, mark it
+    if (streamingConversationId && conversationId !== streamingConversationId) {
+      userNavigatedAwayRef.current = true;
+    }
+    setCurrentConversationId(conversationId);
   }
 
   async function handleDeleteConversation(conversationId: string) {
@@ -260,12 +291,20 @@ export default function App() {
   async function handleSendText(text: string) {
     const controller = new AbortController();
     abortControllerRef.current = controller;
+    userNavigatedAwayRef.current = false;
     const effectiveId = isDraft(currentConversationId) ? null : currentConversationId;
     activeConversationIdRef.current = effectiveId;
     setStreamingConversationId(currentConversationId);
-    // Remove draft from list once we're sending
+    // Show user message immediately (optimistic update)
+    const optimistic = makeOptimisticMessage(text);
     if (isDraft(currentConversationId)) {
-      setConversations((prev) => prev.filter((c) => c.id !== DRAFT_ID));
+      setConversations((prev) =>
+        prev.map((c) => c.id === DRAFT_ID ? { ...c, messages: [optimistic] } : c),
+      );
+    } else if (currentConversationId) {
+      setConversations((prev) =>
+        prev.map((c) => c.id === currentConversationId ? { ...c, messages: [...c.messages, optimistic] } : c),
+      );
     }
     try {
       setBusy(true);
@@ -286,7 +325,9 @@ export default function App() {
         }
         if (event.type === 'conversation') {
           upsertConversation(event.conversation);
-          setCurrentConversationId(event.conversation.id);
+          if (!userNavigatedAwayRef.current) {
+            setCurrentConversationId(event.conversation.id);
+          }
           activeConversationIdRef.current = event.conversation.id;
           setStreamingConversationId(event.conversation.id);
           return;
@@ -299,7 +340,9 @@ export default function App() {
         }
 
         upsertConversation(event.conversation);
-        setCurrentConversationId(event.conversation.id);
+        if (!userNavigatedAwayRef.current) {
+          setCurrentConversationId(event.conversation.id);
+        }
         setActiveToolCalls([]);
         setStreamingText('');
         streamingTextRef.current = '';
@@ -340,11 +383,20 @@ export default function App() {
   async function handleSendFile(text: string, file: File) {
     const controller = new AbortController();
     abortControllerRef.current = controller;
+    userNavigatedAwayRef.current = false;
     const effectiveId = isDraft(currentConversationId) ? null : currentConversationId;
     activeConversationIdRef.current = effectiveId;
     setStreamingConversationId(currentConversationId);
+    // Show user message immediately (optimistic update)
+    const optimistic = makeOptimisticMessage(text || file.name, 'file');
     if (isDraft(currentConversationId)) {
-      setConversations((prev) => prev.filter((c) => c.id !== DRAFT_ID));
+      setConversations((prev) =>
+        prev.map((c) => c.id === DRAFT_ID ? { ...c, messages: [optimistic] } : c),
+      );
+    } else if (currentConversationId) {
+      setConversations((prev) =>
+        prev.map((c) => c.id === currentConversationId ? { ...c, messages: [...c.messages, optimistic] } : c),
+      );
     }
     try {
       setBusy(true);
@@ -365,7 +417,9 @@ export default function App() {
         }
         if (event.type === 'conversation') {
           upsertConversation(event.conversation);
-          setCurrentConversationId(event.conversation.id);
+          if (!userNavigatedAwayRef.current) {
+            setCurrentConversationId(event.conversation.id);
+          }
           activeConversationIdRef.current = event.conversation.id;
           setStreamingConversationId(event.conversation.id);
           return;
@@ -378,7 +432,9 @@ export default function App() {
         }
 
         upsertConversation(event.conversation);
-        setCurrentConversationId(event.conversation.id);
+        if (!userNavigatedAwayRef.current) {
+          setCurrentConversationId(event.conversation.id);
+        }
         setActiveToolCalls([]);
         setStreamingText('');
         streamingTextRef.current = '';
@@ -417,11 +473,21 @@ export default function App() {
   async function handleSendFiles(text: string, files: File[]) {
     const controller = new AbortController();
     abortControllerRef.current = controller;
+    userNavigatedAwayRef.current = false;
     const effectiveId = isDraft(currentConversationId) ? null : currentConversationId;
     activeConversationIdRef.current = effectiveId;
     setStreamingConversationId(currentConversationId);
+    // Show user message immediately (optimistic update)
+    const label = text || files.map((f) => f.name).join(', ');
+    const optimistic = makeOptimisticMessage(label, 'multi_file');
     if (isDraft(currentConversationId)) {
-      setConversations((prev) => prev.filter((c) => c.id !== DRAFT_ID));
+      setConversations((prev) =>
+        prev.map((c) => c.id === DRAFT_ID ? { ...c, messages: [optimistic] } : c),
+      );
+    } else if (currentConversationId) {
+      setConversations((prev) =>
+        prev.map((c) => c.id === currentConversationId ? { ...c, messages: [...c.messages, optimistic] } : c),
+      );
     }
     try {
       setBusy(true);
@@ -442,7 +508,7 @@ export default function App() {
         }
         if (event.type === 'conversation') {
           upsertConversation(event.conversation);
-          setCurrentConversationId(event.conversation.id);
+          if (!userNavigatedAwayRef.current) setCurrentConversationId(event.conversation.id);
           activeConversationIdRef.current = event.conversation.id;
           setStreamingConversationId(event.conversation.id);
           return;
@@ -455,7 +521,7 @@ export default function App() {
         }
 
         upsertConversation(event.conversation);
-        setCurrentConversationId(event.conversation.id);
+        if (!userNavigatedAwayRef.current) setCurrentConversationId(event.conversation.id);
         setActiveToolCalls([]);
         setStreamingText('');
         streamingTextRef.current = '';
@@ -509,6 +575,22 @@ export default function App() {
     abortControllerRef.current = controller;
     activeConversationIdRef.current = currentConversationId;
     setStreamingConversationId(currentConversationId);
+    // Optimistically show the edited user message and remove the old assistant reply
+    setConversations((prev) =>
+      prev.map((c) => {
+        if (c.id !== currentConversationId) return c;
+        const msgs = [...c.messages];
+        // Remove trailing assistant message
+        if (msgs.length > 0 && msgs[msgs.length - 1].role === 'assistant') msgs.pop();
+        // Update last user message content
+        let lastUserIdx = -1;
+        for (let i = msgs.length - 1; i >= 0; i--) {
+          if (msgs[i].role === 'user') { lastUserIdx = i; break; }
+        }
+        if (lastUserIdx >= 0) msgs[lastUserIdx] = { ...msgs[lastUserIdx], content: newText };
+        return { ...c, messages: msgs };
+      }),
+    );
     try {
       setBusy(true);
       setStreamingText('');
@@ -771,7 +853,7 @@ export default function App() {
         health={health}
         error={error}
         onNewConversation={handleNewConversation}
-        onSelectConversation={setCurrentConversationId}
+        onSelectConversation={handleSelectConversation}
         onDeleteConversation={handleDeleteConversation}
         onRenameConversation={handleRenameConversation}
         onOpenSettings={() => setSettingsOpen(true)}

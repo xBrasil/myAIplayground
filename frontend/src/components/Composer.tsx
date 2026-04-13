@@ -10,6 +10,7 @@ interface ComposerProps {
   modelLoading: boolean;
   enterToSend: boolean;
   activeModelKey?: ModelKey;
+  conversationId?: string | null;
   onSendText: (text: string) => Promise<void>;
   onSendFile: (text: string, file: File) => Promise<void>;
   onSendFiles: (text: string, files: File[]) => Promise<void>;
@@ -20,12 +21,19 @@ interface ComposerProps {
   onRestoreComposerConsumed?: () => void;
 }
 
-export default function Composer({ busy, modelLoading, enterToSend, activeModelKey, onSendText, onSendFile, onSendFiles, onStop, droppedFiles, onDroppedFilesConsumed, restoreComposer, onRestoreComposerConsumed }: ComposerProps) {
+export default function Composer({ busy, modelLoading, enterToSend, activeModelKey, conversationId, onSendText, onSendFile, onSendFiles, onStop, droppedFiles, onDroppedFilesConsumed, restoreComposer, onRestoreComposerConsumed }: ComposerProps) {
   const { t } = useI18n();
   const [text, setText] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  // Per-conversation draft persistence
+  const draftsRef = useRef<Map<string, { text: string; files: File[] }>>(new Map());
+  const prevConversationIdRef = useRef<string | null | undefined>(conversationId);
+  const currentTextRef = useRef(text);
+  currentTextRef.current = text;
+  const currentFilesRef = useRef<File[]>(selectedFiles);
+  currentFilesRef.current = selectedFiles;
   // Recording
   const [recordingPhase, setRecordingPhase] = useState<RecordingPhase>('idle');
   const [recordingSeconds, setRecordingSeconds] = useState(0);
@@ -58,12 +66,44 @@ export default function Composer({ busy, modelLoading, enterToSend, activeModelK
     autoResize();
   }, [text, autoResize]);
 
-  // Refocus textarea when the model finishes generating
+  // Refocus textarea when the model finishes generating, but only if nothing else
+  // currently has focus — avoids stealing from an open modal or search input.
   useEffect(() => {
-    if (!busy && textareaRef.current) {
+    if (busy) return;
+    const active = document.activeElement;
+    const nothingFocused = !active || active === document.body;
+    if (nothingFocused && textareaRef.current) {
       textareaRef.current.focus();
     }
   }, [busy]);
+
+  // Save/restore per-conversation drafts when switching conversations
+  useEffect(() => {
+    const prevId = prevConversationIdRef.current;
+    prevConversationIdRef.current = conversationId;
+    if (prevId === conversationId) return;
+    // Save draft for the conversation we're leaving
+    if (prevId != null) {
+      const t2 = currentTextRef.current;
+      const f = currentFilesRef.current;
+      if (t2 || f.length > 0) {
+        draftsRef.current.set(prevId, { text: t2, files: [...f] });
+      } else {
+        draftsRef.current.delete(prevId);
+      }
+    }
+    // Restore draft for the conversation we're entering
+    const draft = conversationId != null ? draftsRef.current.get(conversationId) : undefined;
+    setText(draft?.text ?? '');
+    setSelectedFiles(draft?.files ?? []);
+  }, [conversationId]);
+
+  // Auto-focus textarea when switching conversations or starting a new one
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  }, [conversationId]);
 
   // Merge externally dropped files into selectedFiles
   useEffect(() => {

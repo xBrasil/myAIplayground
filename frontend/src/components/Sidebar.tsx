@@ -9,7 +9,6 @@ interface SidebarProps {
   conversations: Conversation[];
   currentConversationId: string | null;
   streamingConversationId: string | null;
-  searchQuery: string;
   onSearchQueryChange: (query: string) => void;
   onSelectConversation: (conversationId: string) => void;
   onNewConversation: () => void;
@@ -23,7 +22,6 @@ export default function Sidebar({
   conversations,
   currentConversationId,
   streamingConversationId,
-  searchQuery,
   onSearchQueryChange,
   onSelectConversation,
   onNewConversation,
