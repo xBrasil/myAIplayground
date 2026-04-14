@@ -20,7 +20,11 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # Patterns to INCLUDE (relative to repo root)
 INCLUDE = [
     "install.cmd",
+    "install.sh",
     "run.cmd",
+    "run.sh",
+    "tray.cmd",
+    "tray.sh",
     "README.md",
     "LICENSE",
     "LICENÇA",
@@ -30,6 +34,7 @@ INCLUDE = [
     "scripts/i18n.ps1",
     "scripts/install.ps1",
     "scripts/run.ps1",
+    "scripts/tray.py",
     "scripts/download_default_model.py",
 ]
 

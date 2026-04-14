@@ -45,6 +45,7 @@
 | **Tema escuro** | UI minimalista e responsiva com design dark-mode |
 | **Janela deslizante** | Gestão automática de contexto: truncamento de conteúdo longo, descarte de mensagens antigas e retry em estouro |
 | **Privacidade total** | Conversas e arquivos ficam em `data/` no seu disco. Nada é enviado para a nuvem. |
+| **Ícone na bandeja** | Em vez de uma janela de console, a aplicação roda como ícone na bandeja do sistema (system tray) com menu para abrir, reiniciar, ver logs e encerrar |
 
 ---
 
@@ -149,14 +150,16 @@ O instalador:
 #### Execução
 
 ```powershell
-run.cmd
+tray.cmd
 ```
 
 O launcher:
-- Inicia backend (FastAPI na porta 8000) e frontend (Vite na porta 5173)
-- Aguarda ambos ficarem prontos e abre a interface no navegador
-- Reutiliza serviços já em execução — seguro rodar mais de uma vez
+- Inicia backend (FastAPI na porta 8000) e frontend (Vite na porta 5173) em segundo plano
+- Exibe um ícone na bandeja do sistema (system tray) com menu: **Abrir no Navegador**, **Ver Logs**, **Reiniciar**, **Sair**
+- Aguarda os serviços ficarem prontos e abre a interface no navegador automaticamente
 - Logs salvos em `data/backend.log` e `data/frontend.log`
+
+> **Modo diagnóstico:** para ver o log completo no console (útil para depuração), use `run.cmd` em vez de `tray.cmd`.
 
 > **Dica:** o primeiro uso de cada modelo envolve download do GGUF do Hugging Face. Modelos ficam em cache em `data/model-cache/`.
 
@@ -183,10 +186,12 @@ O instalador faz as mesmas etapas da versão Windows: cria `.venv`, instala depe
 ### Execução
 
 ```bash
-./run.sh
+./tray.sh
 ```
 
-Inicia backend e frontend, aguarda ambos ficarem prontos e abre o navegador. Use `Ctrl+C` para encerrar.
+Inicia os serviços em segundo plano e exibe um ícone na bandeja do sistema com menu de controle. O navegador é aberto automaticamente quando os serviços ficam prontos.
+
+> **Modo diagnóstico:** para ver o log no terminal, use `./run.sh` em vez de `./tray.sh`. Use `Ctrl+C` para encerrar.
 
 > **Nota:** o script detecta automaticamente macOS (arm64/x64) e Linux para baixar o binário correto do llama-server.
 
@@ -223,6 +228,7 @@ O modelo E4B é o padrão. Todos são executados pelo llama.cpp via GGUF, sem Py
 - **PyMuPDF** / **python-docx** / **openpyxl** / **python-pptx** (extração de texto de documentos)
 - **pillow-heif** (suporte a HEIC e AVIF no Pillow)
 - **svglib** + **reportlab** (renderização de SVG para análise visual)
+- **pystray** (ícone na bandeja do sistema — system tray)
 
 ### Inferência
 - **llama.cpp server** (binário pré-compilado, CUDA ou CPU)
@@ -250,11 +256,13 @@ myAIplayground/
 │   ├── model-cache/      # GGUF e mmproj baixados do HF
 │   └── llama-server/     # Binário do llama-server
 ├── docs/              # Documentação adicional
-├── scripts/           # Scripts utilitários (install, run, release, i18n, test)
+├── scripts/           # Scripts utilitários (install, run, tray, release, i18n, test)
 ├── install.cmd        # Instalação automatizada (Windows)
-├── run.cmd            # Launcher (Windows)
+├── tray.cmd           # Launcher com ícone na bandeja (Windows)
+├── run.cmd            # Launcher modo diagnóstico (Windows)
 ├── install.sh         # Instalação automatizada (Linux / macOS)
-├── run.sh             # Launcher (Linux / macOS)
+├── tray.sh            # Launcher com ícone na bandeja (Linux / macOS)
+├── run.sh             # Launcher modo diagnóstico (Linux / macOS)
 └── README.md
 ```
 

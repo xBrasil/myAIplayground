@@ -614,6 +614,8 @@ export default function App() {
   function handleStop() {
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
+    setStreamingConversationId(null);
+    setBusy(false);
   }
 
   async function handleEditLastMessage(newText: string) {

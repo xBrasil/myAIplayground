@@ -341,5 +341,23 @@
   "script.run.envNotFound": "data/.env not found. Run install.cmd first.",
   "script.run.serviceNotReady": "{{services}} did not become ready in {{timeout}}s. Check the logs in data\\",
   "script.run.unexpectedExit": "{{name}} exited unexpectedly (exit code {{code}}). Check the logs in data\\",
+
+  "script.tray.openBrowser": "Open in Browser",
+  "script.tray.viewLogs": "View Logs",
+  "script.tray.restart": "Restart",
+  "script.tray.quit": "Quit",
+  "script.tray.tooltip.starting": "My AI Playground — Starting…",
+  "script.tray.tooltip.running": "My AI Playground — Running",
+  "script.tray.tooltip.stopped": "My AI Playground — Stopped",
+  "script.tray.tooltip.stopping": "My AI Playground — Stopping…",
+  "script.tray.notification.crashed": "Service stopped unexpectedly. Use the tray menu to restart.",
+  "script.tray.splash.loading": "Loading, please wait…",
+  "script.tray.splash.doNotClose": "Please do not close this window.",
+  "script.tray.splash.cancel": "Cancel",
+  "script.tray.splash.initServices": "Initializing services…",
+  "script.tray.splash.loadingBackend": "Loading backend…",
+  "script.tray.splash.loadingFrontend": "Loading frontend…",
+  "script.tray.splash.openingBrowser": "Opening browser…",
+
   "script.runCmd.failed": "Startup failed. See the messages above."
 }
