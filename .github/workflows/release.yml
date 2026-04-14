@@ -4,12 +4,18 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build the Windows installer for (e.g. v1.8)'
+        required: true
 
 permissions:
   contents: write
 
 jobs:
   release:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout (full history for release notes)
@@ -92,3 +98,43 @@ jobs:
           body_path: release_notes.md
           generate_release_notes: true
           files: "my-ai-playground-${{ github.ref_name }}.zip"
+
+  windows-installer:
+    runs-on: windows-latest
+    needs: [release]
+    # Run after a successful release job, OR directly via workflow_dispatch (release is skipped)
+    if: always() && (needs.release.result == 'success' || needs.release.result == 'skipped')
+    env:
+      TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Read version
+        id: ver
+        shell: pwsh
+        run: |
+          $v = (Get-Content VERSION -Raw).Trim().Split()[0]
+          "version=$v" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --yes --no-progress
+
+      - name: Build Windows installer
+        shell: pwsh
+        run: |
+          $version = "${{ steps.ver.outputs.version }}"
+          $repoDir = (Get-Location).Path
+          # Ensure Inno Setup is on PATH
+          $env:Path += ";C:\Program Files (x86)\Inno Setup 6"
+          iscc /DAppVer=$version /DRepoDir=$repoDir scripts\installer.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload installer to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          files: "releases/my-ai-playground-v${{ steps.ver.outputs.version }}-setup.exe"
