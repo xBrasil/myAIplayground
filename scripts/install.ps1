@@ -382,12 +382,14 @@ Write-Step (T 'script.install.creatingShortcut')
 try {
     $desktopPath = [Environment]::GetFolderPath("Desktop")
     $shortcutPath = Join-Path $desktopPath "My AI Playground.lnk"
-    $targetPath = Join-Path $repoRoot "run.cmd"
+    $targetPath = Join-Path $repoRoot ".venv\Scripts\pythonw.exe"
+    $trayScript = Join-Path $repoRoot "scripts\tray.py"
     $iconPath = Join-Path $repoRoot "frontend\public\favicon.ico"
 
     $shell = New-Object -ComObject WScript.Shell
     $shortcut = $shell.CreateShortcut($shortcutPath)
     $shortcut.TargetPath = $targetPath
+    $shortcut.Arguments = "`"$trayScript`""
     $shortcut.WorkingDirectory = $repoRoot
     $shortcut.Description = T 'script.install.shortcutDescription'
     if (Test-Path $iconPath) {
@@ -407,12 +409,14 @@ try {
     $taskbarDir = Join-Path $env:APPDATA "Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"
     if (Test-Path $taskbarDir) {
         $taskbarLink = Join-Path $taskbarDir "My AI Playground.lnk"
-        $targetPath = Join-Path $repoRoot "run.cmd"
+        $targetPath = Join-Path $repoRoot ".venv\Scripts\pythonw.exe"
+        $trayScript = Join-Path $repoRoot "scripts\tray.py"
         $iconPath = Join-Path $repoRoot "frontend\public\favicon.ico"
 
         $shell = New-Object -ComObject WScript.Shell
         $shortcut = $shell.CreateShortcut($taskbarLink)
         $shortcut.TargetPath = $targetPath
+        $shortcut.Arguments = "`"$trayScript`""
         $shortcut.WorkingDirectory = $repoRoot
         $shortcut.Description = T 'script.install.shortcutDescription'
         if (Test-Path $iconPath) {

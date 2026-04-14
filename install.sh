@@ -245,9 +245,9 @@ Version=1.0
 Type=Application
 Name=My AI Playground
 Comment=Local AI assistant
-Exec=$REPO_ROOT/run.sh
+Exec=$REPO_ROOT/tray.sh
 Icon=$ICON_PATH
-Terminal=true
+Terminal=false
 Categories=Utility;
 EOF
     chmod +x "$DESKTOP_FILE" 2>/dev/null || true

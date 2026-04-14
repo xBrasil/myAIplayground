@@ -341,5 +341,23 @@
   "script.run.envNotFound": "data/.env não encontrado. Rode install.cmd primeiro.",
   "script.run.serviceNotReady": "{{services}} não ficou pronto em {{timeout}}s. Verifique os logs em data\\",
   "script.run.unexpectedExit": "{{name}} encerrou inesperadamente (exit code {{code}}). Verifique os logs em data\\",
+
+  "script.tray.openBrowser": "Abrir no Navegador",
+  "script.tray.viewLogs": "Ver Logs",
+  "script.tray.restart": "Reiniciar",
+  "script.tray.quit": "Sair",
+  "script.tray.tooltip.starting": "My AI Playground — Iniciando…",
+  "script.tray.tooltip.running": "My AI Playground — Em execução",
+  "script.tray.tooltip.stopped": "My AI Playground — Parado",
+  "script.tray.tooltip.stopping": "My AI Playground — Encerrando…",
+  "script.tray.notification.crashed": "O serviço parou inesperadamente. Use o menu da bandeja para reiniciar.",
+  "script.tray.splash.loading": "Carregando, aguarde…",
+  "script.tray.splash.doNotClose": "Por favor, não feche esta janela.",
+  "script.tray.splash.cancel": "Cancelar",
+  "script.tray.splash.initServices": "Inicializando serviços…",
+  "script.tray.splash.loadingBackend": "Carregando backend…",
+  "script.tray.splash.loadingFrontend": "Carregando frontend…",
+  "script.tray.splash.openingBrowser": "Abrindo navegador…",
+
   "script.runCmd.failed": "Inicialização falhou. Veja as mensagens acima."
 }

@@ -341,5 +341,23 @@
   "script.run.envNotFound": "data/.env introuvable. Lancez install.cmd d'abord.",
   "script.run.serviceNotReady": "{{services}} n'a pas été prêt en {{timeout}}s. Vérifiez les logs dans data\\",
   "script.run.unexpectedExit": "{{name}} s'est arrêté de façon inattendue (code de sortie {{code}}). Vérifiez les logs dans data\\",
+
+  "script.tray.openBrowser": "Ouvrir dans le Navigateur",
+  "script.tray.viewLogs": "Voir les Journaux",
+  "script.tray.restart": "Redémarrer",
+  "script.tray.quit": "Quitter",
+  "script.tray.tooltip.starting": "My AI Playground — Démarrage…",
+  "script.tray.tooltip.running": "My AI Playground — En cours d'exécution",
+  "script.tray.tooltip.stopped": "My AI Playground — Arrêté",
+  "script.tray.tooltip.stopping": "My AI Playground — Arrêt en cours…",
+  "script.tray.notification.crashed": "Le service s'est arrêté de façon inattendue. Utilisez le menu de la barre pour redémarrer.",
+  "script.tray.splash.loading": "Chargement en cours, veuillez patienter…",
+  "script.tray.splash.doNotClose": "Veuillez ne pas fermer cette fenêtre.",
+  "script.tray.splash.cancel": "Annuler",
+  "script.tray.splash.initServices": "Initialisation des services…",
+  "script.tray.splash.loadingBackend": "Chargement du backend…",
+  "script.tray.splash.loadingFrontend": "Chargement du frontend…",
+  "script.tray.splash.openingBrowser": "Ouverture du navigateur…",
+
   "script.runCmd.failed": "Le démarrage a échoué. Consultez les messages ci-dessus."
 }

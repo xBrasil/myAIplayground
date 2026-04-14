@@ -81,11 +81,14 @@ Source: "{#RepoDir}\scripts\install.ps1"; DestDir: "{app}\scripts"; Flags: ignor
 Source: "{#RepoDir}\scripts\run.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
 Source: "{#RepoDir}\scripts\i18n.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
 Source: "{#RepoDir}\scripts\download_default_model.py"; DestDir: "{app}\scripts"; Flags: ignoreversion
+Source: "{#RepoDir}\scripts\tray.py"; DestDir: "{app}\scripts"; Flags: ignoreversion
 ; Root files
 Source: "{#RepoDir}\install.cmd"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#RepoDir}\run.cmd"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#RepoDir}\tray.cmd"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#RepoDir}\install.sh"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#RepoDir}\run.sh"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#RepoDir}\tray.sh"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#RepoDir}\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#RepoDir}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#RepoDir}\LICENÇA"; DestDir: "{app}"; Flags: ignoreversion
@@ -102,13 +105,13 @@ Name: "{app}\data\uploads"; Permissions: users-modify; Flags: uninsneveruninstal
 Name: "{app}\data\llama-server"; Permissions: users-modify; Flags: uninsneveruninstall
 
 [Icons]
-Name: "{group}\My AI Playground"; Filename: "{app}\run.cmd"; IconFilename: "{app}\frontend\public\favicon.ico"; WorkingDir: "{app}"
+Name: "{group}\My AI Playground"; Filename: "{app}\.venv\Scripts\pythonw.exe"; Parameters: """{app}\scripts\tray.py"""; IconFilename: "{app}\frontend\public\favicon.ico"; WorkingDir: "{app}"
 Name: "{group}\{cm:UninstallProgram,My AI Playground}"; Filename: "{uninstallexe}"
 ; {autodesktop} resolves to {userdesktop} on per-user install or {commondesktop} on per-machine install.
-Name: "{autodesktop}\My AI Playground"; Filename: "{app}\run.cmd"; IconFilename: "{app}\frontend\public\favicon.ico"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{autodesktop}\My AI Playground"; Filename: "{app}\.venv\Scripts\pythonw.exe"; Parameters: """{app}\scripts\tray.py"""; IconFilename: "{app}\frontend\public\favicon.ico"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\run.cmd"; Description: "{cm:LaunchApp}"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\.venv\Scripts\pythonw.exe"; Parameters: """{app}\scripts\tray.py"""; Description: "{cm:LaunchApp}"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
 
 [Code]
 // --- Win32 helpers for non-blocking process launch ---
@@ -265,7 +268,7 @@ begin
              mbError, MB_OK);
       // Open the log in Notepad so the user can inspect what went wrong
       if FileExists(LogFile) then
-        ShellExec('open', 'notepad.exe', LogFile, '', SW_SHOWNORMAL, ewNoWait, NotepadResult);
+        ShellExec('open', 'notepad.exe', AddQuotes(LogFile), '', SW_SHOWNORMAL, ewNoWait, NotepadResult);
     end;
   end;
 end;
