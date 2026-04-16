@@ -178,13 +178,23 @@ function Stop-Children {
 Register-EngineEvent PowerShell.Exiting -Action { Stop-Children } | Out-Null
 
 # --- Start backend ---
+# In production mode (-NoBrowser, used by tray.py) we disable uvicorn
+# --reload and Vite file-watching so that file changes during shutdown /
+# uninstall don't restart the servers.
+if ($NoBrowser) {
+    $env:MYAI_NO_RELOAD = "1"
+    $uvicornArgs = @("-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "$backendPort", "--log-config", "log_config.json")
+} else {
+    $uvicornArgs = @("-m", "uvicorn", "app.main:app", "--reload", "--host", "127.0.0.1", "--port", "$backendPort", "--log-config", "log_config.json")
+}
+
 $backendAlreadyRunning = Test-HttpReady -Url $backendUrl
 if ($backendAlreadyRunning) {
     Write-Step (T 'script.run.backendAlreadyRunning')
 } else {
     Write-Step (T 'script.run.startingBackend')
     $backendProc = Start-Process -FilePath $venvPython `
-        -ArgumentList "-m", "uvicorn", "app.main:app", "--reload", "--host", "127.0.0.1", "--port", "$backendPort", "--log-config", "log_config.json" `
+        -ArgumentList $uvicornArgs `
         -WorkingDirectory $backendDir `
         -NoNewWindow -PassThru `
         -RedirectStandardOutput $backendLog `
@@ -278,9 +288,11 @@ try {
                 exit $p.ExitCode
             }
         }
-        # Also check if backend API is still reachable (os._exit in a
-        # uvicorn --reload worker kills the child but the parent python
-        # process stays alive, so HasExited never becomes True).
+        # Also check if backend API is still reachable.  When using
+        # --reload (dev mode), os._exit in the worker doesn't kill the
+        # reloader parent, so HasExited stays False.  Without --reload
+        # (production mode) the HTTP check is still a fast, reliable
+        # way to detect a clean /api/shutdown exit.
         if (-not (Test-HttpReady -Url $backendUrl)) {
             Start-Sleep -Seconds 2
             if (-not (Test-HttpReady -Url $backendUrl)) {

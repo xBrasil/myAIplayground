@@ -53,6 +53,14 @@ def shutdown(request: Request) -> dict:
         import subprocess
         time.sleep(0.5)
         model_service._shutdown()
+
+        # In production mode (MYAI_NO_RELOAD=1), uvicorn runs without
+        # --reload so there is no reloader parent — just exit.  The
+        # launcher script (run.ps1 / run.sh) detects the death and
+        # cleans up the frontend process.
+        if os.environ.get("MYAI_NO_RELOAD"):
+            os._exit(0)
+
         if sys.platform == "win32":
             # With uvicorn --reload, the parent process spawns this worker.
             # os._exit(0) only kills the worker; the parent stays alive.

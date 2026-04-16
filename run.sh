@@ -119,12 +119,21 @@ check_http() {
 }
 
 # ── Start backend ───────────────────────────────────────────────
+# In production mode (--no-browser, used by tray.py) disable uvicorn
+# --reload and Vite file-watching so that file changes during shutdown /
+# uninstall don't restart the servers.
+RELOAD_FLAG="--reload"
+if [ "$NO_BROWSER" = true ]; then
+  export MYAI_NO_RELOAD=1
+  RELOAD_FLAG=""
+fi
+
 if check_http "$BACKEND_URL"; then
   step "Backend already running"
 else
   step "Starting backend..."
   cd "$BACKEND_DIR"
-  "$VENV_PYTHON" -m uvicorn app.main:app --reload --host 127.0.0.1 --port "$BACKEND_PORT" --log-config log_config.json \
+  "$VENV_PYTHON" -m uvicorn app.main:app $RELOAD_FLAG --host 127.0.0.1 --port "$BACKEND_PORT" --log-config log_config.json \
     >"$BACKEND_LOG" 2>"$BACKEND_ERR_LOG" &
   BACKEND_PID=$!
   cd "$REPO_ROOT"
@@ -214,9 +223,11 @@ _monitor() {
       cleanup
       exit 1
     fi
-    # Also check if backend API is still reachable (os._exit in a
-    # uvicorn --reload worker kills the child but the parent python
-    # process stays alive, so kill -0 never fails).
+    # Also check if backend API is still reachable.  With --reload
+    # (dev mode), os._exit in the worker doesn't kill the reloader
+    # parent, so kill -0 keeps succeeding.  Without --reload
+    # (production) the HTTP check is still a fast, reliable way to
+    # detect a clean /api/shutdown exit.
     if ! check_http "$BACKEND_URL"; then
       sleep 2
       if ! check_http "$BACKEND_URL"; then
