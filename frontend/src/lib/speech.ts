@@ -1,7 +1,6 @@
 import { persistSetting } from './settingsApi';
 
 const STORAGE_KEY = 'gemma-local-studio.voice';
-const DEFAULT_VOICE = 'Microsoft Antonio';
 
 let voicesReady = false;
 
@@ -33,7 +32,7 @@ function ensureVoicesLoaded(): Promise<void> {
 export { ensureVoicesLoaded };
 
 export function loadPreferredVoiceName(): string {
-  return window.localStorage.getItem(STORAGE_KEY) || DEFAULT_VOICE;
+  return window.localStorage.getItem(STORAGE_KEY) || '';
 }
 
 export function savePreferredVoiceName(name: string): void {
@@ -47,13 +46,17 @@ export function listVoices(): SpeechSynthesisVoice[] {
 
 export function findPreferredVoice(preferredName: string): SpeechSynthesisVoice | null {
   const voices = listVoices();
-  return (
-    voices.find((voice) => voice.name === preferredName) ||
-    voices.find((voice) => voice.name.includes(DEFAULT_VOICE)) ||
-    voices.find((voice) => voice.lang.toLowerCase().startsWith('pt')) ||
-    voices[0] ||
-    null
-  );
+  if (voices.length === 0) return null;
+  // Exact match by name
+  const exact = voices.find((voice) => voice.name === preferredName);
+  if (exact) return exact;
+  // Fallback: detect browser language prefix, pick best from that language
+  const langPrefix = navigator.language.split('-')[0].toLowerCase();
+  const langVoices = voices.filter((v) => v.lang.toLowerCase().startsWith(langPrefix));
+  const pool = langVoices.length > 0 ? langVoices : voices;
+  const natural = pool.filter((v) => v.name.includes('Online (Natural)'));
+  const nonMulti = natural.find((v) => !v.name.includes('Multilingual'));
+  return nonMulti ?? natural[0] ?? pool[0] ?? null;
 }
 
 export function speakText(text: string, preferredName: string): void {
