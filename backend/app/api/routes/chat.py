@@ -31,7 +31,7 @@ def _estimate_content_tokens(kind: str, file_path: str, raw_bytes: bytes) -> int
         return 200
     # Extract real text content, then count tokens
     if kind == "document":
-        text = extract_document_text(file_path)
+        text = extract_document_text(file_path, sys.maxsize)
     else:
         text = raw_bytes.decode("utf-8", errors="ignore")
     return model_service.estimate_tokens(text)
@@ -84,11 +84,18 @@ def _iter_stream(stream, chunks: list[str], tool_calls_out: list[dict]):
 
 
 def _serialize_conversation(current_conversation) -> dict:
+    follow_ups = []
+    if current_conversation.follow_ups_json:
+        try:
+            follow_ups = json.loads(current_conversation.follow_ups_json)
+        except (json.JSONDecodeError, TypeError):
+            pass
     return {
         "id": current_conversation.id,
         "title": current_conversation.title,
         "created_at": _local_iso(current_conversation.created_at),
         "updated_at": _local_iso(current_conversation.updated_at),
+        "follow_ups": follow_ups,
         "messages": [
             {
                 "id": message.id,
@@ -190,10 +197,12 @@ async def stream_text_message(payload: ChatRequest, db: Session = Depends(get_db
         final_conversation, reply = chat_service.finalize_streamed_reply(db, conversation.id, final_text, tool_calls=tool_calls_out, custom_instructions=payload.custom_instructions)
 
         user_msgs = [m for m in final_conversation.messages if m.role == "user"]
-        if len(user_msgs) == 1:
-            updated = chat_service.generate_title(db, final_conversation.id)
-            if updated is not None:
-                final_conversation = updated
+        is_first = len(user_msgs) == 1
+        updated, follow_ups = chat_service.generate_metadata(
+            db, final_conversation.id, final_text, is_first_message=is_first, locale=payload.locale,
+        )
+        if updated is not None:
+            final_conversation = updated
 
         yield _event_line(
             {
@@ -202,6 +211,7 @@ async def stream_text_message(payload: ChatRequest, db: Session = Depends(get_db
                 "reply": _serialize_message(reply),
                 "model_loaded": chat_service.model_loaded,
                 "tool_calls": tool_calls_out,
+                "follow_ups": follow_ups,
             }
         )
 
@@ -312,10 +322,12 @@ async def stream_upload_message(
         final_conversation, reply = chat_service.finalize_streamed_reply(db, conversation.id, final_text, tool_calls=tool_calls_out, custom_instructions=custom_instructions)
 
         user_msgs = [m for m in final_conversation.messages if m.role == "user"]
-        if len(user_msgs) == 1:
-            updated = chat_service.generate_title(db, final_conversation.id)
-            if updated is not None:
-                final_conversation = updated
+        is_first = len(user_msgs) == 1
+        updated, follow_ups = chat_service.generate_metadata(
+            db, final_conversation.id, final_text, is_first_message=is_first, locale=locale,
+        )
+        if updated is not None:
+            final_conversation = updated
 
         yield _event_line(
             {
@@ -324,6 +336,7 @@ async def stream_upload_message(
                 "reply": _serialize_message(reply),
                 "model_loaded": chat_service.model_loaded,
                 "tool_calls": tool_calls_out,
+                "follow_ups": follow_ups,
             }
         )
 
@@ -409,10 +422,12 @@ async def stream_multi_upload_message(
         final_conversation, reply = chat_service.finalize_streamed_reply(db, conversation.id, final_text, tool_calls=tool_calls_out, custom_instructions=custom_instructions)
 
         user_msgs = [m for m in final_conversation.messages if m.role == "user"]
-        if len(user_msgs) == 1:
-            updated = chat_service.generate_title(db, final_conversation.id)
-            if updated is not None:
-                final_conversation = updated
+        is_first = len(user_msgs) == 1
+        updated, follow_ups = chat_service.generate_metadata(
+            db, final_conversation.id, final_text, is_first_message=is_first, locale=locale,
+        )
+        if updated is not None:
+            final_conversation = updated
 
         yield _event_line(
             {
@@ -421,6 +436,7 @@ async def stream_multi_upload_message(
                 "reply": _serialize_message(reply),
                 "model_loaded": chat_service.model_loaded,
                 "tool_calls": tool_calls_out,
+                "follow_ups": follow_ups,
             }
         )
 
@@ -531,6 +547,7 @@ async def edit_last_message_stream(
         storage_service.delete_message(db, m.id)
 
     storage_service.update_message_content(db, last_user.id, payload.message)
+    storage_service.clear_follow_ups(db, conversation_id)
 
     conversation = storage_service.get_conversation(db, conversation_id)
     tools = chat_service._get_tools(payload.enable_web_access, payload.enable_local_files, payload.allowed_folders)
@@ -556,12 +573,20 @@ async def edit_last_message_stream(
             return
         final_text = "".join(chunks).strip()
         final_conversation, reply = chat_service.finalize_streamed_reply(db, conversation.id, final_text, tool_calls=tool_calls_out, custom_instructions=payload.custom_instructions)
+
+        updated, follow_ups = chat_service.generate_metadata(
+            db, final_conversation.id, final_text, is_first_message=False, locale=payload.locale,
+        )
+        if updated is not None:
+            final_conversation = updated
+
         yield _event_line({
             "type": "done",
             "conversation": _serialize_conversation(final_conversation),
             "reply": _serialize_message(reply),
             "model_loaded": chat_service.model_loaded,
             "tool_calls": tool_calls_out,
+            "follow_ups": follow_ups,
         })
 
     return StreamingResponse(event_stream(), media_type="application/x-ndjson")
@@ -591,6 +616,7 @@ async def regenerate_last_stream(
         raise HTTPException(status_code=400, detail="Nenhuma resposta para regenerar")
     last_assistant = assistant_messages[-1]
     storage_service.delete_message(db, last_assistant.id)
+    storage_service.clear_follow_ups(db, conversation_id)
 
     conversation = storage_service.get_conversation(db, conversation_id)
     tools = chat_service._get_tools(payload.enable_web_access, payload.enable_local_files, payload.allowed_folders)
@@ -616,12 +642,20 @@ async def regenerate_last_stream(
             return
         final_text = "".join(chunks).strip()
         final_conversation, reply = chat_service.finalize_streamed_reply(db, conversation.id, final_text, tool_calls=tool_calls_out, custom_instructions=payload.custom_instructions)
+
+        updated, follow_ups = chat_service.generate_metadata(
+            db, final_conversation.id, final_text, is_first_message=False, locale=payload.locale,
+        )
+        if updated is not None:
+            final_conversation = updated
+
         yield _event_line({
             "type": "done",
             "conversation": _serialize_conversation(final_conversation),
             "reply": _serialize_message(reply),
             "model_loaded": chat_service.model_loaded,
             "tool_calls": tool_calls_out,
+            "follow_ups": follow_ups,
         })
 
     return StreamingResponse(event_stream(), media_type="application/x-ndjson")

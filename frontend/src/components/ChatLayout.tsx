@@ -12,6 +12,9 @@ interface ChatLayoutProps {
   modelLoading: boolean;
   enterToSend: boolean;
   customInstructionsEnabled: boolean;
+  webAccess: boolean;
+  localFiles: boolean;
+  locationSharing: boolean;
   conversations: Conversation[];
   currentConversation: Conversation | null;
   streamingText: string;
@@ -41,6 +44,9 @@ interface ChatLayoutProps {
   activeToolCalls?: ToolCallInfo[];
   searchQuery: string;
   onSearchQueryChange: (query: string) => void;
+  followUps?: string[];
+  onFollowUpClick?: (text: string) => void;
+  systemMessage?: string | null;
 }
 
 export default function ChatLayout({
@@ -48,6 +54,9 @@ export default function ChatLayout({
   modelLoading,
   enterToSend,
   customInstructionsEnabled,
+  webAccess,
+  localFiles,
+  locationSharing,
   conversations,
   currentConversation,
   streamingText,
@@ -77,6 +86,9 @@ export default function ChatLayout({
   activeToolCalls,
   searchQuery,
   onSearchQueryChange,
+  followUps,
+  onFollowUpClick,
+  systemMessage,
 }: ChatLayoutProps) {
   const { t } = useI18n();
   const [isDragOver, setIsDragOver] = useState(false);
@@ -268,7 +280,32 @@ export default function ChatLayout({
           onRegenerate={onRegenerate}
           activeToolCalls={activeToolCalls}
           searchQuery={searchQuery}
+          tipContext={{
+            webAccess,
+            localFiles,
+            locationSharing,
+            customInstructionsEnabled,
+            conversationCount: conversations.length,
+            onOpenSettings,
+          }}
         />
+        {followUps && followUps.length > 0 && !busy && (
+          <div className="follow-up-suggestions">
+            {followUps.map((text) => (
+              <button
+                key={text}
+                type="button"
+                className="follow-up-chip"
+                onClick={() => onFollowUpClick?.(text)}
+              >
+                {text}
+              </button>
+            ))}
+          </div>
+        )}
+        {systemMessage && (
+          <div className="system-message">{systemMessage}</div>
+        )}
         <Composer
           busy={busy}
           modelLoading={modelLoading}

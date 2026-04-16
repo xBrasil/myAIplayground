@@ -19,6 +19,13 @@ mkdir -p "$DATA_DIR"
 exec > >(tee -a "$LOG_FILE") 2>&1
 echo "── Install log: $LOG_FILE"
 echo "── Date: $(date '+%Y-%m-%d %H:%M:%S')"
+echo "── Platform: $(uname -s) $(uname -r) ($(uname -m))"
+echo "── User: $(whoami)"
+echo "── Shell: $SHELL ($BASH_VERSION)"
+echo "── Working dir: $REPO_ROOT"
+echo "── python3: $(command -v python3 2>/dev/null || echo 'NOT found') $(python3 --version 2>/dev/null || true)"
+echo "── node: $(command -v node 2>/dev/null || echo 'NOT found') $(node -v 2>/dev/null || true)"
+echo "── npm: $(command -v npm 2>/dev/null || echo 'NOT found') $(npm -v 2>/dev/null || true)"
 
 step() { echo -e "\n[$(date '+%H:%M:%S')] ==> $1"; }
 ok()   { echo -e "  [$(date '+%H:%M:%S')] \033[32m$1\033[0m"; }
@@ -95,7 +102,21 @@ fi
 
 # ── 2. Python venv + backend deps ──────────────────────────────
 step "Creating Python virtual environment..."
+
+# If .venv exists but python binary is missing/broken, recreate it
+if [ -d "$VENV_DIR" ] && [ ! -f "$VENV_PYTHON" ]; then
+  warn "Removing broken virtual environment..."
+  rm -rf "$VENV_DIR"
+fi
+
 if [ ! -f "$VENV_PYTHON" ]; then
+  # On Debian/Ubuntu, python3-venv may not be installed
+  if ! "$PYTHON_CMD" -m venv --help &>/dev/null; then
+    err "Python venv module not found. Please install it:"
+    echo "  Ubuntu/Debian: sudo apt install python3-venv"
+    echo "  Fedora:        sudo dnf install python3-virtualenv"
+    exit 1
+  fi
   "$PYTHON_CMD" -m venv "$VENV_DIR"
 fi
 

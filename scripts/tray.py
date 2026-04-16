@@ -44,9 +44,38 @@ _PORTS = [8000, 5173]
 # ---------------------------------------------------------------------------
 # Stale-process cleanup — kill anything already occupying our ports
 # ---------------------------------------------------------------------------
+def _is_our_process(pid: int) -> bool:
+    """Check if a PID belongs to our app (uvicorn/app.main or vite/node)."""
+    try:
+        if IS_WINDOWS:
+            _NO_WIN = 0x08000000
+            result = subprocess.run(
+                ["wmic", "process", "where", f"ProcessId={pid}",
+                 "get", "CommandLine", "/VALUE"],
+                capture_output=True, text=True, timeout=5,
+                creationflags=_NO_WIN,
+            )
+            cmdline = result.stdout.lower()
+        else:
+            cmdline_path = f"/proc/{pid}/cmdline"
+            if os.path.exists(cmdline_path):
+                with open(cmdline_path, "rb") as f:
+                    cmdline = f.read().replace(b"\x00", b" ").decode(errors="replace").lower()
+            else:
+                return False
+        # Only kill if command line matches our app signatures
+        repo_lower = str(REPO_ROOT).lower()
+        return any(sig in cmdline for sig in [
+            "app.main", "uvicorn", "vite", repo_lower,
+        ])
+    except Exception:
+        return False
+
+
 def _kill_stale_processes() -> None:
     """Find and kill any processes still listening on our ports from a
-    previous run that wasn't shut down cleanly."""
+    previous run that wasn't shut down cleanly.
+    Only kills processes whose command line matches our app signatures."""
     pids_to_kill: set[int] = set()
     my_pid = os.getpid()
 
@@ -66,7 +95,7 @@ def _kill_stale_processes() -> None:
                         if "LISTENING" in parts or "ESTABLISHED" in parts:
                             try:
                                 pid = int(parts[-1])
-                                if pid > 0 and pid != my_pid:
+                                if pid > 0 and pid != my_pid and _is_our_process(pid):
                                     pids_to_kill.add(pid)
                             except ValueError:
                                 pass
@@ -93,7 +122,7 @@ def _kill_stale_processes() -> None:
                 for line in result.stdout.strip().splitlines():
                     try:
                         pid = int(line.strip())
-                        if pid > 0 and pid != my_pid:
+                        if pid > 0 and pid != my_pid and _is_our_process(pid):
                             pids_to_kill.add(pid)
                     except ValueError:
                         pass
@@ -121,7 +150,11 @@ def _load_i18n() -> None:
     global _strings
     locales_dir = REPO_ROOT / "frontend" / "src" / "locales"
     # Determine system locale (e.g. "pt_BR", "en_US")
-    sys_locale = locale.getdefaultlocale()[0] or "en_US"
+    # locale.getdefaultlocale() is deprecated; use getlocale with fallback
+    try:
+        sys_locale = locale.getlocale()[0] or "en_US"
+    except Exception:
+        sys_locale = os.environ.get("LANG", os.environ.get("LC_ALL", "en_US")).split(".")[0]
     culture = sys_locale.replace("_", "-")  # "pt-BR"
     lang = culture.split("-")[0]  # "pt"
 
@@ -304,9 +337,9 @@ def _start_supervisor() -> subprocess.Popen:
             stderr=subprocess.DEVNULL,
         )
     else:
-        # Unix: start run.sh in its own process group so we can kill the tree.
+        # Unix: use bash explicitly to avoid PermissionError if execute bit is missing.
         proc = subprocess.Popen(
-            [str(REPO_ROOT / "run.sh"), "--no-browser"],
+            ["bash", str(REPO_ROOT / "run.sh"), "--no-browser"],
             cwd=str(REPO_ROOT),
             start_new_session=True,
             stdout=subprocess.DEVNULL,
@@ -375,7 +408,11 @@ def _check_health() -> bool:
     try:
         import urllib.request
         resp = urllib.request.urlopen(BACKEND_HEALTH, timeout=3)
-        return 200 <= resp.status < 500
+        if not (200 <= resp.status < 300):
+            return False
+        # Validate the response is actually our backend (not an unrelated service)
+        body = json.loads(resp.read().decode("utf-8", errors="replace"))
+        return isinstance(body.get("app_name"), str) and "model_status" in body
     except Exception:
         return False
 
@@ -404,7 +441,12 @@ def _on_restart(icon, item) -> None:  # noqa: ARG001
     with _supervisor_lock:
         if _supervisor and _supervisor.poll() is None:
             _kill_supervisor_tree(_supervisor)
-            _supervisor.wait(timeout=10)
+            try:
+                _supervisor.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                pass  # tree kill already issued; proceed with restart
+            except OSError:
+                pass
         _supervisor = _start_supervisor()
     icon.title = T("script.tray.tooltip.running")
 
@@ -425,7 +467,7 @@ def _check_frontend_ready() -> bool:
     try:
         import urllib.request
         resp = urllib.request.urlopen(FRONTEND_URL, timeout=3)
-        return 200 <= resp.status < 500
+        return 200 <= resp.status < 400
     except Exception:
         return False
 

@@ -37,6 +37,15 @@ function isImageAttachment(name?: string | null): boolean {
   return IMAGE_EXTENSIONS.has(ext);
 }
 
+interface TipContext {
+  webAccess: boolean;
+  localFiles: boolean;
+  locationSharing: boolean;
+  customInstructionsEnabled: boolean;
+  conversationCount: number;
+  onOpenSettings: () => void;
+}
+
 interface MessageListProps {
   messages: Message[];
   preferredVoice: string;
@@ -46,6 +55,7 @@ interface MessageListProps {
   onRegenerate?: () => void;
   activeToolCalls?: ToolCallInfo[];
   searchQuery?: string;
+  tipContext?: TipContext;
 }
 
 function renderToolCallLabel(tc: ToolCallInfo, t: (key: string) => string) {
@@ -78,6 +88,7 @@ export default function MessageList({
   onRegenerate,
   activeToolCalls = [],
   searchQuery = '',
+  tipContext,
 }: MessageListProps) {
   const { t, locale } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -234,6 +245,34 @@ export default function MessageList({
     if (confirmed) onRegenerate();
   }
 
+  // --- Rotating tips ---
+  const currentTip = useMemo(() => {
+    type Tip = { key: string; actionable?: boolean; condition?: (ctx: TipContext) => boolean };
+    const tips: Tip[] = [
+      // Context-aware tips (shown only when their condition is met)
+      { key: 'messages.tip.enableWeb', actionable: true, condition: (ctx) => !ctx.webAccess },
+      { key: 'messages.tip.enableFiles', actionable: true, condition: (ctx) => !ctx.localFiles },
+      { key: 'messages.tip.enableLocation', actionable: true, condition: (ctx) => !ctx.locationSharing },
+      { key: 'messages.tip.enableInstructions', actionable: true, condition: (ctx) => !ctx.customInstructionsEnabled },
+      // Generic tips (always shown)
+      { key: 'messages.localTip' },
+      { key: 'messages.tip.tryModels' },
+      { key: 'messages.tip.sendMedia' },
+      { key: 'messages.tip.keyboard' },
+      { key: 'messages.tip.deleteAll', actionable: true },
+    ];
+
+    const available = tipContext
+      ? tips.filter((tip) => !tip.condition || tip.condition(tipContext))
+      : tips.filter((tip) => !tip.condition);
+
+    if (!available.length) return null;
+
+    // Rotate based on conversation count (deterministic per session)
+    const idx = (tipContext?.conversationCount ?? 0) % available.length;
+    return available[idx];
+  }, [tipContext]);
+
   if (!messages.length && !streamingText) {
     return (
       <div className="message-list" ref={containerRef}>
@@ -245,9 +284,22 @@ export default function MessageList({
           </svg>
           <h2>{t('messages.emptyTitle')}</h2>
           <p>{t('messages.emptyHint')}</p>
-          <div className="empty-state__local-tip">
-            {t('messages.localTip')}
-          </div>
+          {currentTip && (
+            <div
+              className={`empty-state__local-tip${currentTip.actionable ? ' empty-state__local-tip--actionable' : ''}`}
+              onClick={currentTip.actionable && tipContext ? () => tipContext.onOpenSettings() : undefined}
+              role={currentTip.actionable ? 'button' : undefined}
+              tabIndex={currentTip.actionable ? 0 : undefined}
+              onKeyDown={currentTip.actionable && tipContext ? (e) => { if (e.key === 'Enter' || e.key === ' ') tipContext.onOpenSettings(); } : undefined}
+            >
+              <svg className="empty-state__tip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 18h6" />
+                <path d="M10 22h4" />
+                <path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z" />
+              </svg>
+              <span>{t(currentTip.key)}</span>
+            </div>
+          )}
         </div>
       </div>
     );

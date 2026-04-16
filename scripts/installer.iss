@@ -38,6 +38,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 AllowNoIcons=yes
+CloseApplications=force
 DisableWelcomePage=no
 ExtraDiskSpaceRequired=8000000000
 
@@ -57,6 +58,16 @@ english.LaunchApp=Launch My AI Playground now
 brazilianportuguese.LaunchApp=Iniciar o My AI Playground agora
 spanish.LaunchApp=Iniciar My AI Playground ahora
 french.LaunchApp=Lancer My AI Playground maintenant
+
+english.UninstallRestartRequired=Some files could not be removed because they are still in use.%n%nPlease restart your computer to complete the uninstallation. The remaining files will be removed automatically on the next startup.
+brazilianportuguese.UninstallRestartRequired=Alguns arquivos não puderam ser removidos porque ainda estão em uso.%n%nPor favor, reinicie o computador para concluir a desinstalação. Os arquivos restantes serão removidos automaticamente na próxima inicialização.
+spanish.UninstallRestartRequired=Algunos archivos no pudieron ser eliminados porque aún están en uso.%n%nPor favor, reinicie su computadora para completar la desinstalación. Los archivos restantes se eliminarán automáticamente en el próximo inicio.
+french.UninstallRestartRequired=Certains fichiers n'ont pas pu être supprimés car ils sont encore utilisés.%n%nVeuillez redémarrer votre ordinateur pour terminer la désinstallation. Les fichiers restants seront supprimés automatiquement au prochain démarrage.
+
+english.UninstallStoppingApp=Stopping My AI Playground...
+brazilianportuguese.UninstallStoppingApp=Parando o My AI Playground...
+spanish.UninstallStoppingApp=Deteniendo My AI Playground...
+french.UninstallStoppingApp=Arrêt de My AI Playground...
 
 english.SetupRunning=Setting up the environment: installing dependencies and downloading the AI model.%nThis will take several minutes. Grab a coffee while you wait!
 brazilianportuguese.SetupRunning=Configurando o ambiente: instalando dependências e baixando o modelo de IA.%nIsso vai demorar vários minutos. Sugestão: tome um cafezinho enquanto isso!
@@ -111,7 +122,7 @@ Name: "{group}\{cm:UninstallProgram,My AI Playground}"; Filename: "{uninstallexe
 Name: "{autodesktop}\My AI Playground"; Filename: "{app}\.venv\Scripts\pythonw.exe"; Parameters: """{app}\scripts\tray.py"""; IconFilename: "{app}\frontend\public\favicon.ico"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\.venv\Scripts\pythonw.exe"; Parameters: """{app}\scripts\tray.py"""; Description: "{cm:LaunchApp}"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\.venv\Scripts\pythonw.exe"; Parameters: """{app}\scripts\tray.py"""; Description: "{cm:LaunchApp}"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent; Check: CanLaunchApp
 
 [Code]
 // --- Win32 helpers for non-blocking process launch ---
@@ -172,6 +183,45 @@ end;
 
 var
   OutputMemo: TNewMemo;
+
+function CanLaunchApp: Boolean;
+begin
+  Result := FileExists(ExpandConstant('{app}\.venv\Scripts\pythonw.exe'));
+end;
+
+// --- Auto-uninstall previous version before installing ---
+function GetPreviousUninstallString: String;
+var
+  S: String;
+begin
+  Result := '';
+  // Check current-user install first (PrivilegesRequired=lowest)
+  if RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#SetupSetting("AppId")}_is1',
+     'UninstallString', S) then
+    Result := S
+  else if RegQueryStringValue(HKLM, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#SetupSetting("AppId")}_is1',
+     'UninstallString', S) then
+    Result := S;
+end;
+
+function InitializeSetup: Boolean;
+var
+  PrevUninstall: String;
+  ResultCode: Integer;
+begin
+  Result := True;
+  PrevUninstall := GetPreviousUninstallString;
+  if PrevUninstall <> '' then begin
+    // Remove surrounding quotes if present
+    if (Length(PrevUninstall) > 1) and (PrevUninstall[1] = '"') then
+      PrevUninstall := Copy(PrevUninstall, 2, Length(PrevUninstall) - 2);
+    if FileExists(PrevUninstall) then begin
+      // Run the old uninstaller silently, keeping user data
+      Exec(PrevUninstall, '/VERYSILENT /NORESTART /SUPPRESSMSGBOXES', '',
+           SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    end;
+  end;
+end;
 
 function ReadFileContents(const FileName: String): String;
 var
@@ -275,27 +325,53 @@ end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
-  DataDir: String;
+  DataDir, AppDir: String;
+  ResultCode: Integer;
+  NeedRestart: Boolean;
 begin
+  if CurUninstallStep = usUninstall then begin
+    // --- Stop running app processes before removing files ---
+    // Try graceful shutdown via backend API
+    try
+      Exec('powershell.exe',
+        '-NoProfile -ExecutionPolicy Bypass -Command "try { Invoke-WebRequest -Uri http://127.0.0.1:8000/api/shutdown -Method POST -Headers @{Origin=''http://127.0.0.1:5173''} -TimeoutSec 3 -ErrorAction SilentlyContinue } catch {}"',
+        '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    except
+    end;
+
+    // Kill any remaining Python/Node processes that belong to our app
+    try
+      Exec('powershell.exe',
+        '-NoProfile -ExecutionPolicy Bypass -Command "Get-Process python,pythonw,node -ErrorAction SilentlyContinue | Where-Object { $_.Path -like (Join-Path ''' + ExpandConstant('{app}') + ''' ''*'') } | Stop-Process -Force -ErrorAction SilentlyContinue"',
+        '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    except
+    end;
+
+    // Also kill by port in case processes are not inside {app}
+    try
+      Exec('taskkill.exe', '/F /T /FI "WINDOWTITLE eq My AI Playground*"',
+        '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    except
+    end;
+
+    // Brief wait for processes to release files
+    Sleep(1500);
+  end;
+
   if CurUninstallStep = usPostUninstall then begin
-    // 1. Remove artifacts created by install.ps1 / install.cmd that Inno doesn't track:
-    //    - .venv/             Python virtual env with pip packages
-    //    - backend/           clears __pycache__/* (Inno installed only .env.example)
-    //    - frontend/          clears node_modules/, dist/, .vite/
-    // DelTree is safe on non-existent paths (no-op), so no conditionals needed.
-    DelTree(ExpandConstant('{app}\.venv'), True, True, True);
-    DelTree(ExpandConstant('{app}\backend'), True, True, True);
-    DelTree(ExpandConstant('{app}\frontend'), True, True, True);
+    AppDir := ExpandConstant('{app}');
+
+    // 1. Remove artifacts created by install.ps1 / install.cmd that Inno doesn't track
+    DelTree(AppDir + '\.venv', True, True, True);
+    DelTree(AppDir + '\backend', True, True, True);
+    DelTree(AppDir + '\frontend', True, True, True);
 
     // 2. Remove shortcuts that install.ps1 creates outside Inno's tracking.
-    //    In per-machine installs, Inno's {autodesktop} = {commondesktop} while install.ps1
-    //    writes to {userdesktop} — two separate shortcuts, both need cleanup.
     DeleteFile(ExpandConstant('{userdesktop}\My AI Playground.lnk'));
     DeleteFile(ExpandConstant('{userappdata}\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\My AI Playground.lnk'));
 
-    // 3. Ask about user data last (chats, uploads, cached models). MB_DEFBUTTON2 makes
-    //    "No" the default — also used when uninstall runs silently.
-    DataDir := ExpandConstant('{app}\data');
+    // 3. Ask about user data (chats, uploads, cached models).
+    DataDir := AppDir + '\data';
     if DirExists(DataDir) then begin
       if MsgBox(FmtMessage(CustomMessage('UninstallDataPrompt'), [DataDir]),
                 mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then begin
@@ -304,6 +380,32 @@ begin
     end;
 
     // 4. Drop {app} itself if everything above left it empty.
-    RemoveDir(ExpandConstant('{app}'));
+    RemoveDir(AppDir);
+
+    // 5. Check if files remain (in-use locks) and offer restart to complete cleanup
+    NeedRestart := False;
+    if DirExists(AppDir + '\.venv') or DirExists(AppDir + '\backend') or
+       DirExists(AppDir + '\frontend') then
+      NeedRestart := True;
+    // Also check data dir if user chose to delete it
+    if not DirExists(DataDir) then begin
+      // User didn't want to delete, or it was deleted fine — no issue
+    end;
+
+    if NeedRestart then begin
+      // Schedule leftover dirs for removal on next login via RunOnce registry
+      try
+        Exec('powershell.exe',
+          '-NoProfile -ExecutionPolicy Bypass -Command "' +
+          'New-ItemProperty -Path ''HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce'' ' +
+          '-Name ''MyAIPlaygroundCleanup'' ' +
+          '-Value (''cmd /c rd /s /q \"' + AppDir + '\"'') ' +
+          '-PropertyType String -Force -ErrorAction SilentlyContinue"',
+          '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+      except
+      end;
+      // Inform user that a restart is needed
+      MsgBox(CustomMessage('UninstallRestartRequired'), mbInformation, MB_OK);
+    end;
   end;
 end;

@@ -86,10 +86,22 @@ function Invoke-ElevatedWinget {
 }
 
 function Get-PythonBootstrapCommand {
+    # Returns a 2-element array @(exe, "-3") for py.exe, a 1-element array
+    # @(exe) for python.exe, or $null.  The comma operator ensures even a
+    # single-element result is returned as [object[]], preventing PowerShell
+    # from unwrapping it into a bare string (which would cause $arr[0] to
+    # return the first *character* instead of the first *element*).
     $py = Get-Command py -ErrorAction SilentlyContinue
     if ($py) { return @($py.Source, "-3") }
     $python = Get-Command python -ErrorAction SilentlyContinue
-    if ($python) { return @($python.Source) }
+    if ($python) {
+        # Verify it's real Python (not the Windows Store stub)
+        try {
+            $ver = & $python.Source --version 2>&1 | Out-String
+            if ($ver -notmatch 'Python \d') { return $null }
+        } catch { return $null }
+        return , @($python.Source)
+    }
     return $null
 }
 
@@ -114,6 +126,24 @@ Set-Content -Path $logFile -Value "" -Encoding UTF8
 Write-Status (T 'script.install.logInfo' @{path=$logFile}) -ForegroundColor DarkGray
 Write-Status (T 'script.install.dateInfo' @{date=(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')}) -ForegroundColor DarkGray
 if ($isAdmin) { Write-Status (T 'script.install.runningAsAdmin') -ForegroundColor Green }
+
+# ---- Environment snapshot (for diagnostics) ----
+Write-Status "  OS: $([System.Environment]::OSVersion.VersionString)" -ForegroundColor DarkGray
+Write-Status "  Arch: $env:PROCESSOR_ARCHITECTURE" -ForegroundColor DarkGray
+Write-Status "  PowerShell: $($PSVersionTable.PSVersion)" -ForegroundColor DarkGray
+Write-Status "  User: $env:USERNAME" -ForegroundColor DarkGray
+Write-Status "  Working dir: $repoRoot" -ForegroundColor DarkGray
+Write-Status "  Winget: $(if ($hasWinget) { 'available' } else { 'NOT found' })" -ForegroundColor DarkGray
+try {
+    $pyCmd = Get-Command python -ErrorAction SilentlyContinue
+    $pyExe = Get-Command py -ErrorAction SilentlyContinue
+    $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
+    $npmCmd = Get-Command npm -ErrorAction SilentlyContinue
+    Write-Status "  python: $(if ($pyCmd) { $pyCmd.Source } else { 'NOT found' })" -ForegroundColor DarkGray
+    Write-Status "  py launcher: $(if ($pyExe) { $pyExe.Source } else { 'NOT found' })" -ForegroundColor DarkGray
+    Write-Status "  node: $(if ($nodeCmd) { "$($nodeCmd.Source) ($(& node -v 2>&1))" } else { 'NOT found' })" -ForegroundColor DarkGray
+    Write-Status "  npm: $(if ($npmCmd) { "$($npmCmd.Source) ($(& npm -v 2>&1))" } else { 'NOT found' })" -ForegroundColor DarkGray
+} catch { }
 
 try {
 
@@ -177,13 +207,29 @@ if ($hasNvidiaGpu) {
 # ---- 2. Python venv + backend deps ----
 
 Write-Step (T 'script.install.creatingVenv')
+
+# If .venv exists but python.exe is missing/broken, remove it so we can recreate
+if ((Test-Path $venvDir) -and -not (Test-Path $venvPython)) {
+    Write-Status "  Removing broken virtual environment..." -ForegroundColor Yellow
+    Remove-Item $venvDir -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 if (-not (Test-Path $venvPython)) {
-    if ($pythonBootstrap.Length -gt 1) {
-        & $pythonBootstrap[0] $pythonBootstrap[1] -m venv $venvDir
+    # Ensure $pythonBootstrap is always treated as an array (guards against
+    # PowerShell unwrapping a single-element array into a bare string).
+    [string[]]$pyArgs = @($pythonBootstrap)
+    Write-Status "  Bootstrap command: $($pyArgs -join ' ')" -ForegroundColor DarkGray
+    Write-Status "  Bootstrap args count: $($pyArgs.Count)" -ForegroundColor DarkGray
+    Write-Status "  Target venv: $venvDir" -ForegroundColor DarkGray
+    if ($pyArgs.Count -gt 1) {
+        & $pyArgs[0] $pyArgs[1] -m venv $venvDir
     } else {
-        & $pythonBootstrap[0] -m venv $venvDir
+        & $pyArgs[0] -m venv $venvDir
     }
     Assert-ExitCode "python -m venv"
+    Write-Status "  venv created successfully" -ForegroundColor Green
+} else {
+    Write-Status "  venv already exists: $venvPython" -ForegroundColor DarkGray
 }
 
 Write-Step (T 'script.install.updatingPip')
@@ -349,10 +395,16 @@ New-Item -ItemType Directory -Force -Path (Join-Path $repoRoot "data\model-cache
 
 Write-Step (T 'script.install.preparingEnv')
 if (-not (Test-Path $envFile)) {
-    $envContent = Get-Content $envExample -Raw
-    $envContent = $envContent -replace "ENABLE_MODEL_LOADING=false", "ENABLE_MODEL_LOADING=true"
-    Set-Content -Path $envFile -Value $envContent -Encoding UTF8
-    Write-Status (T 'script.install.envCreated') -ForegroundColor Yellow
+    if (Test-Path $envExample) {
+        $envContent = Get-Content $envExample -Raw
+        $envContent = $envContent -replace "ENABLE_MODEL_LOADING=false", "ENABLE_MODEL_LOADING=true"
+        Set-Content -Path $envFile -Value $envContent -Encoding UTF8
+        Write-Status (T 'script.install.envCreated') -ForegroundColor Yellow
+    } else {
+        # Create a minimal .env if the example is missing
+        Set-Content -Path $envFile -Value "ENABLE_MODEL_LOADING=true" -Encoding UTF8
+        Write-Status "  .env created (minimal - .env.example not found)" -ForegroundColor Yellow
+    }
 } else {
     Write-Status (T 'script.install.envExists') -ForegroundColor DarkYellow
 }
@@ -379,42 +431,16 @@ if ((Test-Path $venvPython) -and (Test-Path $modelScript)) {
 # ---- 7. Desktop shortcut ----
 
 Write-Step (T 'script.install.creatingShortcut')
-try {
-    $desktopPath = [Environment]::GetFolderPath("Desktop")
-    $shortcutPath = Join-Path $desktopPath "My AI Playground.lnk"
-    $targetPath = Join-Path $repoRoot ".venv\Scripts\pythonw.exe"
-    $trayScript = Join-Path $repoRoot "scripts\tray.py"
-    $iconPath = Join-Path $repoRoot "frontend\public\favicon.ico"
-
-    $shell = New-Object -ComObject WScript.Shell
-    $shortcut = $shell.CreateShortcut($shortcutPath)
-    $shortcut.TargetPath = $targetPath
-    $shortcut.Arguments = "`"$trayScript`""
-    $shortcut.WorkingDirectory = $repoRoot
-    $shortcut.Description = T 'script.install.shortcutDescription'
-    if (Test-Path $iconPath) {
-        $shortcut.IconLocation = "$iconPath, 0"
-    }
-    $shortcut.Save()
-    [System.Runtime.InteropServices.Marshal]::ReleaseComObject($shell) | Out-Null
-    Write-Status "  $(T 'script.install.shortcutCreated' @{path=$shortcutPath})" -ForegroundColor Green
-} catch {
-    Write-Status "  $(T 'script.install.shortcutFailed' @{error="$_"})" -ForegroundColor Yellow
-}
-
-# ---- 7. Taskbar pin ----
-
-Write-Step (T 'script.install.pinningTaskbar')
-try {
-    $taskbarDir = Join-Path $env:APPDATA "Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"
-    if (Test-Path $taskbarDir) {
-        $taskbarLink = Join-Path $taskbarDir "My AI Playground.lnk"
-        $targetPath = Join-Path $repoRoot ".venv\Scripts\pythonw.exe"
+$targetPath = Join-Path $repoRoot ".venv\Scripts\pythonw.exe"
+if (Test-Path $targetPath) {
+    try {
+        $desktopPath = [Environment]::GetFolderPath("Desktop")
+        $shortcutPath = Join-Path $desktopPath "My AI Playground.lnk"
         $trayScript = Join-Path $repoRoot "scripts\tray.py"
         $iconPath = Join-Path $repoRoot "frontend\public\favicon.ico"
 
         $shell = New-Object -ComObject WScript.Shell
-        $shortcut = $shell.CreateShortcut($taskbarLink)
+        $shortcut = $shell.CreateShortcut($shortcutPath)
         $shortcut.TargetPath = $targetPath
         $shortcut.Arguments = "`"$trayScript`""
         $shortcut.WorkingDirectory = $repoRoot
@@ -424,12 +450,46 @@ try {
         }
         $shortcut.Save()
         [System.Runtime.InteropServices.Marshal]::ReleaseComObject($shell) | Out-Null
-        Write-Status "  $(T 'script.install.taskbarPinned')" -ForegroundColor Green
-    } else {
-        Write-Status "  $(T 'script.install.taskbarDirNotFound')" -ForegroundColor Yellow
+        Write-Status "  $(T 'script.install.shortcutCreated' @{path=$shortcutPath})" -ForegroundColor Green
+    } catch {
+        Write-Status "  $(T 'script.install.shortcutFailed' @{error="$_"})" -ForegroundColor Yellow
     }
-} catch {
-    Write-Status "  $(T 'script.install.taskbarFailed' @{error="$_"})" -ForegroundColor Yellow
+} else {
+    Write-Status "  Skipping shortcut (pythonw.exe not found)" -ForegroundColor Yellow
+}
+
+# ---- 7. Taskbar pin ----
+
+Write-Step (T 'script.install.pinningTaskbar')
+$targetPath = Join-Path $repoRoot ".venv\Scripts\pythonw.exe"
+if (Test-Path $targetPath) {
+    try {
+        $taskbarDir = Join-Path $env:APPDATA "Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"
+        if (Test-Path $taskbarDir) {
+            $taskbarLink = Join-Path $taskbarDir "My AI Playground.lnk"
+            $trayScript = Join-Path $repoRoot "scripts\tray.py"
+            $iconPath = Join-Path $repoRoot "frontend\public\favicon.ico"
+
+            $shell = New-Object -ComObject WScript.Shell
+            $shortcut = $shell.CreateShortcut($taskbarLink)
+            $shortcut.TargetPath = $targetPath
+            $shortcut.Arguments = "`"$trayScript`""
+            $shortcut.WorkingDirectory = $repoRoot
+            $shortcut.Description = T 'script.install.shortcutDescription'
+            if (Test-Path $iconPath) {
+                $shortcut.IconLocation = "$iconPath, 0"
+            }
+            $shortcut.Save()
+            [System.Runtime.InteropServices.Marshal]::ReleaseComObject($shell) | Out-Null
+            Write-Status "  $(T 'script.install.taskbarPinned')" -ForegroundColor Green
+        } else {
+            Write-Status "  $(T 'script.install.taskbarDirNotFound')" -ForegroundColor Yellow
+        }
+    } catch {
+        Write-Status "  $(T 'script.install.taskbarFailed' @{error="$_"})" -ForegroundColor Yellow
+    }
+} else {
+    Write-Status "  Skipping taskbar pin (pythonw.exe not found)" -ForegroundColor Yellow
 }
 
 # ---- Done ----
@@ -446,9 +506,14 @@ Write-Status (T 'script.install.logSaved' @{path=$logFile}) -ForegroundColor Dar
     # Use Write-Host (always works) + direct .NET file append (resilient to file locks
     # from Inno Setup polling the log with LoadStringsFromFile / fmShareDenyWrite).
     $errorMsg = "  ERROR: $_"
+    $errorDetail = "  Exception: $($_.Exception.GetType().FullName): $($_.Exception.Message)"
+    $errorStack = "  At: $($_.InvocationInfo.PositionMessage)"
     Write-Host $errorMsg -ForegroundColor Red
+    Write-Host $errorDetail -ForegroundColor Red
+    Write-Host $errorStack -ForegroundColor DarkRed
     try {
-        [System.IO.File]::AppendAllText($logFile, "`r`n$errorMsg`r`n", [System.Text.Encoding]::UTF8)
+        $fullError = "$errorMsg`r`n$errorDetail`r`n$errorStack"
+        [System.IO.File]::AppendAllText($logFile, "`r`n$fullError`r`n", [System.Text.Encoding]::UTF8)
     } catch { }
     exit 1
 }

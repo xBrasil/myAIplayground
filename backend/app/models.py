@@ -18,6 +18,7 @@ class Conversation(Base):
         onupdate=func.now(),
         nullable=False,
     )
+    follow_ups_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     messages: Mapped[list["Message"]] = relationship(
         back_populates="conversation",

@@ -1,6 +1,7 @@
 import base64
 import json
 import logging
+import sys
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -75,14 +76,14 @@ class ChatService:
         except Exception:
             return ""
 
-    def _read_text_file(self, file_path: str, max_chars: int = 64000) -> str:
+    def _read_text_file(self, file_path: str) -> str:
         try:
-            return Path(file_path).read_text("utf-8", errors="ignore")[:max_chars]
+            return Path(file_path).read_text("utf-8", errors="ignore")
         except Exception:
             return "(Erro ao ler o arquivo)"
 
-    def _read_document_file(self, file_path: str, max_chars: int = 256000) -> str:
-        return extract_document_text(file_path, max_chars)
+    def _read_document_file(self, file_path: str) -> str:
+        return extract_document_text(file_path, sys.maxsize)
 
     def _read_any_file(self, file_path: str) -> str:
         """Read a file by detecting its type from extension."""
@@ -613,6 +614,7 @@ class ChatService:
         user_location: str | None = None,
     ) -> tuple[Conversation, object]:
         conversation = self._ensure_conversation(db, conversation_id, text)
+        storage_service.clear_follow_ups(db, conversation.id)
         storage_service.append_message(db, conversation.id, "user", text, input_type="text", model_key=model_service.active_model_key)
         conversation = storage_service.get_conversation(db, conversation.id)
         tools = self._get_tools(enable_web_access, enable_local_files, allowed_folders)
@@ -663,6 +665,89 @@ class ChatService:
             conversation = storage_service.get_conversation(db, conversation_id)
         return conversation
 
+    def generate_metadata(
+        self,
+        db: Session,
+        conversation_id: str,
+        assistant_reply: str,
+        is_first_message: bool,
+        locale: str = "en-US",
+    ) -> tuple[Conversation | None, list[str]]:
+        """Generate conversation title (first message only) and follow-up suggestions.
+
+        Returns (updated_conversation_or_None, follow_ups_list).
+        """
+        conversation = storage_service.get_conversation(db, conversation_id)
+        if conversation is None:
+            return None, []
+
+        user_messages = [m for m in conversation.messages if m.role == "user"]
+        first_content = (user_messages[0].content.strip() if user_messages else "")[:300]
+        reply_excerpt = assistant_reply[:500]
+
+        lang_hint = locale.split("-")[0] if locale else "en"
+
+        parts = []
+        if is_first_message and first_content:
+            parts.append(
+                'A "title" field with a concise conversation title (max 5 words, in the same language as the user message).'
+            )
+        parts.append(
+            'A "follow_ups" field with an array of 1-3 short follow-up questions the user might ask next '
+            f"(in {lang_hint}, each max 80 characters). Make them diverse and relevant."
+        )
+
+        prompt = (
+            "Based on this conversation exchange, generate a JSON object with:\n"
+            + "\n".join(f"- {p}" for p in parts)
+            + "\n\nReply with ONLY valid JSON, no markdown, no explanation.\n\n"
+            f"User message: {first_content}\n\n"
+            f"Assistant reply: {reply_excerpt}"
+        )
+
+        follow_ups: list[str] = []
+        try:
+            raw = model_service.generate_reply(
+                [{"role": "user", "content": prompt}],
+                enable_thinking=False,
+            ).strip()
+            # Extract JSON from response (handle potential markdown code blocks)
+            if "```" in raw:
+                raw = raw.split("```")[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+                raw = raw.strip()
+            data = json.loads(raw)
+            follow_ups = [
+                s.strip() for s in data.get("follow_ups", [])
+                if isinstance(s, str) and s.strip()
+            ][:3]
+
+            if is_first_message:
+                title = str(data.get("title", "")).strip().strip('"').strip("'").strip(".")
+                if title and len(title) <= 80:
+                    storage_service.rename_conversation(db, conversation_id, title)
+                    conversation = storage_service.get_conversation(db, conversation_id)
+                elif first_content:
+                    storage_service.rename_conversation(db, conversation_id, first_content[:40].strip())
+                    conversation = storage_service.get_conversation(db, conversation_id)
+        except Exception:
+            logger.warning("generate_metadata failed", exc_info=True)
+            # Fallback: if JSON parsing fails, do simple title generation for first message
+            if is_first_message and first_content:
+                try:
+                    fallback_title = first_content[:40].strip()
+                    storage_service.rename_conversation(db, conversation_id, fallback_title)
+                    conversation = storage_service.get_conversation(db, conversation_id)
+                except Exception:
+                    pass
+
+        # Persist follow-ups to the conversation so they survive navigation
+        if follow_ups:
+            storage_service.set_follow_ups(db, conversation_id, follow_ups)
+
+        return conversation, follow_ups
+
     def handle_file_message(
         self,
         db: Session,
@@ -684,6 +769,7 @@ class ChatService:
         seed_text = self._conversation_seed_for_upload(stored_content, input_type, attachment_name, attachment_summary)
 
         conversation = self._ensure_conversation(db, conversation_id, seed_text)
+        storage_service.clear_follow_ups(db, conversation.id)
         storage_service.append_message(
             db,
             conversation.id,
@@ -730,6 +816,7 @@ class ChatService:
         seed_text = self._conversation_seed_for_upload(stored_content, input_type, attachment_name, attachment_summary)
 
         conversation = self._ensure_conversation(db, conversation_id, seed_text)
+        storage_service.clear_follow_ups(db, conversation.id)
         storage_service.append_message(
             db,
             conversation.id,

@@ -4,20 +4,19 @@ Security measures:
 - Read-only access (no writing, deletion, or modification)
 - Only user-specified folders are accessible
 - Paths are validated against allowed folders (prevents path traversal)
-- Binary files and very large files are rejected
+- Binary files are rejected
 - Symlinks outside allowed folders are blocked
 """
 
 import logging
-import os
+import sys
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 # ── Configuration ────────────────────────────────────────────────
 
-_MAX_FILE_SIZE = 256_000  # max bytes for reading a file
-_MAX_LIST_ENTRIES = 200  # max directory entries returned
+_MAX_LIST_ENTRIES = 2000  # max directory entries returned
 _BINARY_EXTENSIONS = {
     ".exe", ".dll", ".so", ".dylib", ".bin", ".dat", ".db", ".sqlite",
     ".zip", ".tar", ".gz", ".bz2", ".7z", ".rar", ".xz",
@@ -141,7 +140,7 @@ def read_file(path: str, allowed_folders: list[str]) -> dict[str, str]:
     if suffix in _DOCUMENT_EXTENSIONS:
         try:
             from app.services.document_service import extract_text as extract_document_text
-            text = extract_document_text(str(target), max_chars=_MAX_FILE_SIZE)
+            text = extract_document_text(str(target), max_chars=sys.maxsize)
             if text.startswith("Erro") or text.startswith("Error"):
                 result["error"] = text
             else:
@@ -153,26 +152,6 @@ def read_file(path: str, allowed_folders: list[str]) -> dict[str, str]:
     # Block binary files
     if suffix in _BINARY_EXTENSIONS:
         result["error"] = f"Arquivo binário não pode ser lido como texto: {target.name}"
-        return result
-
-    # Check file size
-    try:
-        size = target.stat().st_size
-        if size > _MAX_FILE_SIZE:
-            result["error"] = (
-                f"Arquivo muito grande ({size:,} bytes, limite: {_MAX_FILE_SIZE:,} bytes). "
-                f"Apenas os primeiros {_MAX_FILE_SIZE:,} bytes seriam lidos."
-            )
-            # Read partial content anyway
-            try:
-                with open(target, "r", encoding="utf-8", errors="ignore") as f:
-                    result["content"] = f.read(_MAX_FILE_SIZE)
-                result["error"] = f"(Arquivo truncado: {size:,} bytes total, primeiros {_MAX_FILE_SIZE:,} bytes mostrados)"
-            except Exception as exc:
-                result["error"] = f"Erro ao ler arquivo: {exc}"
-            return result
-    except OSError as exc:
-        result["error"] = f"Erro ao verificar tamanho do arquivo: {exc}"
         return result
 
     try:

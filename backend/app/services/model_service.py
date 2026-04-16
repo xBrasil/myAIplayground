@@ -167,7 +167,18 @@ class ModelService:
             return
         logger.info("Parando llama-server (PID %s)...", proc.pid)
         try:
-            proc.terminate()
+            if sys.platform == "win32":
+                # On Windows, terminate() doesn't propagate to children.
+                # Use taskkill /T to kill the entire process tree.
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    creationflags=0x08000000,  # CREATE_NO_WINDOW
+                    timeout=10,
+                )
+            else:
+                proc.terminate()
             proc.wait(timeout=10)
         except Exception:
             try:
