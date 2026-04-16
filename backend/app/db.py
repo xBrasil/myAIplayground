@@ -46,3 +46,8 @@ def create_db_and_tables() -> None:
     if "custom_instructions_risk_score" not in columns:
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE messages ADD COLUMN custom_instructions_risk_score INTEGER"))
+
+    conv_columns = {col["name"] for col in inspector.get_columns("conversations")}
+    if "follow_ups_json" not in conv_columns:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE conversations ADD COLUMN follow_ups_json TEXT"))

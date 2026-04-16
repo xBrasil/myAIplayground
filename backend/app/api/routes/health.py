@@ -1,4 +1,6 @@
 import os
+import signal
+import sys
 import threading
 
 from fastapi import APIRouter, HTTPException, Request
@@ -44,9 +46,30 @@ def shutdown(request: Request) -> dict:
 
     def _deferred_exit() -> None:
         import time
+        import subprocess
         time.sleep(0.5)
         model_service._shutdown()
-        os._exit(0)
+        if sys.platform == "win32":
+            # With uvicorn --reload, the parent process spawns this worker.
+            # os._exit(0) only kills the worker; the parent stays alive.
+            # Kill the parent's entire process tree to clean up everything.
+            ppid = os.getppid()
+            try:
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", str(ppid)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    creationflags=0x08000000,  # CREATE_NO_WINDOW
+                )
+            except Exception:
+                pass
+            os._exit(0)
+        else:
+            # On Unix, kill our own process group to clean up parent + workers
+            try:
+                os.killpg(os.getpgid(os.getpid()), signal.SIGTERM)
+            except OSError:
+                os._exit(0)
 
     threading.Thread(target=_deferred_exit, daemon=True).start()
     return {"ok": True}

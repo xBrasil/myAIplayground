@@ -197,30 +197,40 @@ def build_installer() -> None:
         print(f"ERROR: {iss_file} not found", file=sys.stderr)
         sys.exit(1)
 
-    version = read_version().split()[0]  # strip "(dev)" etc.
+    raw_version = read_version()
+    is_dev = "(dev)" in raw_version
+    version = raw_version.split()[0]  # strip "(dev)" etc. for AppVer
     repo_dir = str(REPO_ROOT).replace("/", "\\")
 
     cmd = [
         str(iscc),
         f"/DAppVer={version}",
         f"/DRepoDir={repo_dir}",
-        str(iss_file),
     ]
+
+    if is_dev:
+        git_hash = git_short_hash()
+        out_basename = f"my-ai-playground-v{raw_version}-{git_hash}-setup"
+        cmd.append(f"/F{out_basename}")
+        expected_output = REPO_ROOT / "releases" / f"{out_basename}.exe"
+    else:
+        expected_output = REPO_ROOT / "releases" / f"my-ai-playground-v{version}-setup.exe"
+
+    cmd.append(str(iss_file))
 
     print(f"Building installer with Inno Setup...")
     print(f"  ISCC: {iscc}")
-    print(f"  Version: {version}")
+    print(f"  Version: {raw_version}")
     result = subprocess.run(cmd, cwd=REPO_ROOT)
     if result.returncode != 0:
         print("ERROR: Inno Setup compilation failed", file=sys.stderr)
         sys.exit(1)
 
-    output = REPO_ROOT / "releases" / f"my-ai-playground-v{version}-setup.exe"
-    if output.exists():
-        size_mb = output.stat().st_size / (1024 * 1024)
-        print(f"Created {output} ({size_mb:.1f} MB)")
+    if expected_output.exists():
+        size_mb = expected_output.stat().st_size / (1024 * 1024)
+        print(f"Created {expected_output} ({size_mb:.1f} MB)")
     else:
-        print(f"Installer expected at {output}")
+        print(f"Installer expected at {expected_output}")
 
 
 def main() -> None:

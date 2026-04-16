@@ -82,6 +82,23 @@ function Stop-Children {
             } catch {}
         }
     }
+    # Fallback: kill any remaining processes on our ports that belong to this repo
+    foreach ($port in @(8000, 5173)) {
+        try {
+            $netstat = netstat -ano -p TCP 2>$null | Select-String "127.0.0.1:$port" | Select-String "LISTENING"
+            foreach ($line in $netstat) {
+                $pid = ($line -split '\s+')[-1]
+                if ($pid -match '^\d+$' -and [int]$pid -gt 0) {
+                    try {
+                        $proc = Get-Process -Id ([int]$pid) -ErrorAction SilentlyContinue
+                        if ($proc -and $proc.Path -like "$repoRoot*") {
+                            Stop-Process -Id ([int]$pid) -Force -ErrorAction SilentlyContinue
+                        }
+                    } catch {}
+                }
+            }
+        } catch {}
+    }
 }
 
 # Clean up children when PowerShell exits

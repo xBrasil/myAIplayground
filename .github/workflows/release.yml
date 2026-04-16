@@ -4,19 +4,12 @@ on:
   push:
     tags:
       - 'v*'
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Tag to rebuild assets for (e.g. v1.8)'
-        required: true
 
 permissions:
   contents: write
 
 jobs:
-  # ── Triggered by tag push: create the GitHub release + upload ZIP ──────────
   release:
-    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout (full history for release notes)
@@ -43,9 +36,11 @@ jobs:
       - name: Generate release notes
         id: notes
         run: |
+          # Find the previous tag (the one before this release)
           PREV_TAG=$(git tag --sort=-version:refname | grep -v "^${{ github.ref_name }}$" | head -1)
 
           if [ -z "$PREV_TAG" ]; then
+            # First release ever — use all commits
             RANGE="HEAD"
           else
             RANGE="${PREV_TAG}..${{ github.ref_name }}"
@@ -53,8 +48,10 @@ jobs:
 
           echo "Generating notes for range: ${PREV_TAG:-<initial>} → ${{ github.ref_name }}"
 
+          # Collect commits in the range
           COMMITS=$(git log "$RANGE" --pretty=format:"%s" --no-merges 2>/dev/null || git log --pretty=format:"%s" --no-merges)
 
+          # Helper: extract lines matching a prefix, strip the prefix
           extract() {
             echo "$COMMITS" | grep -iE "^$1" | sed -E "s/^[^:]+: //" | sed 's/^/- /'
           }
@@ -81,76 +78,18 @@ jobs:
             BODY="Veja os commits para detalhes das alterações.\n"
           fi
 
+          # Write to file (avoids quoting issues with multiline)
           printf "%b" "$BODY" > release_notes.md
           echo "notes_file=release_notes.md" >> "$GITHUB_OUTPUT"
 
       - name: Build release ZIP
-        run: python3 scripts/release.py --no-installer -o "my-ai-playground-${{ github.ref_name }}.zip"
+        run: python3 scripts/release.py -o "my-ai-playground-${{ github.ref_name }}.zip"
 
-      - name: Create GitHub Release and upload ZIP
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: My AI Playground ${{ github.ref_name }}
           body_path: release_notes.md
           generate_release_notes: true
+          fail_on_unmatched_files: true
           files: "my-ai-playground-${{ github.ref_name }}.zip"
-
-  # ── Triggered by workflow_dispatch only: re-upload ZIP for an existing tag ─
-  release-zip:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.tag }}
-
-      - name: Build release ZIP
-        run: python3 scripts/release.py --no-installer -o "my-ai-playground-${{ inputs.tag }}.zip"
-
-      - name: Upload ZIP to existing release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ inputs.tag }}" "my-ai-playground-${{ inputs.tag }}.zip" --clobber
-
-  # ── Runs after release (tag push) or release-zip (dispatch): build .exe ────
-  windows-installer:
-    runs-on: windows-latest
-    needs: [release, release-zip]
-    if: |
-      always() &&
-      (needs.release.result == 'success' || needs.release.result == 'skipped') &&
-      (needs.release-zip.result == 'success' || needs.release-zip.result == 'skipped')
-    env:
-      TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ env.TAG }}
-
-      - name: Read version
-        id: ver
-        shell: pwsh
-        run: |
-          $v = (Get-Content VERSION -Raw).Trim().Split()[0]
-          "version=$v" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
-
-      - name: Install Inno Setup
-        shell: pwsh
-        run: choco install innosetup --yes --no-progress
-
-      - name: Build Windows installer
-        shell: pwsh
-        run: |
-          $version = "${{ steps.ver.outputs.version }}"
-          $repoDir = (Get-Location).Path
-          $env:Path += ";C:\Program Files (x86)\Inno Setup 6"
-          iscc /DAppVer=$version /DRepoDir=$repoDir scripts\installer.iss
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-      - name: Upload installer to existing release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: pwsh
-        run: gh release upload "${{ env.TAG }}" "releases\my-ai-playground-v${{ steps.ver.outputs.version }}-setup.exe" --clobber

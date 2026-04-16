@@ -74,6 +74,22 @@ class StorageService:
         db.refresh(conversation)
         return conversation
 
+    def set_follow_ups(self, db: Session, conversation_id: str, follow_ups: list[str]) -> None:
+        conversation = db.get(Conversation, conversation_id)
+        if conversation is None:
+            return
+        import json as _json
+        conversation.follow_ups_json = _json.dumps(follow_ups, ensure_ascii=False) if follow_ups else None
+        db.commit()
+
+    def clear_follow_ups(self, db: Session, conversation_id: str) -> None:
+        conversation = db.get(Conversation, conversation_id)
+        if conversation is None:
+            return
+        if conversation.follow_ups_json is not None:
+            conversation.follow_ups_json = None
+            db.commit()
+
     def append_message(
         self,
         db: Session,

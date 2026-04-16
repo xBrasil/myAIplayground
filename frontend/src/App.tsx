@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import ApiAccessPanel from './components/ApiAccessPanel';
 import ChatLayout from './components/ChatLayout';
@@ -7,6 +7,8 @@ import LegalModal from './components/LegalModal';
 import ModelSelectorModal from './components/ModelSelectorModal';
 import SettingsPanel from './components/SettingsPanel';
 import { useI18n } from './lib/i18n';
+import { isDevMode } from './lib/devMode';
+import { AutoplayEngine } from './lib/autoplay';
 import type { ToolCallInfo } from './types';
 import {
   acceptLegal,
@@ -25,7 +27,7 @@ import {
   streamMultiUploadMessage,
 } from './lib/api';
 import { loadEnterToSendPreference, loadLastModelKey, loadCustomInstructions, loadCustomInstructionsEnabled, loadWebAccess, loadLocalFiles, loadAllowedFolders, loadLocationSharing, saveEnterToSendPreference, saveLastModelKey, saveCustomInstructions, saveCustomInstructionsEnabled, saveWebAccess, saveLocalFiles, saveAllowedFolders, saveLocationSharing } from './lib/preferences';
-import { loadPreferredVoiceName } from './lib/speech';
+import { loadPreferredVoiceName, stopSpeaking } from './lib/speech';
 import type { ChatStreamEvent, Conversation, HealthResponse, InputType, Message, ModelKey } from './types';
 
 const DRAFT_ID = 'draft';
@@ -90,11 +92,13 @@ export default function App() {
   const [activeToolCalls, setActiveToolCalls] = useState<ToolCallInfo[]>([]);
   const [streamingConversationId, setStreamingConversationId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [systemMessage, setSystemMessage] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const streamingTextRef = useRef('');
   const activeConversationIdRef = useRef<string | null>(null);
   /** Set to true when the user manually navigates away from a streaming conversation. */
   const userNavigatedAwayRef = useRef(false);
+  const autoplayRef = useRef<AutoplayEngine | null>(null);
 
   // Fetch geolocation when location sharing is enabled
   useEffect(() => {
@@ -108,7 +112,7 @@ export default function App() {
     }
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        // 1 decimal ≈ 11 km — matches the "city-level" promise in the settings copy.
+        // 1 decimal â‰ˆ 11 km â€” matches the "city-level" promise in the settings copy.
         setUserLocation(`${position.coords.latitude.toFixed(1)},${position.coords.longitude.toFixed(1)}`);
       },
       () => {
@@ -135,7 +139,7 @@ export default function App() {
 
   function upsertConversation(nextConversation: Conversation) {
     setConversations((current) => {
-      // Also remove the optimistic draft — the real conversation replaces it.
+      // Also remove the optimistic draft â€” the real conversation replaces it.
       const remaining = current.filter((c) => c.id !== nextConversation.id && c.id !== DRAFT_ID);
       return [nextConversation, ...remaining];
     });
@@ -211,6 +215,62 @@ export default function App() {
     () => conversations.find((conversation) => conversation.id === currentConversationId) || null,
     [conversations, currentConversationId],
   );
+
+  // -- Dev-mode: autoplay engine --
+  const conversationsRef = useRef(conversations);
+  conversationsRef.current = conversations;
+  const currentConversationIdRef = useRef(currentConversationId);
+  currentConversationIdRef.current = currentConversationId;
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
+  const preferredVoiceRef = useRef(preferredVoice);
+  preferredVoiceRef.current = preferredVoice;
+  const localeRef = useRef(locale);
+  localeRef.current = locale;
+
+  /** Stable ref to the raw sendText so autoplay can call it without re-creating the engine. */
+  const sendTextRef = useRef<(text: string) => Promise<void>>(async () => {});
+
+  const getAutoplay = useCallback(() => {
+    if (!autoplayRef.current) {
+      autoplayRef.current = new AutoplayEngine({
+        getConversation: () => {
+          const id = currentConversationIdRef.current;
+          return conversationsRef.current.find((c) => c.id === id) ?? null;
+        },
+        isBusy: () => busyRef.current,
+        sendText: (text: string) => sendTextRef.current(text),
+        showSystemMessage: (msg: string) => setSystemMessage(msg),
+        getPreferredVoice: () => preferredVoiceRef.current,
+        getLocale: () => localeRef.current,
+      });
+    }
+    return autoplayRef.current;
+  }, []);
+
+  /** Handle dev-mode /commands. Returns true if the text was consumed as a command. */
+  function handleDevCommand(text: string): boolean {
+    if (!isDevMode()) return false;
+    const trimmed = text.trim();
+    if (!trimmed.startsWith('/')) return false;
+    const cmd = trimmed.split(/\s+/)[0].toLowerCase();
+    switch (cmd) {
+      case '/autoplay': {
+        getAutoplay().start();
+        return true;
+      }
+      case '/stop': {
+        getAutoplay().stop();
+        stopSpeaking();
+        handleStop();
+        setSystemMessage(null);
+        return true;
+      }
+      default:
+        setSystemMessage(`Unknown command: ${cmd}`);
+        return true;
+    }
+  }
 
   function handleNewConversation() {
     // If we're already viewing an empty draft, don't create another
@@ -301,7 +361,7 @@ export default function App() {
   }
 
   async function handleSendText(text: string) {
-    // Don't abort the previous stream – let it finish in the background so its
+    // Don't abort the previous stream â€“ let it finish in the background so its
     // conversation keeps its response.  We just take over the shared UI state.
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -404,6 +464,16 @@ export default function App() {
         setBusy(false);
       }
     }
+  }
+
+  // Keep ref in sync so autoplay can call the raw send function
+  sendTextRef.current = handleSendText;
+
+  /** Wrapper that intercepts /commands in dev mode, otherwise sends normally. */
+  async function handleSendTextOrCommand(text: string) {
+    setSystemMessage(null);
+    if (handleDevCommand(text)) return;
+    return handleSendText(text);
   }
 
   async function handleSendFile(text: string, file: File) {
@@ -612,6 +682,7 @@ export default function App() {
   }
 
   function handleStop() {
+    autoplayRef.current?.stop();
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
     setStreamingConversationId(null);
@@ -919,6 +990,9 @@ export default function App() {
         modelLoading={!!modelLoading}
         enterToSend={enterToSend}
         customInstructionsEnabled={customInstructionsEnabled && !!customInstructions.trim()}
+        webAccess={webAccess}
+        localFiles={localFiles}
+        locationSharing={locationSharing}
         conversations={conversations}
         currentConversation={currentConversation}
         streamingText={effectiveStreamingText}
@@ -934,7 +1008,7 @@ export default function App() {
         onOpenApi={() => setApiPanelOpen(true)}
         onOpenLegal={setLegalDocument}
         onOpenModelSelector={() => setModelSelectorOpen(true)}
-        onSendText={handleSendText}
+        onSendText={handleSendTextOrCommand}
         onSendFile={handleSendFile}
         onSendFiles={handleSendFiles}
         onDropFiles={(files) => setDroppedFiles(files)}
@@ -948,6 +1022,9 @@ export default function App() {
         activeToolCalls={effectiveToolCalls}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
+        followUps={currentConversation?.follow_ups}
+        onFollowUpClick={handleSendText}
+        systemMessage={systemMessage}
       />
     </>
   );

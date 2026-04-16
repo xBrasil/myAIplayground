@@ -27,6 +27,7 @@ export interface Conversation {
   title: string;
   created_at: string;
   updated_at: string;
+  follow_ups?: string[];
   messages: Message[];
 }
 
@@ -74,6 +75,7 @@ export interface StreamDoneEvent {
   reply: Message;
   model_loaded: boolean;
   tool_calls?: ToolCallInfo[];
+  follow_ups?: string[];
 }
 
 export interface StreamToolStartEvent {
