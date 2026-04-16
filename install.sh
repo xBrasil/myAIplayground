@@ -92,26 +92,28 @@ fi
 ok "Node.js: $(node --version), npm: $(npm --version)"
 
 # GPU detection
-GPU_VENDOR="none"
 HAS_NVIDIA=false
 HAS_AMD=false
+HAS_ROCM=false
 IS_APPLE_SILICON=false
 
 if [ "$PLATFORM" = "macos" ] && [ "$ARCH" = "arm64" ]; then
   IS_APPLE_SILICON=true
-  GPU_VENDOR="apple"
   ok "Apple Silicon detected (Metal acceleration)"
 elif command -v nvidia-smi &>/dev/null; then
   HAS_NVIDIA=true
-  GPU_VENDOR="nvidia"
   ok "NVIDIA GPU detected"
-elif lspci 2>/dev/null | grep -iq 'amd\|radeon'; then
+elif command -v lspci &>/dev/null && lspci 2>/dev/null | grep -iq 'amd\|radeon'; then
   HAS_AMD=true
-  GPU_VENDOR="amd"
-  ok "AMD GPU detected (ROCm)"
+  if command -v rocminfo &>/dev/null; then
+    HAS_ROCM=true
+    ok "AMD GPU detected (ROCm available)"
+  else
+    warn "AMD GPU detected, but ROCm runtime not found; will use Vulkan mode"
+  fi
 elif command -v rocminfo &>/dev/null; then
   HAS_AMD=true
-  GPU_VENDOR="amd"
+  HAS_ROCM=true
   ok "AMD GPU detected (ROCm via rocminfo)"
 else
   warn "No GPU detected (will use CPU mode)"
@@ -174,8 +176,11 @@ if [ "$LLAMA_INSTALLED" = false ]; then
     # Linux
     if [ "$HAS_NVIDIA" = true ]; then
       ASSET_PATTERN="bin-ubuntu.*vulkan.*x64"
-    elif [ "$HAS_AMD" = true ]; then
+    elif [ "$HAS_ROCM" = true ]; then
       ASSET_PATTERN="bin-ubuntu-rocm.*x64"
+    elif [ "$HAS_AMD" = true ]; then
+      # AMD GPU without ROCm runtime: use Vulkan build
+      ASSET_PATTERN="bin-ubuntu.*vulkan.*x64"
     else
       ASSET_PATTERN="bin-ubuntu-x64"
     fi

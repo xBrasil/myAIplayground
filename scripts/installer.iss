@@ -339,10 +339,15 @@ end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
-  DataDir, AppDir: String;
+  DataDir, AppDir, SafeApp: String;
   ResultCode: Integer;
   NeedRestart: Boolean;
 begin
+  // Escape single quotes in {app} for safe embedding in PowerShell single-quoted strings
+  AppDir := ExpandConstant('{app}');
+  SafeApp := AppDir;
+  StringChangeEx(SafeApp, '''', '''''', False);
+
   if CurUninstallStep = usUninstall then begin
     // --- Stop running app processes before removing files ---
     // Try graceful shutdown via backend API on default and fallback ports.
@@ -358,7 +363,7 @@ begin
     // Kill any remaining Python/Node processes that belong to our app
     try
       Exec('powershell.exe',
-        '-NoProfile -ExecutionPolicy Bypass -Command "Get-Process python,pythonw,node -ErrorAction SilentlyContinue | Where-Object { $_.Path -like (Join-Path ''' + ExpandConstant('{app}') + ''' ''*'') } | Stop-Process -Force -ErrorAction SilentlyContinue"',
+        '-NoProfile -ExecutionPolicy Bypass -Command "Get-Process python,pythonw,node -ErrorAction SilentlyContinue | Where-Object { $_.Path -like (Join-Path ''' + SafeApp + ''' ''*'') } | Stop-Process -Force -ErrorAction SilentlyContinue"',
         '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     except
     end;
@@ -375,7 +380,7 @@ begin
     // Only kills processes whose executable path or command line references {app}
     try
       Exec('powershell.exe',
-        '-NoProfile -ExecutionPolicy Bypass -Command "$app = ''' + ExpandConstant('{app}') + '''; $ports = @(8081) + @(8000..8009) + @(5173..5182); foreach ($port in $ports) { try { $lines = netstat -ano 2>$null | Select-String ''127\.0\.0\.1:'' | Select-String ('':'' + $port + ''\s'') | Select-String ''LISTENING''; $pids = @(); foreach ($l in $lines) { if ($l -match ''\s(\d+)\s*$'') { $pids += $Matches[1] } }; $pids = $pids | Select-Object -Unique; foreach ($pid in $pids) { try { $proc = Get-CimInstance Win32_Process -Filter (''ProcessId = '' + $pid) -ErrorAction SilentlyContinue; if ($proc -and (($proc.ExecutablePath -like ($app + ''*'')) -or ($proc.CommandLine -like (''*'' + $app + ''*'')))) { taskkill /F /T /PID $pid 2>$null } } catch {} } } catch {} }"',
+        '-NoProfile -ExecutionPolicy Bypass -Command "$app = ''' + SafeApp + '''; $ports = @(8081) + @(8000..8009) + @(5173..5182); foreach ($port in $ports) { try { $lines = netstat -ano 2>$null | Select-String ''127\.0\.0\.1:'' | Select-String ('':'' + $port + ''\s'') | Select-String ''LISTENING''; $pids = @(); foreach ($l in $lines) { if ($l -match ''\s(\d+)\s*$'') { $pids += $Matches[1] } }; $pids = $pids | Select-Object -Unique; foreach ($pid in $pids) { try { $proc = Get-CimInstance Win32_Process -Filter (''ProcessId = '' + $pid) -ErrorAction SilentlyContinue; if ($proc -and (($proc.ExecutablePath -like ($app + ''*'')) -or ($proc.CommandLine -like (''*'' + $app + ''*'')))) { taskkill /F /T /PID $pid 2>$null } } catch {} } } catch {} }"',
         '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     except
     end;
@@ -385,7 +390,6 @@ begin
   end;
 
   if CurUninstallStep = usPostUninstall then begin
-    AppDir := ExpandConstant('{app}');
 
     // 1. Remove artifacts created by install.ps1 / install.cmd that Inno doesn't track
     DelTree(AppDir + '\.venv', True, True, True);
@@ -429,13 +433,13 @@ begin
           '-NoProfile -ExecutionPolicy Bypass -Command "' +
           '$dirs = @(''.venv'',''backend'',''frontend''); ' +
           'foreach ($d in $dirs) { ' +
-          '  $p = Join-Path ''' + AppDir + ''' $d; ' +
+          '  $p = Join-Path ''' + SafeApp + ''' $d; ' +
           '  if (Test-Path $p) { ' +
           '    Remove-Item $p -Recurse -Force -ErrorAction SilentlyContinue ' +
           '  } ' +
           '}; ' +
-          '$remaining = Get-ChildItem ''' + AppDir + ''' -ErrorAction SilentlyContinue; ' +
-          'if (-not $remaining) { Remove-Item ''' + AppDir + ''' -Force -ErrorAction SilentlyContinue }"',
+          '$remaining = Get-ChildItem ''' + SafeApp + ''' -ErrorAction SilentlyContinue; ' +
+          'if (-not $remaining) { Remove-Item ''' + SafeApp + ''' -Force -ErrorAction SilentlyContinue }"',
           '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
       except
       end;
@@ -446,9 +450,9 @@ begin
           'New-ItemProperty -Path ''HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce'' ' +
           '-Name ''MyAIPlaygroundCleanup'' ' +
           '-Value (''cmd /c ' +
-          'if exist \"' + AppDir + '\.venv\" rd /s /q \"' + AppDir + '\.venv\" ^& ' +
-          'if exist \"' + AppDir + '\backend\" rd /s /q \"' + AppDir + '\backend\" ^& ' +
-          'if exist \"' + AppDir + '\frontend\" rd /s /q \"' + AppDir + '\frontend\"'') ' +
+          'if exist \"' + SafeApp + '\.venv\" rd /s /q \"' + SafeApp + '\.venv\" ^& ' +
+          'if exist \"' + SafeApp + '\backend\" rd /s /q \"' + SafeApp + '\backend\" ^& ' +
+          'if exist \"' + SafeApp + '\frontend\" rd /s /q \"' + SafeApp + '\frontend\"'') ' +
           '-PropertyType String -Force -ErrorAction SilentlyContinue"',
           '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
       except

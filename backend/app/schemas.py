@@ -77,8 +77,8 @@ class HealthResponse(BaseModel):
     model_status: Literal["idle", "loading", "loaded", "error"]
     model_loaded: bool
     cuda_available: bool
-    gpu_vendor: str
-    gpu_backend: str
+    gpu_vendor: Literal["nvidia", "amd", "apple", "none"]
+    gpu_backend: Literal["cuda", "hip", "rocm", "metal", "vulkan", "cpu"]
     gpu_display_name: str
     context_size: int
     model_setup_status: str

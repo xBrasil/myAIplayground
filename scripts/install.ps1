@@ -182,7 +182,6 @@ Write-Status "  $(T 'script.install.nodeOk')" -ForegroundColor Green
 # GPU detection — try WMI first, fall back to nvidia-smi on PATH
 $hasNvidiaGpu = $false
 $hasAmdGpu = $false
-$gpuVendor = "none"
 if (-not $SkipCudaTorch) {
     try {
         $gpuControllers = @(Get-CimInstance Win32_VideoController -ErrorAction Stop)
@@ -206,10 +205,8 @@ if (-not $SkipCudaTorch) {
     }
 }
 if ($hasNvidiaGpu) {
-    $gpuVendor = "nvidia"
     Write-Status "  $(T 'script.install.gpuDetected')" -ForegroundColor Green
 } elseif ($hasAmdGpu) {
-    $gpuVendor = "amd"
     Write-Status "  AMD GPU detected (HIP/Radeon)" -ForegroundColor Green
 } else {
     Write-Status "  $(T 'script.install.gpuNotDetected')" -ForegroundColor Yellow
