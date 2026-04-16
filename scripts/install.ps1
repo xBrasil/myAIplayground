@@ -181,11 +181,17 @@ Write-Status "  $(T 'script.install.nodeOk')" -ForegroundColor Green
 
 # GPU detection — try WMI first, fall back to nvidia-smi on PATH
 $hasNvidiaGpu = $false
+$hasAmdGpu = $false
+$gpuVendor = "none"
 if (-not $SkipCudaTorch) {
     try {
-        $nvidiaGpus = @(Get-CimInstance Win32_VideoController -ErrorAction Stop |
-            Where-Object { $_.Name -match 'NVIDIA' })
+        $gpuControllers = @(Get-CimInstance Win32_VideoController -ErrorAction Stop)
+        $nvidiaGpus = @($gpuControllers | Where-Object { $_.Name -match 'NVIDIA' })
         $hasNvidiaGpu = $nvidiaGpus.Count -gt 0
+        if (-not $hasNvidiaGpu) {
+            $amdGpus = @($gpuControllers | Where-Object { $_.Name -match 'AMD|Radeon' -and $_.Name -notmatch 'Microsoft' })
+            $hasAmdGpu = $amdGpus.Count -gt 0
+        }
     } catch {
         # WMI/CIM unavailable — fall back to nvidia-smi
         $smiCmd = Get-Command nvidia-smi -ErrorAction SilentlyContinue
@@ -200,7 +206,11 @@ if (-not $SkipCudaTorch) {
     }
 }
 if ($hasNvidiaGpu) {
+    $gpuVendor = "nvidia"
     Write-Status "  $(T 'script.install.gpuDetected')" -ForegroundColor Green
+} elseif ($hasAmdGpu) {
+    $gpuVendor = "amd"
+    Write-Status "  AMD GPU detected (HIP/Radeon)" -ForegroundColor Green
 } else {
     Write-Status "  $(T 'script.install.gpuNotDetected')" -ForegroundColor Yellow
 }
@@ -280,19 +290,28 @@ if ($isWindows) {
             $cudaDllPattern = "*cudart*-win-cuda-12*-x64*"
         }
         Write-Status "  $(T 'script.install.gpuCudaDriver' @{version="$cudaMajor"})" -ForegroundColor Green
+    } elseif ($hasAmdGpu) {
+        $assetPattern = "*-bin-win-hip-radeon-x64*"
+        $cudaDllPattern = $null  # AMD HIP does not need separate cudart
+        Write-Status "  AMD GPU: selecting HIP/Radeon binary" -ForegroundColor Green
     } else {
         $assetPattern = "*-bin-win-cpu-x64*"
         Write-Status "  $(T 'script.install.noCpuFallback')" -ForegroundColor Yellow
     }
 } elseif ($IsMacOS) {
-    $assetPattern = "*-bin-macos-arm64*"
-    if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq "X64") {
+    if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq "Arm64") {
+        $assetPattern = "*-bin-macos-arm64*"
+        Write-Status "  Apple Silicon detected: selecting Metal binary" -ForegroundColor Green
+    } else {
         $assetPattern = "*-bin-macos-x64*"
     }
 } else {
     # Linux
     if ($hasNvidiaGpu) {
         $assetPattern = "*-bin-ubuntu-*vulkan*x64*"  # Vulkan as universal GPU option
+    } elseif ($hasAmdGpu) {
+        $assetPattern = "*-bin-ubuntu-rocm*-x64*"
+        Write-Status "  AMD GPU: selecting ROCm binary" -ForegroundColor Green
     } else {
         $assetPattern = "*-bin-ubuntu-x64*"
     }
@@ -319,8 +338,8 @@ if (-not $llamaInstalled) {
             -Headers @{ "User-Agent" = "myAIplayground-installer" }
         $latestTag = $releaseInfo.tag_name
 
-        # Find matching binary asset
-        $binAsset = $releaseInfo.assets | Where-Object { $_.name -like $assetPattern -and $_.name -notlike "*cudart*" } | Select-Object -First 1
+        # Find matching binary asset (exclude cudart bundles and kleidiai variants)
+        $binAsset = $releaseInfo.assets | Where-Object { $_.name -like $assetPattern -and $_.name -notlike "*cudart*" -and $_.name -notlike "*kleidiai*" } | Select-Object -First 1
         if (-not $binAsset) {
             throw (T 'script.install.noBinaryFound' @{pattern=$assetPattern})
         }
@@ -367,7 +386,7 @@ if (-not $llamaInstalled) {
         # Save version
         $latestTag | Out-File -FilePath $llamaVersionFile -Encoding UTF8 -NoNewline
         $llamaInstalled = $true
-        $variant = if ($cudaDllPattern) { "CUDA" } else { "CPU" }
+        $variant = if ($cudaDllPattern) { "CUDA" } elseif ($hasAmdGpu) { "HIP" } else { "CPU" }
         Write-Status "  $(T 'script.install.llamaInstalledOk' @{version=$latestTag; variant=$variant})" -ForegroundColor Green
     } catch {
         Write-Status "  $(T 'script.install.llamaDownloadError' @{error="$_"})" -ForegroundColor Red
@@ -422,14 +441,22 @@ if ((Test-Path $legacyLegal) -and -not (Test-Path (Join-Path $repoRoot "data\use
     Move-Item $legacyLegal (Join-Path $repoRoot "data\user\legal-acceptance.json") -Force
 }
 $legacyModelCache = Join-Path $repoRoot "data\model-cache"
-if ((Test-Path $legacyModelCache) -and -not (Test-Path (Join-Path $repoRoot "data\system\model-cache"))) {
+$systemModelCache = Join-Path $repoRoot "data\system\model-cache"
+if ((Test-Path $legacyModelCache) -and (Get-ChildItem $legacyModelCache -ErrorAction SilentlyContinue | Select-Object -First 1)) {
     Write-Status "  Migrating data/model-cache/ -> data/system/model-cache/" -ForegroundColor Yellow
-    Move-Item $legacyModelCache (Join-Path $repoRoot "data\system\model-cache") -Force
+    Get-ChildItem $legacyModelCache -Force | Move-Item -Destination $systemModelCache -Force
+    Remove-Item $legacyModelCache -Recurse -Force -ErrorAction SilentlyContinue
 }
 $legacyLlama = Join-Path $repoRoot "data\llama-server"
-if ((Test-Path $legacyLlama) -and -not (Test-Path (Join-Path $repoRoot "data\system\llama-server"))) {
+$systemLlama = Join-Path $repoRoot "data\system\llama-server"
+if ((Test-Path $legacyLlama) -and (Get-ChildItem $legacyLlama -ErrorAction SilentlyContinue | Select-Object -First 1)) {
     Write-Status "  Migrating data/llama-server/ -> data/system/llama-server/" -ForegroundColor Yellow
-    Move-Item $legacyLlama (Join-Path $repoRoot "data\system\llama-server") -Force
+    if (-not (Test-Path $systemLlama)) {
+        Move-Item $legacyLlama $systemLlama -Force
+    } else {
+        Get-ChildItem $legacyLlama -Force | Move-Item -Destination $systemLlama -Force
+        Remove-Item $legacyLlama -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }
 foreach ($legacyLog in @('install.log', 'backend.log', 'backend-err.log', 'frontend.log', 'frontend-err.log')) {
     $legacyLogPath = Join-Path $repoRoot "data\$legacyLog"

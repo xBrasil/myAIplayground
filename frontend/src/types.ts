@@ -100,6 +100,9 @@ export interface HealthResponse {
   model_status: ModelStatus;
   model_loaded: boolean;
   cuda_available: boolean;
+  gpu_vendor: 'nvidia' | 'amd' | 'apple' | 'none';
+  gpu_backend: string;
+  gpu_display_name: string;
   context_size: number;
   model_setup_status: string;
   model_loading_enabled: boolean;

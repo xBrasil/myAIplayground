@@ -372,9 +372,10 @@ begin
 
     // Kill any process still listening on our ports, including fallback range
     // Backend: 8000-8009, Frontend: 5173-5182, llama-server: 8081
+    // Only kills processes whose executable path or command line references {app}
     try
       Exec('powershell.exe',
-        '-NoProfile -ExecutionPolicy Bypass -Command "$ports = @(8081) + @(8000..8009) + @(5173..5182); foreach ($port in $ports) { try { $lines = netstat -ano 2>$null | Select-String ''127\.0\.0\.1:'' | Select-String ('':'' + $port + ''\s'') | Select-String ''LISTENING''; foreach ($l in $lines) { if ($l -match ''\s(\d+)\s*$'') { taskkill /F /T /PID $Matches[1] 2>$null } } } catch {} }"',
+        '-NoProfile -ExecutionPolicy Bypass -Command "$app = ''' + ExpandConstant('{app}') + '''; $ports = @(8081) + @(8000..8009) + @(5173..5182); foreach ($port in $ports) { try { $lines = netstat -ano 2>$null | Select-String ''127\.0\.0\.1:'' | Select-String ('':'' + $port + ''\s'') | Select-String ''LISTENING''; $pids = @(); foreach ($l in $lines) { if ($l -match ''\s(\d+)\s*$'') { $pids += $Matches[1] } }; $pids = $pids | Select-Object -Unique; foreach ($pid in $pids) { try { $proc = Get-CimInstance Win32_Process -Filter (''ProcessId = '' + $pid) -ErrorAction SilentlyContinue; if ($proc -and (($proc.ExecutablePath -like ($app + ''*'')) -or ($proc.CommandLine -like (''*'' + $app + ''*'')))) { taskkill /F /T /PID $pid 2>$null } } catch {} } } catch {} }"',
         '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     except
     end;

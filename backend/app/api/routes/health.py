@@ -15,6 +15,7 @@ router = APIRouter(tags=["health"])
 @router.get("/health", response_model=HealthResponse)
 def healthcheck() -> HealthResponse:
     settings = get_settings()
+    gpu = model_service.gpu_info
     return HealthResponse(
         app_name=settings.app_name,
         environment=settings.app_env,
@@ -22,7 +23,10 @@ def healthcheck() -> HealthResponse:
         active_model_key=model_service.active_model_key,
         model_status=model_service.model_status,
         model_loaded=model_service.is_loaded,
-        cuda_available=model_service.cuda_available,
+        cuda_available=gpu.available,
+        gpu_vendor=gpu.vendor,
+        gpu_backend=gpu.backend,
+        gpu_display_name=gpu.display_name,
         context_size=model_service.context_size,
         model_setup_status=model_service.setup_status,
         model_loading_enabled=settings.enable_model_loading,

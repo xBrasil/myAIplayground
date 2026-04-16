@@ -92,12 +92,29 @@ fi
 ok "Node.js: $(node --version), npm: $(npm --version)"
 
 # GPU detection
+GPU_VENDOR="none"
 HAS_NVIDIA=false
-if command -v nvidia-smi &>/dev/null; then
+HAS_AMD=false
+IS_APPLE_SILICON=false
+
+if [ "$PLATFORM" = "macos" ] && [ "$ARCH" = "arm64" ]; then
+  IS_APPLE_SILICON=true
+  GPU_VENDOR="apple"
+  ok "Apple Silicon detected (Metal acceleration)"
+elif command -v nvidia-smi &>/dev/null; then
   HAS_NVIDIA=true
+  GPU_VENDOR="nvidia"
   ok "NVIDIA GPU detected"
+elif lspci 2>/dev/null | grep -iq 'amd\|radeon'; then
+  HAS_AMD=true
+  GPU_VENDOR="amd"
+  ok "AMD GPU detected (ROCm)"
+elif command -v rocminfo &>/dev/null; then
+  HAS_AMD=true
+  GPU_VENDOR="amd"
+  ok "AMD GPU detected (ROCm via rocminfo)"
 else
-  warn "No NVIDIA GPU detected (will use CPU mode)"
+  warn "No GPU detected (will use CPU mode)"
 fi
 
 # ── 2. Python venv + backend deps ──────────────────────────────
@@ -145,9 +162,11 @@ fi
 if [ "$LLAMA_INSTALLED" = false ]; then
   # Determine asset pattern
   ASSET_PATTERN=""
+  ASSET_EXCLUDE=""
   if [ "$PLATFORM" = "macos" ]; then
     if [ "$ARCH" = "arm64" ]; then
       ASSET_PATTERN="bin-macos-arm64"
+      ASSET_EXCLUDE="kleidiai"  # Exclude kleidiai variant
     else
       ASSET_PATTERN="bin-macos-x64"
     fi
@@ -155,6 +174,8 @@ if [ "$LLAMA_INSTALLED" = false ]; then
     # Linux
     if [ "$HAS_NVIDIA" = true ]; then
       ASSET_PATTERN="bin-ubuntu.*vulkan.*x64"
+    elif [ "$HAS_AMD" = true ]; then
+      ASSET_PATTERN="bin-ubuntu-rocm.*x64"
     else
       ASSET_PATTERN="bin-ubuntu-x64"
     fi
@@ -171,31 +192,45 @@ if [ "$LLAMA_INSTALLED" = false ]; then
     LATEST_TAG=$(echo "$RELEASE_JSON" | "$VENV_PYTHON" -c "import sys,json; print(json.load(sys.stdin).get('tag_name',''))" 2>/dev/null || echo "")
 
     if [ -n "$LATEST_TAG" ]; then
-      # Find matching asset URL
+      # Find matching asset URL (exclude cudart bundles and kleidiai variants)
       ASSET_URL=$(echo "$RELEASE_JSON" | "$VENV_PYTHON" -c "
 import sys, json, re
+exclude = '$ASSET_EXCLUDE'
 data = json.load(sys.stdin)
 for a in data.get('assets', []):
     name = a['name']
     if re.search(r'$ASSET_PATTERN', name) and 'cudart' not in name:
+        if exclude and exclude in name:
+            continue
         print(a['browser_download_url'])
         break
 " 2>/dev/null || echo "")
 
       if [ -n "$ASSET_URL" ]; then
-        echo "  Downloading: $(basename "$ASSET_URL") ($LATEST_TAG)..."
+        ASSET_NAME="$(basename "$ASSET_URL")"
+        echo "  Downloading: $ASSET_NAME ($LATEST_TAG)..."
         mkdir -p "$LLAMA_DIR"
-        TMP_ZIP="/tmp/llama-server-download.zip"
-        curl -L -o "$TMP_ZIP" "$ASSET_URL"
+        TMP_FILE="/tmp/llama-server-download"
+        curl -L -o "$TMP_FILE" "$ASSET_URL"
 
-        # Extract
+        # Extract (handle both .zip and .tar.gz)
         rm -rf "$LLAMA_DIR"/*
-        if command -v unzip &>/dev/null; then
-          unzip -o "$TMP_ZIP" -d "$LLAMA_DIR"
-        else
-          "$VENV_PYTHON" -c "import zipfile; zipfile.ZipFile('$TMP_ZIP').extractall('$LLAMA_DIR')"
-        fi
-        rm -f "$TMP_ZIP"
+        case "$ASSET_NAME" in
+          *.tar.gz|*.tgz)
+            tar xzf "$TMP_FILE" -C "$LLAMA_DIR"
+            ;;
+          *.zip)
+            if command -v unzip &>/dev/null; then
+              unzip -o "$TMP_FILE" -d "$LLAMA_DIR"
+            else
+              "$VENV_PYTHON" -c "import zipfile; zipfile.ZipFile('$TMP_FILE').extractall('$LLAMA_DIR')"
+            fi
+            ;;
+          *)
+            err "Unknown archive format: $ASSET_NAME"
+            ;;
+        esac
+        rm -f "$TMP_FILE"
 
         # Move files from subdirectories to root if needed
         NESTED=$(find "$LLAMA_DIR" -name "llama-server" -type f | head -1)
@@ -252,13 +287,16 @@ if [ -f "$DATA_DIR/legal-acceptance.json" ] && [ ! -f "$DATA_DIR/user/legal-acce
   warn "Migrating data/legal-acceptance.json -> data/user/legal-acceptance.json"
   mv "$DATA_DIR/legal-acceptance.json" "$DATA_DIR/user/legal-acceptance.json"
 fi
-if [ -d "$DATA_DIR/model-cache" ] && [ ! -d "$DATA_DIR/system/model-cache" ]; then
+if [ -d "$DATA_DIR/model-cache" ] && [ "$(ls -A "$DATA_DIR/model-cache" 2>/dev/null)" ]; then
   warn "Migrating data/model-cache/ -> data/system/model-cache/"
-  mv "$DATA_DIR/model-cache" "$DATA_DIR/system/model-cache"
+  mv "$DATA_DIR/model-cache"/* "$DATA_DIR/system/model-cache/" 2>/dev/null || true
+  rmdir "$DATA_DIR/model-cache" 2>/dev/null || true
 fi
-if [ -d "$DATA_DIR/llama-server" ] && [ ! -d "$DATA_DIR/system/llama-server" ]; then
+if [ -d "$DATA_DIR/llama-server" ] && [ "$(ls -A "$DATA_DIR/llama-server" 2>/dev/null)" ]; then
   warn "Migrating data/llama-server/ -> data/system/llama-server/"
-  mv "$DATA_DIR/llama-server" "$DATA_DIR/system/llama-server"
+  mkdir -p "$DATA_DIR/system/llama-server"
+  mv "$DATA_DIR/llama-server"/* "$DATA_DIR/system/llama-server/" 2>/dev/null || true
+  rmdir "$DATA_DIR/llama-server" 2>/dev/null || true
 fi
 for legacyLog in install.log backend.log backend-err.log frontend.log frontend-err.log; do
   if [ -f "$DATA_DIR/$legacyLog" ]; then

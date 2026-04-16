@@ -985,7 +985,6 @@ export default function App() {
       <ModelSelectorModal
         open={modelSelectorOpen}
         health={health}
-        cudaAvailable={health?.cuda_available ?? false}
         onClose={() => setModelSelectorOpen(false)}
         onSelectModel={handleSelectModel}
         onRefreshHealth={refreshHealth}

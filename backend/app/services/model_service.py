@@ -2,6 +2,7 @@ import atexit
 import json
 import logging
 import os
+import platform
 import re
 import subprocess
 import sys
@@ -23,6 +24,15 @@ try:
 except ImportError:  # pragma: no cover
     hf_hub_download = None
     try_to_load_from_cache = None
+
+
+@dataclass(frozen=True)
+class GpuInfo:
+    """Detected GPU hardware info — drives binary selection, model fallback, and UI display."""
+    available: bool          # Any accelerated GPU detected?
+    vendor: str              # "nvidia" | "amd" | "apple" | "none"
+    backend: str             # "cuda" | "hip" | "rocm" | "metal" | "vulkan" | "cpu"
+    display_name: str        # Human-readable, e.g. "NVIDIA RTX 4070"
 
 
 @dataclass(frozen=True)
@@ -84,12 +94,17 @@ class ModelService:
         self._client = httpx.Client(timeout=self._HTTP_TIMEOUT)
         self._has_vision = False
         self._actual_n_ctx: int = 0
-        self._cuda_detected: bool | None = None
+        self._gpu_info: GpuInfo = self._detect_gpu()
         self._log_file_handle = None
         atexit.register(self._shutdown)
 
-        # Override default to e2b when no GPU is available
-        if not self.cuda_available and self._active_model_key != "e2b":
+        logger.info(
+            "GPU detected: vendor=%s, backend=%s, name=%s",
+            self._gpu_info.vendor, self._gpu_info.backend, self._gpu_info.display_name,
+        )
+
+        # Override default to e2b only when NO GPU is available at all
+        if not self._gpu_info.available and self._active_model_key != "e2b":
             logger.info("No GPU detected — defaulting to e2b model")
             self._active_model_key = "e2b"
 
@@ -290,7 +305,8 @@ class ModelService:
             "--parallel", "1",
         ]
 
-        if self._settings.flash_attn:
+        # Flash attention is not supported on Vulkan or CPU-only backends
+        if self._settings.flash_attn and self._gpu_info.backend not in ("vulkan", "cpu"):
             base_cmd.extend(["--flash-attn", "on"])
 
         has_vision = False
@@ -437,15 +453,101 @@ class ModelService:
     def supports_vision(self) -> bool:
         return self._has_vision
 
+    # ── GPU detection ────────────────────────────────────────────
+
+    @staticmethod
+    def _detect_gpu() -> GpuInfo:
+        """Detect the best available GPU: NVIDIA > AMD > Apple Metal > none."""
+        system = platform.system()
+
+        # 1. macOS Apple Silicon → Metal (always available on arm64)
+        if system == "Darwin" and platform.machine() == "arm64":
+            chip_name = "Apple Silicon"
+            try:
+                result = subprocess.run(
+                    ["sysctl", "-n", "machdep.cpu.brand_string"],
+                    capture_output=True, text=True, timeout=5,
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    chip_name = result.stdout.strip()
+            except Exception:
+                pass
+            return GpuInfo(available=True, vendor="apple",
+                           backend="metal", display_name=chip_name)
+
+        # 2. NVIDIA → CUDA (short-circuit if nvidia-smi is not on PATH)
+        import shutil
+        if shutil.which("nvidia-smi"):
+            try:
+                result = subprocess.run(
+                    ["nvidia-smi", "--query-gpu=name",
+                     "--format=csv,noheader,nounits"],
+                    capture_output=True, text=True, timeout=5, check=True,
+                )
+                name = result.stdout.strip().split("\n")[0].strip()
+                return GpuInfo(available=True, vendor="nvidia",
+                               backend="cuda", display_name=name or "NVIDIA GPU")
+            except Exception:
+                pass
+
+        # 3. AMD → ROCm (Linux) or HIP (Windows)
+        if system == "Linux":
+            # Try rocminfo first (installed with ROCm stack)
+            try:
+                result = subprocess.run(
+                    ["rocminfo"], capture_output=True, text=True, timeout=10,
+                )
+                if result.returncode == 0 and "gfx" in result.stdout.lower():
+                    match = re.search(r'Marketing Name:\s*(.+)', result.stdout)
+                    name = match.group(1).strip() if match else "AMD GPU"
+                    return GpuInfo(available=True, vendor="amd",
+                                   backend="rocm", display_name=name)
+            except Exception:
+                pass
+            # Fallback: lspci
+            try:
+                result = subprocess.run(
+                    ["lspci"], capture_output=True, text=True, timeout=5,
+                )
+                for line in result.stdout.splitlines():
+                    if re.search(r'VGA.*(?:AMD|Radeon)', line, re.IGNORECASE):
+                        return GpuInfo(available=True, vendor="amd",
+                                       backend="vulkan",
+                                       display_name="AMD GPU (Vulkan)")
+            except Exception:
+                pass
+        elif system == "Windows":
+            try:
+                result = subprocess.run(
+                    ["wmic", "path", "Win32_VideoController",
+                     "get", "Name", "/value"],
+                    capture_output=True, text=True, timeout=10,
+                    creationflags=0x08000000,  # CREATE_NO_WINDOW
+                )
+                for line in result.stdout.splitlines():
+                    if "=" in line:
+                        name = line.split("=", 1)[1].strip()
+                        if re.search(r'AMD|Radeon', name, re.IGNORECASE) \
+                                and not re.search(r'Microsoft', name, re.IGNORECASE):
+                            return GpuInfo(available=True, vendor="amd",
+                                           backend="hip",
+                                           display_name=name)
+            except Exception:
+                pass
+
+        # 4. No GPU detected
+        return GpuInfo(available=False, vendor="none",
+                       backend="cpu", display_name="CPU only")
+
+    @property
+    def gpu_info(self) -> GpuInfo:
+        """Return detected GPU information."""
+        return self._gpu_info
+
     @property
     def cuda_available(self) -> bool:
-        if self._cuda_detected is None:
-            try:
-                subprocess.run(["nvidia-smi"], capture_output=True, timeout=5, check=True)
-                self._cuda_detected = True
-            except Exception:
-                self._cuda_detected = False
-        return self._cuda_detected
+        """Backward-compatible: True when ANY accelerated GPU is available."""
+        return self._gpu_info.available
 
     def available_models(self) -> list[ModelOption]:
         return [

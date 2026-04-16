@@ -55,13 +55,25 @@ New-Item -ItemType Directory -Force -Path (Join-Path $dataDir "system\logs") | O
 function Free-Port {
     param([int]$Port)
     try {
-        $netstat = netstat -ano -p TCP 2>$null | Select-String "127.0.0.1:$Port" | Select-String "LISTENING"
+        $repoRootLower = $repoRoot.ToLowerInvariant()
+        $portPattern = [regex]::Escape(":$Port")
+        $netstat = netstat -ano -p TCP 2>$null | Select-String $portPattern | Select-String "LISTENING"
         foreach ($line in $netstat) {
             $pid = ($line -split '\s+')[-1]
             if ($pid -match '^\d+$' -and [int]$pid -gt 0) {
                 try {
                     $proc = Get-Process -Id ([int]$pid) -ErrorAction SilentlyContinue
-                    if ($proc -and $proc.Path -like "$repoRoot*") {
+                    $cimProc = Get-CimInstance Win32_Process -Filter "ProcessId = $pid" -ErrorAction SilentlyContinue
+
+                    $procPath = if ($proc -and $proc.Path) { $proc.Path.ToLowerInvariant() } else {
+                        if ($cimProc -and $cimProc.ExecutablePath) { $cimProc.ExecutablePath.ToLowerInvariant() } else { $null }
+                    }
+                    $commandLine = if ($cimProc -and $cimProc.CommandLine) { $cimProc.CommandLine.ToLowerInvariant() } else { $null }
+
+                    $belongsToRepo = ($procPath -and $procPath.StartsWith($repoRootLower)) -or
+                                     ($commandLine -and $commandLine.Contains($repoRootLower))
+
+                    if ($belongsToRepo) {
                         Write-Host "  Killing stale process PID $pid on port $Port" -ForegroundColor Yellow
                         Stop-Process -Id ([int]$pid) -Force -ErrorAction SilentlyContinue
                         Start-Sleep -Milliseconds 500
@@ -77,10 +89,12 @@ function Find-FreePort {
     param([int]$StartPort, [int]$MaxTries = 10)
     for ($i = 0; $i -lt $MaxTries; $i++) {
         $port = $StartPort + $i
-        $listener = netstat -ano -p TCP 2>$null | Select-String "127.0.0.1:$port" | Select-String "LISTENING"
+        $portPattern = [regex]::Escape(":$port")
+        $listener = netstat -ano -p TCP 2>$null | Select-String $portPattern | Select-String "LISTENING"
         if (-not $listener) { return $port }
     }
-    return $StartPort
+    $endPort = $StartPort + $MaxTries - 1
+    throw "No free port found in range $StartPort-$endPort. All $MaxTries candidate ports are busy."
 }
 
 # Try to free default ports first (kill stale processes from previous runs)

@@ -55,8 +55,13 @@ export default function ServerStatusPanel({ open, health, onClose }: ServerStatu
                   {statusLabel()}
                 </span>
               </dd>
-              <dt>{t('serverPanel.cuda')}</dt>
-              <dd>{health.cuda_available ? t('serverPanel.cudaYes') : t('serverPanel.cudaNo')}</dd>
+              <dt>{t('serverPanel.gpu')}</dt>
+              <dd>
+                {health.gpu_vendor !== 'none'
+                  ? `${health.gpu_display_name} (${health.gpu_backend.toUpperCase()})`
+                  : t('serverPanel.gpuNo')
+                }
+              </dd>
               {health.context_size > 0 && (
                 <>
                   <dt>{t('serverPanel.contextSize')}</dt>
