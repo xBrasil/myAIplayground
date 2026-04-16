@@ -28,17 +28,46 @@ import atexit
 # Paths
 # ---------------------------------------------------------------------------
 REPO_ROOT = Path(__file__).resolve().parent.parent
-FRONTEND_URL = "http://127.0.0.1:5173"
-BACKEND_HEALTH = "http://127.0.0.1:8000/api/health"
-BACKEND_SHUTDOWN = "http://127.0.0.1:8000/api/shutdown"
 DATA_DIR = REPO_ROOT / "data"
-BACKEND_LOG = DATA_DIR / "backend.log"
-FRONTEND_LOG = DATA_DIR / "frontend.log"
+BACKEND_LOG = DATA_DIR / "system" / "logs" / "backend.log"
+FRONTEND_LOG = DATA_DIR / "system" / "logs" / "frontend.log"
+PORTS_FILE = DATA_DIR / "system" / ".ports"
 
 IS_WINDOWS = platform.system() == "Windows"
 
-# Ports used by the application
-_PORTS = [8000, 5173]
+# Default ports (used for stale-process cleanup before run.ps1 writes .ports)
+_DEFAULT_BACKEND_PORT = 8000
+_DEFAULT_FRONTEND_PORT = 5173
+
+# Ports used by the application (for initial stale-process cleanup).
+# Covers default ports and the fallback range used by run.ps1/run.sh.
+_PORTS = list(range(8000, 8010)) + list(range(5173, 5183))
+
+
+def _read_ports() -> tuple[int, int]:
+    """Read dynamic port assignments from .ports file, with defaults."""
+    try:
+        import json
+        with open(PORTS_FILE) as f:
+            data = json.load(f)
+        return data.get("backend", _DEFAULT_BACKEND_PORT), data.get("frontend", _DEFAULT_FRONTEND_PORT)
+    except Exception:
+        return _DEFAULT_BACKEND_PORT, _DEFAULT_FRONTEND_PORT
+
+
+def _get_frontend_url() -> str:
+    _, fp = _read_ports()
+    return f"http://127.0.0.1:{fp}"
+
+
+def _get_backend_health_url() -> str:
+    bp, _ = _read_ports()
+    return f"http://127.0.0.1:{bp}/api/health"
+
+
+def _get_backend_shutdown_url() -> str:
+    bp, _ = _read_ports()
+    return f"http://127.0.0.1:{bp}/api/shutdown"
 
 
 # ---------------------------------------------------------------------------
@@ -65,8 +94,11 @@ def _is_our_process(pid: int) -> bool:
                 return False
         # Only kill if command line matches our app signatures
         repo_lower = str(REPO_ROOT).lower()
+        # Require repo path in cmdline to avoid killing unrelated processes
+        if repo_lower not in cmdline:
+            return False
         return any(sig in cmdline for sig in [
-            "app.main", "uvicorn", "vite", repo_lower,
+            "app.main", "uvicorn", "vite",
         ])
     except Exception:
         return False
@@ -215,9 +247,14 @@ class SplashScreen:
         root.title("My AI Playground")
         root.configure(bg=BG)
         root.resizable(False, False)
-        root.attributes("-topmost", True)
         # Remove title bar for a cleaner splash look
         root.overrideredirect(True)
+        # Start on top so the user sees it, then drop topmost after a moment
+        # so other windows can cover it when the user clicks away.
+        root.attributes("-topmost", True)
+        root.after(800, lambda: root.attributes("-topmost", False))
+        # Allow clicking the splash to push it behind other windows
+        root.bind("<Button-1>", lambda _e: root.lower())
 
         # DPI scaling — tkinter already scales font *point* sizes when
         # DPI awareness is enabled, so we only scale *pixel* values
@@ -377,11 +414,12 @@ def _graceful_shutdown() -> None:
     """POST /api/shutdown then kill the supervisor tree as fallback."""
     try:
         import urllib.request
+        _, fp = _read_ports()
         req = urllib.request.Request(
-            BACKEND_SHUTDOWN,
+            _get_backend_shutdown_url(),
             data=b"",
             method="POST",
-            headers={"Origin": "http://127.0.0.1:5173"},
+            headers={"Origin": f"http://127.0.0.1:{fp}"},
         )
         urllib.request.urlopen(req, timeout=3)
     except Exception:
@@ -407,7 +445,7 @@ atexit.register(_atexit_cleanup)
 def _check_health() -> bool:
     try:
         import urllib.request
-        resp = urllib.request.urlopen(BACKEND_HEALTH, timeout=3)
+        resp = urllib.request.urlopen(_get_backend_health_url(), timeout=3)
         if not (200 <= resp.status < 300):
             return False
         # Validate the response is actually our backend (not an unrelated service)
@@ -421,7 +459,7 @@ def _check_health() -> bool:
 # Tray actions
 # ---------------------------------------------------------------------------
 def _on_open_browser(icon, item) -> None:  # noqa: ARG001
-    webbrowser.open(FRONTEND_URL)
+    webbrowser.open(_get_frontend_url())
 
 
 def _on_view_logs(icon, item) -> None:  # noqa: ARG001
@@ -466,7 +504,7 @@ _splash: SplashScreen | None = None
 def _check_frontend_ready() -> bool:
     try:
         import urllib.request
-        resp = urllib.request.urlopen(FRONTEND_URL, timeout=3)
+        resp = urllib.request.urlopen(_get_frontend_url(), timeout=3)
         return 200 <= resp.status < 400
     except Exception:
         return False
@@ -521,7 +559,7 @@ def _monitor_health(icon) -> None:
             time.sleep(0.5)
             _splash.close()
         icon.title = T("script.tray.tooltip.running")
-        webbrowser.open(FRONTEND_URL)
+        webbrowser.open(_get_frontend_url())
     else:
         if _splash:
             _splash.close()

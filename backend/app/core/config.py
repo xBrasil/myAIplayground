@@ -9,19 +9,32 @@ BASE_DIR = Path(__file__).resolve().parents[2]
 PROJECT_DIR = BASE_DIR.parent
 
 # Origins allowed for CORS and sensitive endpoints (e.g. /shutdown).
-ALLOWED_ORIGINS = ["http://127.0.0.1:5173", "http://localhost:5173"]
+# Accepts a range of ports to support automatic port fallback when
+# the default frontend port (5173) is already in use.
+ALLOWED_ORIGINS = [
+    f"http://{host}:{port}"
+    for host in ("127.0.0.1", "localhost")
+    for port in range(5173, 5183)
+]
+
+# Locate .env file: prefer data/system/.env, fall back to legacy data/.env
+_env_file = PROJECT_DIR / "data" / "system" / ".env"
+if not _env_file.exists():
+    _legacy_env = PROJECT_DIR / "data" / ".env"
+    if _legacy_env.exists():
+        _env_file = _legacy_env
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=PROJECT_DIR / "data" / ".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file=_env_file, env_file_encoding="utf-8", extra="ignore")
 
     app_name: str = Field(default="Gemma 4 Local Studio", alias="APP_NAME")
     app_env: str = Field(default="development", alias="APP_ENV")
     api_host: str = Field(default="127.0.0.1", alias="API_HOST")
     api_port: int = Field(default=8000, alias="API_PORT")
-    database_url: str = Field(default="sqlite:///../data/app.db", alias="DATABASE_URL")
-    upload_dir: str = Field(default="../data/uploads", alias="UPLOAD_DIR")
-    model_cache_dir: str = Field(default="../data/model-cache", alias="MODEL_CACHE_DIR")
+    database_url: str = Field(default="sqlite:///../data/user/app.db", alias="DATABASE_URL")
+    upload_dir: str = Field(default="../data/user/uploads", alias="UPLOAD_DIR")
+    model_cache_dir: str = Field(default="../data/system/model-cache", alias="MODEL_CACHE_DIR")
     enable_model_loading: bool = Field(default=False, alias="ENABLE_MODEL_LOADING")
     default_model_key: str = Field(default="e4b", alias="DEFAULT_MODEL_KEY")
     default_system_prompt: str = Field(

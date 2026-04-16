@@ -32,14 +32,18 @@ function stripMarkdown(md: string): string {
 // ---------------------------------------------------------------------------
 
 /** Speak text and wait for it to finish (resolves on end/error). */
-function speakAndWait(text: string, voiceName: string): Promise<void> {
-  return new Promise<void>(async (resolve) => {
+async function speakAndWait(text: string, voiceName: string): Promise<void> {
+  try {
     await ensureVoicesLoaded();
     const utterance = await createUtterance(text, voiceName);
-    utterance.onend = () => resolve();
-    utterance.onerror = () => resolve();
-    window.speechSynthesis.speak(utterance);
-  });
+    return new Promise<void>((resolve) => {
+      utterance.onend = () => resolve();
+      utterance.onerror = () => resolve();
+      window.speechSynthesis.speak(utterance);
+    });
+  } catch {
+    // If voice loading or utterance creation fails, silently continue
+  }
 }
 
 /** Find the next voice name in the locale-filtered list after the given name. */
@@ -143,6 +147,10 @@ export class AutoplayEngine {
   private async loop(): Promise<void> {
     try {
       while (!this.cancelled) {
+        // Yield to the macrotask queue so React can commit any pending state
+        // updates before we read conversation data from refs.
+        await new Promise<void>((r) => setTimeout(r, 0));
+
         // --- 1) Pick a follow-up and send it ---
         const conv = this.cb.getConversation();
         if (!conv) { this.fail('Conversation no longer available.'); return; }
@@ -163,7 +171,9 @@ export class AutoplayEngine {
           : '';
 
         // Send the follow-up (this starts generation in the background)
-        const sendPromise = this.cb.sendText(followUpText);
+        // Attach a no-op catch immediately to prevent unhandled rejection
+        let sendError: unknown = null;
+        const sendPromise = this.cb.sendText(followUpText).catch((err) => { sendError = err; });
 
         // --- 2) Immediately start TTS of the PREVIOUS assistant response ---
         if (lastAssistantContent && !this.cancelled) {
@@ -183,14 +193,16 @@ export class AutoplayEngine {
         if (this.cancelled) break;
 
         // --- 4) Wait for generation to complete ---
-        try {
-          await sendPromise;
-        } catch {
-          // If the stream was aborted or errored, stop the loop
+        await sendPromise;
+        if (sendError) {
           this.fail('Generation was interrupted or errored.');
           return;
         }
         if (this.cancelled) break;
+
+        // Yield again so React commits the final conversation state (with
+        // follow-ups) before we check for continuation.
+        await new Promise<void>((r) => setTimeout(r, 0));
 
         // Check the NEW conversation state for follow-ups
         const updatedConv = this.cb.getConversation();

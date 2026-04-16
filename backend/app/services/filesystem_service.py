@@ -9,7 +9,6 @@ Security measures:
 """
 
 import logging
-import sys
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -17,6 +16,7 @@ logger = logging.getLogger(__name__)
 # ── Configuration ────────────────────────────────────────────────
 
 _MAX_LIST_ENTRIES = 2000  # max directory entries returned
+_MAX_FILE_SIZE = 2_000_000  # ~2 MB hard read cap for text files
 _BINARY_EXTENSIONS = {
     ".exe", ".dll", ".so", ".dylib", ".bin", ".dat", ".db", ".sqlite",
     ".zip", ".tar", ".gz", ".bz2", ".7z", ".rar", ".xz",
@@ -136,11 +136,18 @@ def read_file(path: str, allowed_folders: list[str]) -> dict[str, str]:
 
     suffix = target.suffix.lower()
 
+    # Enforce file size limit
+    try:
+        size = target.stat().st_size
+    except OSError as exc:
+        result["error"] = f"Erro ao verificar tamanho do arquivo: {exc}"
+        return result
+
     # Handle document files (PDF, DOCX, XLSX, PPTX) via document_service
     if suffix in _DOCUMENT_EXTENSIONS:
         try:
             from app.services.document_service import extract_text as extract_document_text
-            text = extract_document_text(str(target), max_chars=sys.maxsize)
+            text = extract_document_text(str(target), max_chars=_MAX_FILE_SIZE)
             if text.startswith("Erro") or text.startswith("Error"):
                 result["error"] = text
             else:
@@ -152,6 +159,15 @@ def read_file(path: str, allowed_folders: list[str]) -> dict[str, str]:
     # Block binary files
     if suffix in _BINARY_EXTENSIONS:
         result["error"] = f"Arquivo binário não pode ser lido como texto: {target.name}"
+        return result
+
+    if size > _MAX_FILE_SIZE:
+        try:
+            with open(target, "r", encoding="utf-8", errors="ignore") as f:
+                result["content"] = f.read(_MAX_FILE_SIZE)
+            result["error"] = f"(Arquivo truncado: {size:,} bytes total, primeiros {_MAX_FILE_SIZE:,} bytes mostrados)"
+        except Exception as exc:
+            result["error"] = f"Erro ao ler arquivo: {exc}"
         return result
 
     try:

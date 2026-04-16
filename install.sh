@@ -11,11 +11,11 @@ VENV_DIR="$REPO_ROOT/.venv"
 VENV_PYTHON="$VENV_DIR/bin/python"
 DATA_DIR="$REPO_ROOT/data"
 ENV_EXAMPLE="$BACKEND_DIR/.env.example"
-ENV_FILE="$DATA_DIR/.env"
-LOG_FILE="$DATA_DIR/install.log"
-LLAMA_DIR="$DATA_DIR/llama-server"
+ENV_FILE="$DATA_DIR/system/.env"
+LOG_FILE="$DATA_DIR/system/logs/install.log"
+LLAMA_DIR="$DATA_DIR/system/llama-server"
 
-mkdir -p "$DATA_DIR"
+mkdir -p "$DATA_DIR/user/uploads" "$DATA_DIR/system/logs"
 exec > >(tee -a "$LOG_FILE") 2>&1
 echo "── Install log: $LOG_FILE"
 echo "── Date: $(date '+%Y-%m-%d %H:%M:%S')"
@@ -228,7 +228,43 @@ cd "$REPO_ROOT"
 
 # ── 5. Data dirs + .env ─────────────────────────────────────────
 step "Creating data directories..."
-mkdir -p "$DATA_DIR" "$DATA_DIR/uploads" "$DATA_DIR/model-cache"
+mkdir -p "$DATA_DIR/user/uploads" "$DATA_DIR/system/model-cache" "$DATA_DIR/system/logs"
+
+# ---- Migrate legacy flat data/ layout to new user/system structure ----
+if [ -f "$DATA_DIR/.env" ] && [ ! -f "$ENV_FILE" ]; then
+  warn "Migrating data/.env -> data/system/.env"
+  mv "$DATA_DIR/.env" "$ENV_FILE"
+fi
+if [ -f "$DATA_DIR/app.db" ] && [ ! -f "$DATA_DIR/user/app.db" ]; then
+  warn "Migrating data/app.db -> data/user/app.db"
+  mv "$DATA_DIR/app.db" "$DATA_DIR/user/app.db"
+fi
+if [ -d "$DATA_DIR/uploads" ] && [ "$(ls -A "$DATA_DIR/uploads" 2>/dev/null)" ]; then
+  warn "Migrating data/uploads/ -> data/user/uploads/"
+  mv "$DATA_DIR/uploads/"* "$DATA_DIR/user/uploads/" 2>/dev/null || true
+  rmdir "$DATA_DIR/uploads" 2>/dev/null || true
+fi
+if [ -f "$DATA_DIR/settings.json" ] && [ ! -f "$DATA_DIR/user/settings.json" ]; then
+  warn "Migrating data/settings.json -> data/user/settings.json"
+  mv "$DATA_DIR/settings.json" "$DATA_DIR/user/settings.json"
+fi
+if [ -f "$DATA_DIR/legal-acceptance.json" ] && [ ! -f "$DATA_DIR/user/legal-acceptance.json" ]; then
+  warn "Migrating data/legal-acceptance.json -> data/user/legal-acceptance.json"
+  mv "$DATA_DIR/legal-acceptance.json" "$DATA_DIR/user/legal-acceptance.json"
+fi
+if [ -d "$DATA_DIR/model-cache" ] && [ ! -d "$DATA_DIR/system/model-cache" ]; then
+  warn "Migrating data/model-cache/ -> data/system/model-cache/"
+  mv "$DATA_DIR/model-cache" "$DATA_DIR/system/model-cache"
+fi
+if [ -d "$DATA_DIR/llama-server" ] && [ ! -d "$DATA_DIR/system/llama-server" ]; then
+  warn "Migrating data/llama-server/ -> data/system/llama-server/"
+  mv "$DATA_DIR/llama-server" "$DATA_DIR/system/llama-server"
+fi
+for legacyLog in install.log backend.log backend-err.log frontend.log frontend-err.log; do
+  if [ -f "$DATA_DIR/$legacyLog" ]; then
+    mv "$DATA_DIR/$legacyLog" "$DATA_DIR/system/logs/$legacyLog"
+  fi
+done
 
 step "Preparing .env..."
 if [ ! -f "$ENV_FILE" ]; then

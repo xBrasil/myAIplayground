@@ -290,7 +290,7 @@ export default function MessageList({
               onClick={currentTip.actionable && tipContext ? () => tipContext.onOpenSettings() : undefined}
               role={currentTip.actionable ? 'button' : undefined}
               tabIndex={currentTip.actionable ? 0 : undefined}
-              onKeyDown={currentTip.actionable && tipContext ? (e) => { if (e.key === 'Enter' || e.key === ' ') tipContext.onOpenSettings(); } : undefined}
+              onKeyDown={currentTip.actionable && tipContext ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tipContext.onOpenSettings(); } } : undefined}
             >
               <svg className="empty-state__tip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M9 18h6" />

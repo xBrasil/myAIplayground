@@ -33,11 +33,8 @@ $frontendDir = Join-Path $repoRoot "frontend"
 $backendDir  = Join-Path $repoRoot "backend"
 $dataDir     = Join-Path $repoRoot "data"
 $venvPython  = Join-Path $repoRoot ".venv\Scripts\python.exe"
-$backendLog  = Join-Path $dataDir "backend.log"
-$frontendLog = Join-Path $dataDir "frontend.log"
-
-$backendUrl  = "http://127.0.0.1:8000/api/health"
-$frontendUrl = "http://127.0.0.1:5173"
+$backendLog  = Join-Path $dataDir "system\logs\backend.log"
+$frontendLog = Join-Path $dataDir "system\logs\frontend.log"
 
 # --- Pre-flight checks ---
 if (-not (Test-Path (Join-Path $frontendDir "package.json"))) {
@@ -46,11 +43,71 @@ if (-not (Test-Path (Join-Path $frontendDir "package.json"))) {
 if (-not (Test-Path $venvPython)) {
     throw (T 'script.run.venvNotFound')
 }
-if (-not (Test-Path (Join-Path $dataDir ".env"))) {
+if (-not (Test-Path (Join-Path $dataDir "system\.env")) -and -not (Test-Path (Join-Path $dataDir ".env"))) {
     throw (T 'script.run.envNotFound')
 }
 
 if (-not (Test-Path $dataDir)) { New-Item -ItemType Directory -Path $dataDir | Out-Null }
+New-Item -ItemType Directory -Force -Path (Join-Path $dataDir "system\logs") | Out-Null
+
+# --- Port resolution ---
+# Helper: kill stale processes on a given port that belong to this repo
+function Free-Port {
+    param([int]$Port)
+    try {
+        $netstat = netstat -ano -p TCP 2>$null | Select-String "127.0.0.1:$Port" | Select-String "LISTENING"
+        foreach ($line in $netstat) {
+            $pid = ($line -split '\s+')[-1]
+            if ($pid -match '^\d+$' -and [int]$pid -gt 0) {
+                try {
+                    $proc = Get-Process -Id ([int]$pid) -ErrorAction SilentlyContinue
+                    if ($proc -and $proc.Path -like "$repoRoot*") {
+                        Write-Host "  Killing stale process PID $pid on port $Port" -ForegroundColor Yellow
+                        Stop-Process -Id ([int]$pid) -Force -ErrorAction SilentlyContinue
+                        Start-Sleep -Milliseconds 500
+                    }
+                } catch {}
+            }
+        }
+    } catch {}
+}
+
+# Helper: find a free port starting from $StartPort
+function Find-FreePort {
+    param([int]$StartPort, [int]$MaxTries = 10)
+    for ($i = 0; $i -lt $MaxTries; $i++) {
+        $port = $StartPort + $i
+        $listener = netstat -ano -p TCP 2>$null | Select-String "127.0.0.1:$port" | Select-String "LISTENING"
+        if (-not $listener) { return $port }
+    }
+    return $StartPort
+}
+
+# Try to free default ports first (kill stale processes from previous runs)
+Free-Port -Port 8000
+Free-Port -Port 5173
+
+# Determine available ports
+$backendPort  = Find-FreePort -StartPort 8000
+$frontendPort = Find-FreePort -StartPort 5173
+
+if ($backendPort -ne 8000) {
+    Write-Host "  Port 8000 is busy — using port $backendPort for backend" -ForegroundColor Yellow
+}
+if ($frontendPort -ne 5173) {
+    Write-Host "  Port 5173 is busy — using port $frontendPort for frontend" -ForegroundColor Yellow
+}
+
+# Set env vars for child processes (backend reads API_PORT, Vite exposes VITE_*)
+$env:API_PORT = $backendPort
+$env:VITE_API_PORT = $backendPort
+
+# Write ports state file for tray.py
+$portsFile = Join-Path $dataDir "system\.ports"
+@{ backend = $backendPort; frontend = $frontendPort } | ConvertTo-Json | Set-Content -Path $portsFile -Encoding UTF8
+
+$backendUrl  = "http://127.0.0.1:${backendPort}/api/health"
+$frontendUrl = "http://127.0.0.1:${frontendPort}"
 
 # --- Track child processes ---
 $script:children = @()
@@ -83,7 +140,7 @@ function Stop-Children {
         }
     }
     # Fallback: kill any remaining processes on our ports that belong to this repo
-    foreach ($port in @(8000, 5173)) {
+    foreach ($port in @($backendPort, $frontendPort)) {
         try {
             $netstat = netstat -ano -p TCP 2>$null | Select-String "127.0.0.1:$port" | Select-String "LISTENING"
             foreach ($line in $netstat) {
@@ -99,6 +156,8 @@ function Stop-Children {
             }
         } catch {}
     }
+    # Remove ports state file
+    Remove-Item -Path $portsFile -Force -ErrorAction SilentlyContinue
 }
 
 # Clean up children when PowerShell exits
@@ -111,11 +170,11 @@ if ($backendAlreadyRunning) {
 } else {
     Write-Step (T 'script.run.startingBackend')
     $backendProc = Start-Process -FilePath $venvPython `
-        -ArgumentList "-m", "uvicorn", "app.main:app", "--reload", "--host", "127.0.0.1", "--port", "8000", "--log-config", "log_config.json" `
+        -ArgumentList "-m", "uvicorn", "app.main:app", "--reload", "--host", "127.0.0.1", "--port", "$backendPort", "--log-config", "log_config.json" `
         -WorkingDirectory $backendDir `
         -NoNewWindow -PassThru `
         -RedirectStandardOutput $backendLog `
-        -RedirectStandardError (Join-Path $dataDir "backend-err.log")
+        -RedirectStandardError (Join-Path $dataDir "system\logs\backend-err.log")
     $script:children += $backendProc
 }
 
@@ -127,7 +186,7 @@ if ($frontendAlreadyRunning) {
     Write-Step (T 'script.run.startingFrontend')
     # Wrap in powershell to prepend timestamps to each line
     $frontendCmd = @"
-& cmd.exe /c 'npm run dev -- --host=127.0.0.1 --port=5173 --strictPort' 2>&1 |
+& cmd.exe /c 'npm run dev -- --host=127.0.0.1 --port=$frontendPort --strictPort' 2>&1 |
     ForEach-Object { "`$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') `$_" } |
     Out-File -FilePath "$frontendLog" -Encoding utf8
 "@
@@ -172,7 +231,7 @@ if (-not $backendReady -or -not $frontendReady) {
     throw (T 'script.run.serviceNotReady' @{services=($missing -join ' + '); timeout="$timeout"})
 }
 
-Write-Host "`n  Backend:  http://127.0.0.1:8000" -ForegroundColor Green
+Write-Host "`n  Backend:  http://127.0.0.1:$backendPort" -ForegroundColor Green
 Write-Host "  Frontend: $frontendUrl" -ForegroundColor Green
 
 # --- Open browser ---

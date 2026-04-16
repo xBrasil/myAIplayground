@@ -1,7 +1,6 @@
 import base64
 import json
 import logging
-import sys
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -76,14 +75,16 @@ class ChatService:
         except Exception:
             return ""
 
+    _MAX_READ_CHARS = 2_000_000  # ~2 MB hard cap per file read
+
     def _read_text_file(self, file_path: str) -> str:
         try:
-            return Path(file_path).read_text("utf-8", errors="ignore")
+            return Path(file_path).read_text("utf-8", errors="ignore")[:self._MAX_READ_CHARS]
         except Exception:
             return "(Erro ao ler o arquivo)"
 
     def _read_document_file(self, file_path: str) -> str:
-        return extract_document_text(file_path, sys.maxsize)
+        return extract_document_text(file_path, self._MAX_READ_CHARS)
 
     def _read_any_file(self, file_path: str) -> str:
         """Read a file by detecting its type from extension."""
