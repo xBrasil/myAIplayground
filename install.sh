@@ -219,21 +219,27 @@ for a in data.get('assets', []):
         else
           # Extract (handle both .zip and .tar.gz)
           rm -rf "$LLAMA_DIR"/*
-          case "$ASSET_NAME" in
-            *.tar.gz|*.tgz)
-              tar xzf "$TMP_FILE" -C "$LLAMA_DIR"
-              ;;
-            *.zip)
-              if command -v unzip &>/dev/null; then
-                unzip -o "$TMP_FILE" -d "$LLAMA_DIR"
-              else
-                "$VENV_PYTHON" -c "import zipfile; zipfile.ZipFile('$TMP_FILE').extractall('$LLAMA_DIR')"
-              fi
-              ;;
-            *)
-              err "Unknown archive format: $ASSET_NAME"
-              ;;
-          esac
+          if ! {
+            case "$ASSET_NAME" in
+              *.tar.gz|*.tgz)
+                tar xzf "$TMP_FILE" -C "$LLAMA_DIR"
+                ;;
+              *.zip)
+                if command -v unzip &>/dev/null; then
+                  unzip -o "$TMP_FILE" -d "$LLAMA_DIR"
+                else
+                  "$VENV_PYTHON" -c "import zipfile; zipfile.ZipFile('$TMP_FILE').extractall('$LLAMA_DIR')"
+                fi
+                ;;
+              *)
+                err "Unknown archive format: $ASSET_NAME"
+                false
+                ;;
+            esac
+          }; then
+            rm -f "$TMP_FILE"
+            exit 1
+          fi
           rm -f "$TMP_FILE"
 
           # Move files from subdirectories to root if needed
@@ -245,10 +251,14 @@ for a in data.get('assets', []):
           # Make executable
           chmod +x "$LLAMA_DIR/llama-server" 2>/dev/null || true
 
-          # Save version
-          echo -n "$LATEST_TAG" > "$LLAMA_VERSION_FILE"
-          LLAMA_INSTALLED=true
-          ok "llama-server installed ($LATEST_TAG)"
+          # Save version only if the binary is present and executable
+          if [ -x "$LLAMA_DIR/llama-server" ]; then
+            echo -n "$LATEST_TAG" > "$LLAMA_VERSION_FILE"
+            LLAMA_INSTALLED=true
+            ok "llama-server installed ($LATEST_TAG)"
+          else
+            err "llama-server install failed: '$LLAMA_DIR/llama-server' is missing or not executable"
+          fi
         fi
       else
         err "No matching binary found for pattern: $ASSET_PATTERN"

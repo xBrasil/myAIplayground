@@ -77,8 +77,8 @@ free_port 8000
 free_port 5173
 
 # Determine available ports
-BACKEND_PORT=$(find_free_port 8000)
-FRONTEND_PORT=$(find_free_port 5173)
+if ! BACKEND_PORT=$(find_free_port 8000); then exit 1; fi
+if ! FRONTEND_PORT=$(find_free_port 5173); then exit 1; fi
 
 [ "$BACKEND_PORT" -ne 8000 ] && warn "Port 8000 is busy — using port $BACKEND_PORT for backend"
 [ "$FRONTEND_PORT" -ne 5173 ] && warn "Port 5173 is busy — using port $FRONTEND_PORT for frontend"
@@ -119,21 +119,12 @@ check_http() {
 }
 
 # ── Start backend ───────────────────────────────────────────────
-# In production mode (--no-browser, used by tray.py) disable uvicorn
-# --reload and Vite file-watching so that file changes during shutdown /
-# uninstall don't restart the servers.
-RELOAD_FLAG="--reload"
-if [ "$NO_BROWSER" = true ]; then
-  export MYAI_NO_RELOAD=1
-  RELOAD_FLAG=""
-fi
-
 if check_http "$BACKEND_URL"; then
   step "Backend already running"
 else
   step "Starting backend..."
   cd "$BACKEND_DIR"
-  "$VENV_PYTHON" -m uvicorn app.main:app $RELOAD_FLAG --host 127.0.0.1 --port "$BACKEND_PORT" --log-config log_config.json \
+  "$VENV_PYTHON" -m uvicorn app.main:app --host 127.0.0.1 --port "$BACKEND_PORT" --log-config log_config.json \
     >"$BACKEND_LOG" 2>"$BACKEND_ERR_LOG" &
   BACKEND_PID=$!
   cd "$REPO_ROOT"
@@ -223,11 +214,9 @@ _monitor() {
       cleanup
       exit 1
     fi
-    # Also check if backend API is still reachable.  With --reload
-    # (dev mode), os._exit in the worker doesn't kill the reloader
-    # parent, so kill -0 keeps succeeding.  Without --reload
-    # (production) the HTTP check is still a fast, reliable way to
-    # detect a clean /api/shutdown exit.
+    # Also check if backend API is still reachable — the HTTP
+    # check detects a clean /api/shutdown exit even if kill -0 on
+    # the PID hasn't updated yet.
     if ! check_http "$BACKEND_URL"; then
       sleep 2
       if ! check_http "$BACKEND_URL"; then

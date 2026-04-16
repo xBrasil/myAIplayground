@@ -458,7 +458,7 @@ class ModelService:
 
     @staticmethod
     def _detect_gpu() -> GpuInfo:
-        """Detect the best available GPU: NVIDIA > AMD > Apple Metal > none."""
+        """Detect the best available GPU: Apple Metal > NVIDIA > AMD > none."""
         system = platform.system()
 
         # 1. macOS Apple Silicon → Metal (always available on arm64)

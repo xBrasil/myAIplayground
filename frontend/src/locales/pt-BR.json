@@ -350,6 +350,7 @@
   "script.run.envNotFound": "data/system/.env não encontrado. Rode install.cmd primeiro.",
   "script.run.serviceNotReady": "{{services}} não ficou pronto em {{timeout}}s. Verifique os logs em data\\",
   "script.run.unexpectedExit": "{{name}} encerrou inesperadamente (exit code {{code}}). Verifique os logs em data\\",
+  "script.run.noFreePort": "Nenhuma porta livre no intervalo {{start}}-{{end}}. Todas as {{tries}} portas candidatas estão ocupadas.",
 
   "script.tray.openBrowser": "Abrir no Navegador",
   "script.tray.viewLogs": "Ver Logs",

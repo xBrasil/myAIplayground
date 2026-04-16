@@ -350,6 +350,7 @@
   "script.run.envNotFound": "data/system/.env introuvable. Lancez install.cmd d'abord.",
   "script.run.serviceNotReady": "{{services}} n'a pas été prêt en {{timeout}}s. Vérifiez les logs dans data\\",
   "script.run.unexpectedExit": "{{name}} s'est arrêté de façon inattendue (code de sortie {{code}}). Vérifiez les logs dans data\\",
+  "script.run.noFreePort": "Aucun port libre trouvé dans la plage {{start}}-{{end}}. Les {{tries}} ports candidats sont tous occupés.",
 
   "script.tray.openBrowser": "Ouvrir dans le Navigateur",
   "script.tray.viewLogs": "Voir les Journaux",
