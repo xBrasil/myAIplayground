@@ -291,9 +291,9 @@ export default function ChatLayout({
         />
         {followUps && followUps.length > 0 && !busy && (
           <div className="follow-up-suggestions">
-            {followUps.map((text) => (
+            {followUps.map((text, idx) => (
               <button
-                key={text}
+                key={`followup-${idx}`}
                 type="button"
                 className="follow-up-chip"
                 onClick={() => onFollowUpClick?.(text)}

@@ -44,7 +44,7 @@
 | **i18n** | Português (BR), English (US), Español e Français — detecta automaticamente o idioma do navegador |
 | **Tema escuro** | UI minimalista e responsiva com design dark-mode |
 | **Janela deslizante** | Gestão automática de contexto: truncamento de conteúdo longo, descarte de mensagens antigas e retry em estouro |
-| **Privacidade total** | Conversas e arquivos ficam em `data/` no seu disco. Nada é enviado para a nuvem. |
+| **Privacidade total** | Conversas e arquivos ficam em `data/user/` no seu disco. Nada é enviado para a nuvem. |
 | **Ícone na bandeja** | Em vez de uma janela de console, a aplicação roda como ícone na bandeja do sistema (system tray) com menu para abrir, reiniciar, ver logs e encerrar |
 
 ---
@@ -113,7 +113,7 @@ O My AI Playground roda modelos de IA localmente no seu hardware. Os requisitos 
 | **VRAM (GPU)** | 16 GB+ (NVIDIA com CUDA) |
 | **Disco** | ~15 GB para o modelo |
 
-> **Nota:** sem VRAM suficiente, o llama.cpp fará offloading para a RAM do sistema (modo CPU/parcial), resultando em inferência significativamente mais lenta. Se você receber erros de **Out of Memory (OOM)**, experimente um modelo menor ou reduza `N_CTX` no arquivo `data/.env`.
+> **Nota:** sem VRAM suficiente, o llama.cpp fará offloading para a RAM do sistema (modo CPU/parcial), resultando em inferência significativamente mais lenta. Se você receber erros de **Out of Memory (OOM)**, experimente um modelo menor ou reduza `N_CTX` no arquivo `data/system/.env`.
 
 ---
 
@@ -145,7 +145,7 @@ O instalador:
 - Cria o ambiente virtual `.venv` e instala dependências do backend
 - Instala dependências npm do frontend
 - Baixa o binário mais recente do `llama-server` (CUDA ou CPU, conforme sua GPU)
-- Cria `data/.env` a partir de `backend/.env.example`
+- Cria `data/system/.env` a partir de `backend/.env.example`
 
 #### Execução
 
@@ -157,11 +157,11 @@ O launcher:
 - Inicia backend (FastAPI na porta 8000) e frontend (Vite na porta 5173) em segundo plano
 - Exibe um ícone na bandeja do sistema (system tray) com menu: **Abrir no Navegador**, **Ver Logs**, **Reiniciar**, **Sair**
 - Aguarda os serviços ficarem prontos e abre a interface no navegador automaticamente
-- Logs salvos em `data/backend.log` e `data/frontend.log`
+- Logs salvos em `data/system/logs/backend.log` e `data/system/logs/frontend.log`
 
 > **Modo diagnóstico:** para ver o log completo no console (útil para depuração), use `run.cmd` em vez de `tray.cmd`.
 
-> **Dica:** o primeiro uso de cada modelo envolve download do GGUF do Hugging Face. Modelos ficam em cache em `data/model-cache/`.
+> **Dica:** o primeiro uso de cada modelo envolve download do GGUF do Hugging Face. Modelos ficam em cache em `data/system/model-cache/`.
 
 ---
 
@@ -251,10 +251,13 @@ myAIplayground/
 │       ├── core/         # config (pydantic-settings)
 │       └── services/     # chat, model, storage, input_adapter, document, web, filesystem, whisper
 ├── data/              # Dados locais (ignorados pelo git)
-│   ├── app.db            # SQLite com conversas e mensagens
-│   ├── uploads/          # Arquivos enviados nas conversas
-│   ├── model-cache/      # GGUF e mmproj baixados do HF
-│   └── llama-server/     # Binário do llama-server
+│   ├── user/             # Dados do usuário (preservados na desinstalação)
+│   │   ├── app.db           # SQLite com conversas e mensagens
+│   │   └── uploads/         # Arquivos enviados nas conversas
+│   └── system/           # Dados do sistema (removidos na desinstalação)
+│       ├── model-cache/     # GGUF e mmproj baixados do HF
+│       ├── llama-server/    # Binário do llama-server
+│       └── logs/            # Logs da aplicação
 ├── docs/              # Documentação adicional
 ├── scripts/           # Scripts utilitários (install, run, tray, release, i18n, test)
 ├── install.cmd        # Instalação automatizada (Windows)
@@ -270,9 +273,9 @@ myAIplayground/
 
 ## Privacidade
 
-- As conversas são salvas apenas em `data/app.db` (local).
-- Arquivos enviados ficam em `data/uploads/` (local).
-- Os ajustes do aplicativo (idioma, voz, instruções personalizadas, pastas permitidas etc.) ficam em `data/settings.json` (local).
+- As conversas são salvas apenas em `data/user/app.db` (local).
+- Arquivos enviados ficam em `data/user/uploads/` (local).
+- Os ajustes do aplicativo (idioma, voz, instruções personalizadas, pastas permitidas etc.) ficam em `data/user/settings.json` (local).
 - O download inicial dos modelos vem do Hugging Face. Após isso, tudo roda offline.
 - **Pesquisa web**: quando ativada nos Ajustes, o modelo pode fazer buscas no DuckDuckGo e acessar páginas web. Essas requisições saem da sua máquina. Desative nos Ajustes para modo totalmente offline.
 - **Acesso a arquivos locais**: quando ativado nos Ajustes, o modelo pode ler arquivos **somente** das pastas que você permitiu explicitamente. Acesso é READ-ONLY e protegido contra travessia de diretório.
@@ -306,14 +309,27 @@ Criado por [Rodolfo Motta Saraiva](https://rmsaraiva.com/) como projeto pessoal 
 |---|---|
 | [llama.cpp](https://github.com/ggml-org/llama.cpp) | MIT |
 | [FastAPI](https://github.com/tiangolo/fastapi) | MIT |
+| [Uvicorn](https://github.com/encode/uvicorn) | BSD-3-Clause |
+| [SQLAlchemy](https://github.com/sqlalchemy/sqlalchemy) | MIT |
+| [Pydantic](https://github.com/pydantic/pydantic) | MIT |
 | [React](https://github.com/facebook/react) | MIT |
+| [Vite](https://github.com/vitejs/vite) | MIT |
+| [react-markdown](https://github.com/remarkjs/react-markdown) | MIT |
+| [KaTeX](https://github.com/KaTeX/KaTeX) (via rehype-katex) | MIT |
 | [Hugging Face Hub](https://github.com/huggingface/huggingface_hub) | Apache 2.0 |
 | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) | MIT |
+| [Pillow](https://github.com/python-pillow/Pillow) | HPND |
+| [pillow-heif](https://github.com/bigcat88/pillow_heif) | BSD-3-Clause |
+| [PyMuPDF](https://github.com/pymupdf/PyMuPDF) | AGPL-3.0 |
+| [python-docx](https://github.com/python-openxml/python-docx) | MIT |
+| [openpyxl](https://foss.heptapod.net/openpyxl/openpyxl) | MIT |
+| [python-pptx](https://github.com/scanny/python-pptx) | MIT |
 | [duckduckgo-search](https://github.com/deedy5/duckduckgo_search) | MIT |
 | [beautifulsoup4](https://www.crummy.com/software/BeautifulSoup/) | MIT |
-| [pillow-heif](https://github.com/bigcat88/pillow_heif) | BSD-3-Clause |
 | [svglib](https://github.com/deeplook/svglib) | LGPL-3.0 |
 | [reportlab](https://www.reportlab.com/dev/opensource/) | BSD-3-Clause |
+| [pystray](https://github.com/moses-palmer/pystray) | LGPL-3.0 |
+| [Inno Setup](https://jrsoftware.org/isinfo.php) (instalador Windows) | [Inno Setup License](https://jrsoftware.org/files/is/license.txt) |
 | [Google Gemma 4](https://ai.google.dev/gemma) (modelos de IA — não distribuídos) | [Gemma Terms of Use](https://ai.google.dev/gemma/terms) |
 
 ---
@@ -358,7 +374,7 @@ Criado por [Rodolfo Motta Saraiva](https://rmsaraiva.com/) como projeto pessoal 
 | Gemma 4 E4B (4B) | 16 GB | 6 GB | ~5 GB |
 | Gemma 4 26B-A4B (26B MoE) | 32 GB | 16 GB+ | ~15 GB |
 
-> Without sufficient VRAM, llama.cpp will offload layers to system RAM (CPU mode), resulting in significantly slower inference. If you encounter **OOM errors**, try a smaller model or reduce `N_CTX` in `data/.env`.
+> Without sufficient VRAM, llama.cpp will offload layers to system RAM (CPU mode), resulting in significantly slower inference. If you encounter **OOM errors**, try a smaller model or reduce `N_CTX` in `data/system/.env`.
 
 ### Installation
 
@@ -387,7 +403,7 @@ The installer:
 - Creates the `.venv` virtual environment and installs backend dependencies
 - Installs frontend npm dependencies
 - Downloads the latest `llama-server` binary (CUDA or CPU, according to your GPU)
-- Creates `data/.env` from `backend/.env.example`
+- Creates `data/system/.env` from `backend/.env.example`
 
 Launch with:
 
@@ -410,15 +426,15 @@ The installer performs the same steps as the Windows version: creates `.venv`, i
 - Starts backend (FastAPI on port 8000) and frontend (Vite on port 5173)
 - Waits for both to be ready and opens the UI in your browser
 - Reuses already-running services — safe to run more than once
-- Logs saved to `data/backend.log` and `data/frontend.log`
+- Logs saved to `data/system/logs/backend.log` and `data/system/logs/frontend.log`
 
-> **Tip:** the first use of each model triggers a GGUF download from Hugging Face. Models are cached in `data/model-cache/`.
+> **Tip:** the first use of each model triggers a GGUF download from Hugging Face. Models are cached in `data/system/model-cache/`.
 
 ### Privacy
 
-- Conversations are stored in a local SQLite database (`data/app.db`).
-- Uploaded files stay in `data/uploads/`.
-- App settings (language, voice, custom instructions, allowed folders, etc.) are stored in `data/settings.json`.
+- Conversations are stored in a local SQLite database (`data/user/app.db`).
+- Uploaded files stay in `data/user/uploads/`.
+- App settings (language, voice, custom instructions, allowed folders, etc.) are stored in `data/user/settings.json`.
 - Initial model downloads come from Hugging Face. After that, everything runs offline.
 - **Web search**: when enabled in Settings, the model can query DuckDuckGo and fetch pages. Those requests leave your machine — disable it for fully offline mode.
 - **Local filesystem access**: when enabled, the model can read files **only** from folders you explicitly allowed. Access is read-only and protected against directory traversal.
@@ -431,4 +447,33 @@ The installer performs the same steps as the Windows version: creates `.venv`, i
 - **Gemma models are not included** — they are downloaded from [Hugging Face](https://huggingface.co/) at the user's request and are subject to [Google's Gemma Terms of Use](https://ai.google.dev/gemma/terms).
 - **Stack**: React 19 + TypeScript + Vite (frontend), FastAPI + SQLAlchemy (backend), llama.cpp server (inference), faster-whisper (speech-to-text).
 - **License**: [Apache License 2.0](LICENSE) — Copyright 2026 Rodolfo Motta Saraiva.
+
+### Third-party components
+
+| Component | License |
+|---|---|
+| [llama.cpp](https://github.com/ggml-org/llama.cpp) | MIT |
+| [FastAPI](https://github.com/tiangolo/fastapi) | MIT |
+| [Uvicorn](https://github.com/encode/uvicorn) | BSD-3-Clause |
+| [SQLAlchemy](https://github.com/sqlalchemy/sqlalchemy) | MIT |
+| [Pydantic](https://github.com/pydantic/pydantic) | MIT |
+| [React](https://github.com/facebook/react) | MIT |
+| [Vite](https://github.com/vitejs/vite) | MIT |
+| [react-markdown](https://github.com/remarkjs/react-markdown) | MIT |
+| [KaTeX](https://github.com/KaTeX/KaTeX) (via rehype-katex) | MIT |
+| [Hugging Face Hub](https://github.com/huggingface/huggingface_hub) | Apache 2.0 |
+| [faster-whisper](https://github.com/SYSTRAN/faster-whisper) | MIT |
+| [Pillow](https://github.com/python-pillow/Pillow) | HPND |
+| [pillow-heif](https://github.com/bigcat88/pillow_heif) | BSD-3-Clause |
+| [PyMuPDF](https://github.com/pymupdf/PyMuPDF) | AGPL-3.0 |
+| [python-docx](https://github.com/python-openxml/python-docx) | MIT |
+| [openpyxl](https://foss.heptapod.net/openpyxl/openpyxl) | MIT |
+| [python-pptx](https://github.com/scanny/python-pptx) | MIT |
+| [duckduckgo-search](https://github.com/deedy5/duckduckgo_search) | MIT |
+| [beautifulsoup4](https://www.crummy.com/software/BeautifulSoup/) | MIT |
+| [svglib](https://github.com/deeplook/svglib) | LGPL-3.0 |
+| [reportlab](https://www.reportlab.com/dev/opensource/) | BSD-3-Clause |
+| [pystray](https://github.com/moses-palmer/pystray) | LGPL-3.0 |
+| [Inno Setup](https://jrsoftware.org/isinfo.php) (Windows installer) | [Inno Setup License](https://jrsoftware.org/files/is/license.txt) |
+| [Google Gemma 4](https://ai.google.dev/gemma) (AI models — not distributed) | [Gemma Terms of Use](https://ai.google.dev/gemma/terms) |
 

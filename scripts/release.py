@@ -134,8 +134,11 @@ def build_zip(output: Path) -> None:
     # Add empty data/ scaffold directories
     data_scaffold = [
         "data/",
-        "data/model-cache/",
-        "data/uploads/",
+        "data/user/",
+        "data/user/uploads/",
+        "data/system/",
+        "data/system/model-cache/",
+        "data/system/logs/",
     ]
 
     with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as zf:

@@ -112,14 +112,15 @@ $backendDir  = Join-Path $repoRoot "backend"
 $venvDir     = Join-Path $repoRoot ".venv"
 $venvPython  = Join-Path $venvDir "Scripts\python.exe"
 $envExample  = Join-Path $backendDir ".env.example"
-$envFile     = Join-Path $repoRoot "data\.env"
-$logFile     = Join-Path $repoRoot "data\install.log"
+$envFile     = Join-Path $repoRoot "data\system\.env"
+$logFile     = Join-Path $repoRoot "data\system\logs\install.log"
 $isAdmin     = Test-Admin
 $isWindows   = $env:OS -eq "Windows_NT"
 $hasWinget   = (Get-Command winget -ErrorAction SilentlyContinue) -ne $null
 
-# Ensure data/ exists before starting the log file
-New-Item -ItemType Directory -Force -Path (Join-Path $repoRoot "data") | Out-Null
+# Ensure data directories exist before starting the log file
+New-Item -ItemType Directory -Force -Path (Join-Path $repoRoot "data\user\uploads") | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $repoRoot "data\system\logs") | Out-Null
 
 # Create/clear the log file in UTF-8 so Inno Setup's LoadStringsFromFile can read it
 Set-Content -Path $logFile -Value "" -Encoding UTF8
@@ -243,7 +244,7 @@ Assert-ExitCode "pip install requirements"
 # ---- 3. llama.cpp server (pre-built binary) ----
 
 Write-Step (T 'script.install.llamaServer')
-$llamaServerDir = Join-Path $repoRoot "data\llama-server"
+$llamaServerDir = Join-Path $repoRoot "data\system\llama-server"
 $llamaVersionFile = Join-Path $llamaServerDir "version.txt"
 $llamaInstalled = $false
 
@@ -389,9 +390,53 @@ try {
 # ---- 5. Data dirs + .env ----
 
 Write-Step (T 'script.install.dataDirs')
-New-Item -ItemType Directory -Force -Path (Join-Path $repoRoot "data") | Out-Null
-New-Item -ItemType Directory -Force -Path (Join-Path $repoRoot "data\uploads") | Out-Null
-New-Item -ItemType Directory -Force -Path (Join-Path $repoRoot "data\model-cache") | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $repoRoot "data\user\uploads") | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $repoRoot "data\system\model-cache") | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $repoRoot "data\system\logs") | Out-Null
+
+# ---- Migrate legacy flat data/ layout to new user/system structure ----
+$legacyEnv = Join-Path $repoRoot "data\.env"
+if ((Test-Path $legacyEnv) -and -not (Test-Path $envFile)) {
+    Write-Status "  Migrating data/.env -> data/system/.env" -ForegroundColor Yellow
+    Move-Item $legacyEnv $envFile -Force
+}
+$legacyDb = Join-Path $repoRoot "data\app.db"
+if ((Test-Path $legacyDb) -and -not (Test-Path (Join-Path $repoRoot "data\user\app.db"))) {
+    Write-Status "  Migrating data/app.db -> data/user/app.db" -ForegroundColor Yellow
+    Move-Item $legacyDb (Join-Path $repoRoot "data\user\app.db") -Force
+}
+$legacyUploads = Join-Path $repoRoot "data\uploads"
+if ((Test-Path $legacyUploads) -and (Get-ChildItem $legacyUploads -ErrorAction SilentlyContinue | Select-Object -First 1)) {
+    Write-Status "  Migrating data/uploads/ -> data/user/uploads/" -ForegroundColor Yellow
+    Get-ChildItem $legacyUploads -File | Move-Item -Destination (Join-Path $repoRoot "data\user\uploads") -Force
+    Remove-Item $legacyUploads -Recurse -Force -ErrorAction SilentlyContinue
+}
+$legacySettings = Join-Path $repoRoot "data\settings.json"
+if ((Test-Path $legacySettings) -and -not (Test-Path (Join-Path $repoRoot "data\user\settings.json"))) {
+    Write-Status "  Migrating data/settings.json -> data/user/settings.json" -ForegroundColor Yellow
+    Move-Item $legacySettings (Join-Path $repoRoot "data\user\settings.json") -Force
+}
+$legacyLegal = Join-Path $repoRoot "data\legal-acceptance.json"
+if ((Test-Path $legacyLegal) -and -not (Test-Path (Join-Path $repoRoot "data\user\legal-acceptance.json"))) {
+    Write-Status "  Migrating data/legal-acceptance.json -> data/user/legal-acceptance.json" -ForegroundColor Yellow
+    Move-Item $legacyLegal (Join-Path $repoRoot "data\user\legal-acceptance.json") -Force
+}
+$legacyModelCache = Join-Path $repoRoot "data\model-cache"
+if ((Test-Path $legacyModelCache) -and -not (Test-Path (Join-Path $repoRoot "data\system\model-cache"))) {
+    Write-Status "  Migrating data/model-cache/ -> data/system/model-cache/" -ForegroundColor Yellow
+    Move-Item $legacyModelCache (Join-Path $repoRoot "data\system\model-cache") -Force
+}
+$legacyLlama = Join-Path $repoRoot "data\llama-server"
+if ((Test-Path $legacyLlama) -and -not (Test-Path (Join-Path $repoRoot "data\system\llama-server"))) {
+    Write-Status "  Migrating data/llama-server/ -> data/system/llama-server/" -ForegroundColor Yellow
+    Move-Item $legacyLlama (Join-Path $repoRoot "data\system\llama-server") -Force
+}
+foreach ($legacyLog in @('install.log', 'backend.log', 'backend-err.log', 'frontend.log', 'frontend-err.log')) {
+    $legacyLogPath = Join-Path $repoRoot "data\$legacyLog"
+    if (Test-Path $legacyLogPath) {
+        Move-Item $legacyLogPath (Join-Path $repoRoot "data\system\logs\$legacyLog") -Force
+    }
+}
 
 Write-Step (T 'script.install.preparingEnv')
 if (-not (Test-Path $envFile)) {

@@ -6,6 +6,7 @@ import type { HealthResponse, ModelKey } from '../types';
 interface ModelSelectorModalProps {
   open: boolean;
   health: HealthResponse | null;
+  cudaAvailable: boolean;
   onClose: () => void;
   onSelectModel: (modelKey: ModelKey) => Promise<void>;
   onRefreshHealth: () => Promise<HealthResponse | null>;
@@ -17,6 +18,7 @@ interface ModelMeta {
   vramEstimate: string;
   capabilitiesKey: string;
   limitationsKey: string;
+  requiresGpu: boolean;
 }
 
 const MODEL_META: ModelMeta[] = [
@@ -26,6 +28,7 @@ const MODEL_META: ModelMeta[] = [
     vramEstimate: '~4 GB',
     capabilitiesKey: 'modelSelector.e2b.capabilities',
     limitationsKey: 'modelSelector.e2b.limitations',
+    requiresGpu: false,
   },
   {
     key: 'e4b',
@@ -33,6 +36,7 @@ const MODEL_META: ModelMeta[] = [
     vramEstimate: '~6 GB',
     capabilitiesKey: 'modelSelector.e4b.capabilities',
     limitationsKey: 'modelSelector.e4b.limitations',
+    requiresGpu: true,
   },
   {
     key: '26b',
@@ -40,6 +44,7 @@ const MODEL_META: ModelMeta[] = [
     vramEstimate: '~14 GB',
     capabilitiesKey: 'modelSelector.26b.capabilities',
     limitationsKey: 'modelSelector.26b.limitations',
+    requiresGpu: true,
   },
 ];
 
@@ -48,6 +53,7 @@ type SwitchState = 'idle' | 'switching' | 'success' | 'error';
 export default function ModelSelectorModal({
   open,
   health,
+  cudaAvailable,
   onClose,
   onSelectModel,
   onRefreshHealth,
@@ -94,6 +100,7 @@ export default function ModelSelectorModal({
         summary: model?.summary || '',
         cached: model?.cached || false,
         modelId: model?.model_id || '',
+        requiresGpu: meta.requiresGpu,
       };
     });
   }, [health]);
@@ -221,6 +228,7 @@ export default function ModelSelectorModal({
             {models.map((model) => {
               const isActive = model.key === activeKey;
               const isSelected = model.key === selectedKey;
+              const gpuBlocked = model.requiresGpu && !cudaAvailable;
               const capabilities = tList(model.capabilitiesKey);
               const limitations = tList(model.limitationsKey);
 
@@ -228,22 +236,24 @@ export default function ModelSelectorModal({
                 <button
                   key={model.key}
                   type="button"
-                  className={`model-card ${isSelected ? 'model-card--selected' : ''} ${isActive ? 'model-card--active' : ''}`}
-                  onClick={() => switchState === 'idle' && setSelectedKey(model.key)}
-                  disabled={switchState !== 'idle'}
+                  className={`model-card ${isSelected ? 'model-card--selected' : ''} ${isActive ? 'model-card--active' : ''} ${gpuBlocked ? 'model-card--disabled' : ''}`}
+                  onClick={() => switchState === 'idle' && !gpuBlocked && setSelectedKey(model.key)}
+                  disabled={switchState !== 'idle' || gpuBlocked}
                 >
                   <div className="model-card__header">
                     <strong className="model-card__name">{model.label}</strong>
                     <span className="model-card__summary">{model.summary}</span>
                     <div className="model-card__badges">
                       {isActive && <span className="badge badge--current">{t('modelSelector.current')}</span>}
-                      {model.cached
-                        ? <span className="badge badge--cached">{t('modelSelector.cached')}</span>
-                        : <span className="badge badge--download">{t('modelSelector.notCached')}</span>}
+                      {gpuBlocked
+                        ? <span className="badge badge--gpu-required">{t('modelSelector.gpuRequired')}</span>
+                        : model.cached
+                          ? <span className="badge badge--cached">{t('modelSelector.cached')}</span>
+                          : <span className="badge badge--download">{t('modelSelector.notCached')}</span>}
                     </div>
                   </div>
 
-                  {isSelected && (
+                  {isSelected && !gpuBlocked && (
                     <div className="model-card__details">
                       <div className="model-card__specs">
                         <span>{t('modelSelector.contextWindow')}: <strong>{model.contextWindow}</strong></span>
@@ -268,6 +278,9 @@ export default function ModelSelectorModal({
                         </div>
                       )}
                     </div>
+                  )}
+                  {gpuBlocked && (
+                    <p className="model-card__gpu-warning">{t('modelSelector.gpuWarning')}</p>
                   )}
                 </button>
               );

@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import ApiAccessPanel from './components/ApiAccessPanel';
 import ChatLayout from './components/ChatLayout';
@@ -112,7 +112,7 @@ export default function App() {
     }
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        // 1 decimal â‰ˆ 11 km â€” matches the "city-level" promise in the settings copy.
+        // 1 decimal ~= 11 km -- matches the "city-level" promise in the settings copy.
         setUserLocation(`${position.coords.latitude.toFixed(1)},${position.coords.longitude.toFixed(1)}`);
       },
       () => {
@@ -139,10 +139,16 @@ export default function App() {
 
   function upsertConversation(nextConversation: Conversation) {
     setConversations((current) => {
-      // Also remove the optimistic draft â€” the real conversation replaces it.
+      // Also remove the optimistic draft -- the real conversation replaces it.
       const remaining = current.filter((c) => c.id !== nextConversation.id && c.id !== DRAFT_ID);
       return [nextConversation, ...remaining];
     });
+    // Eagerly update ref so synchronous readers (e.g. autoplay) see fresh data
+    // without waiting for React's async render cycle.
+    const remaining = conversationsRef.current.filter(
+      (c) => c.id !== nextConversation.id && c.id !== DRAFT_ID,
+    );
+    conversationsRef.current = [nextConversation, ...remaining];
   }
 
   async function reloadConversations() {
@@ -361,7 +367,7 @@ export default function App() {
   }
 
   async function handleSendText(text: string) {
-    // Don't abort the previous stream â€“ let it finish in the background so its
+    // Don't abort the previous stream -- let it finish in the background so its
     // conversation keeps its response.  We just take over the shared UI state.
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -979,6 +985,7 @@ export default function App() {
       <ModelSelectorModal
         open={modelSelectorOpen}
         health={health}
+        cudaAvailable={health?.cuda_available ?? false}
         onClose={() => setModelSelectorOpen(false)}
         onSelectModel={handleSelectModel}
         onRefreshHealth={refreshHealth}

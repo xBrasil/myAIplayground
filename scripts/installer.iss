@@ -49,10 +49,10 @@ Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"; LicenseFile: "{
 Name: "french"; MessagesFile: "compiler:Languages\French.isl"; LicenseFile: "{#RepoDir}\LICENSE"
 
 [CustomMessages]
-english.UninstallDataPrompt=Also delete the user data folder?%n%n%1%n%nIt may contain conversations, uploaded files, and downloaded models. Choose "Yes" to delete everything permanently, or "No" to keep it.
-brazilianportuguese.UninstallDataPrompt=Remover também a pasta de dados do usuário?%n%n%1%n%nEla pode conter conversas, arquivos enviados e modelos baixados. Escolha "Sim" para apagar tudo permanentemente, ou "Não" para preservar.
-spanish.UninstallDataPrompt=¿Eliminar también la carpeta de datos del usuario?%n%n%1%n%nPuede contener conversaciones, archivos subidos y modelos descargados. Elige "Sí" para borrar todo permanentemente, o "No" para conservarla.
-french.UninstallDataPrompt=Supprimer aussi le dossier de données de l'utilisateur ?%n%n%1%n%nIl peut contenir des conversations, des fichiers envoyés et des modèles téléchargés. Choisissez « Oui » pour tout supprimer définitivement, ou « Non » pour le conserver.
+english.UninstallDataPrompt=Also delete your personal data?%n%n%1%n%nThis folder contains your conversations, uploaded files, and preferences. Choose "Yes" to delete permanently, or "No" to keep it.%n%n(Downloaded models and system files are always removed.)
+brazilianportuguese.UninstallDataPrompt=Remover também seus dados pessoais?%n%n%1%n%nEssa pasta contém suas conversas, arquivos enviados e preferências. Escolha "Sim" para apagar permanentemente, ou "Não" para preservar.%n%n(Modelos baixados e arquivos de sistema são sempre removidos.)
+spanish.UninstallDataPrompt=¿Eliminar también sus datos personales?%n%n%1%n%nEsta carpeta contiene sus conversaciones, archivos subidos y preferencias. Elige "Sí" para borrar permanentemente, o "No" para conservarla.%n%n(Los modelos descargados y archivos de sistema siempre se eliminan.)
+french.UninstallDataPrompt=Supprimer aussi vos données personnelles ?%n%n%1%n%nCe dossier contient vos conversations, fichiers envoyés et préférences. Choisissez « Oui » pour tout supprimer définitivement, ou « Non » pour le conserver.%n%n(Les modèles téléchargés et les fichiers système sont toujours supprimés.)
 
 english.LaunchApp=Launch My AI Playground now
 brazilianportuguese.LaunchApp=Iniciar o My AI Playground agora
@@ -109,11 +109,14 @@ Source: "{#RepoDir}\docs\*"; DestDir: "{app}\docs"; Flags: ignoreversion recurse
 
 [Dirs]
 ; Permissions: users-modify — allows runtime writes when installed per-machine (Program Files).
-; uninsneveruninstall — preserve user-generated content (chats, uploads, cached models) on uninstall.
-Name: "{app}\data"; Permissions: users-modify; Flags: uninsneveruninstall
-Name: "{app}\data\model-cache"; Permissions: users-modify; Flags: uninsneveruninstall
-Name: "{app}\data\uploads"; Permissions: users-modify; Flags: uninsneveruninstall
-Name: "{app}\data\llama-server"; Permissions: users-modify; Flags: uninsneveruninstall
+; System data: always deleted on uninstall (models, logs, engine binaries).
+Name: "{app}\data\system"; Permissions: users-modify
+Name: "{app}\data\system\model-cache"; Permissions: users-modify
+Name: "{app}\data\system\llama-server"; Permissions: users-modify
+Name: "{app}\data\system\logs"; Permissions: users-modify
+; User data: preserved on uninstall unless user opts to delete.
+Name: "{app}\data\user"; Permissions: users-modify; Flags: uninsneveruninstall
+Name: "{app}\data\user\uploads"; Permissions: users-modify; Flags: uninsneveruninstall
 
 [Icons]
 Name: "{group}\My AI Playground"; Filename: "{app}\.venv\Scripts\pythonw.exe"; Parameters: """{app}\scripts\tray.py"""; IconFilename: "{app}\frontend\public\favicon.ico"; WorkingDir: "{app}"
@@ -208,13 +211,24 @@ function InitializeSetup: Boolean;
 var
   PrevUninstall: String;
   ResultCode: Integer;
+  QuoteEnd: Integer;
 begin
   Result := True;
   PrevUninstall := GetPreviousUninstallString;
   if PrevUninstall <> '' then begin
-    // Remove surrounding quotes if present
-    if (Length(PrevUninstall) > 1) and (PrevUninstall[1] = '"') then
-      PrevUninstall := Copy(PrevUninstall, 2, Length(PrevUninstall) - 2);
+    // Extract the executable path: handle quoted paths like '"C:\path\unins000.exe" /SILENT'
+    if (Length(PrevUninstall) > 1) and (PrevUninstall[1] = '"') then begin
+      QuoteEnd := Pos('"', Copy(PrevUninstall, 2, Length(PrevUninstall) - 1));
+      if QuoteEnd > 0 then
+        PrevUninstall := Copy(PrevUninstall, 2, QuoteEnd - 1)
+      else
+        PrevUninstall := Copy(PrevUninstall, 2, Length(PrevUninstall) - 1);
+    end else begin
+      // Unquoted: take everything up to the first space (if any)
+      QuoteEnd := Pos(' ', PrevUninstall);
+      if QuoteEnd > 0 then
+        PrevUninstall := Copy(PrevUninstall, 1, QuoteEnd - 1);
+    end;
     if FileExists(PrevUninstall) then begin
       // Run the old uninstaller silently, keeping user data
       Exec(PrevUninstall, '/VERYSILENT /NORESTART /SUPPRESSMSGBOXES', '',
@@ -331,10 +345,12 @@ var
 begin
   if CurUninstallStep = usUninstall then begin
     // --- Stop running app processes before removing files ---
-    // Try graceful shutdown via backend API
+    // Try graceful shutdown via backend API on default and fallback ports.
+    // HttpWebRequest has a reliable hard timeout, unlike Invoke-WebRequest
+    // whose -TimeoutSec can hang on connection-level issues in PS 5.1.
     try
       Exec('powershell.exe',
-        '-NoProfile -ExecutionPolicy Bypass -Command "try { Invoke-WebRequest -Uri http://127.0.0.1:8000/api/shutdown -Method POST -Headers @{Origin=''http://127.0.0.1:5173''} -TimeoutSec 3 -ErrorAction SilentlyContinue } catch {}"',
+        '-NoProfile -ExecutionPolicy Bypass -Command "foreach ($p in 8000..8009) { try { $r=[System.Net.HttpWebRequest]::Create(\"http://127.0.0.1:${p}/api/shutdown\"); $r.Method=''POST''; $r.Timeout=1500; $r.Headers.Add(''Origin'',''http://127.0.0.1:5173''); $null=$r.GetResponse(); break } catch {} finally { if ($r) { try { $r.Abort() } catch {} } } }"',
         '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     except
     end;
@@ -347,15 +363,24 @@ begin
     except
     end;
 
-    // Also kill by port in case processes are not inside {app}
+    // Also kill by window title in case processes are not inside {app}
     try
       Exec('taskkill.exe', '/F /T /FI "WINDOWTITLE eq My AI Playground*"',
         '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     except
     end;
 
+    // Kill any process still listening on our ports, including fallback range
+    // Backend: 8000-8009, Frontend: 5173-5182, llama-server: 8081
+    try
+      Exec('powershell.exe',
+        '-NoProfile -ExecutionPolicy Bypass -Command "$ports = @(8081) + @(8000..8009) + @(5173..5182); foreach ($port in $ports) { try { $lines = netstat -ano 2>$null | Select-String ''127\.0\.0\.1:'' | Select-String ('':'' + $port + ''\s'') | Select-String ''LISTENING''; foreach ($l in $lines) { if ($l -match ''\s(\d+)\s*$'') { taskkill /F /T /PID $Matches[1] 2>$null } } } catch {} }"',
+        '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    except
+    end;
+
     // Brief wait for processes to release files
-    Sleep(1500);
+    Sleep(1000);
   end;
 
   if CurUninstallStep = usPostUninstall then begin
@@ -370,8 +395,11 @@ begin
     DeleteFile(ExpandConstant('{userdesktop}\My AI Playground.lnk'));
     DeleteFile(ExpandConstant('{userappdata}\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\My AI Playground.lnk'));
 
-    // 3. Ask about user data (chats, uploads, cached models).
-    DataDir := AppDir + '\data';
+    // 3. Always remove system data (models, logs, engine binaries).
+    DelTree(AppDir + '\data\system', True, True, True);
+
+    // 4. Ask about user data (conversations, uploads, preferences).
+    DataDir := AppDir + '\data\user';
     if DirExists(DataDir) then begin
       if MsgBox(FmtMessage(CustomMessage('UninstallDataPrompt'), [DataDir]),
                 mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then begin
@@ -379,10 +407,11 @@ begin
       end;
     end;
 
-    // 4. Drop {app} itself if everything above left it empty.
+    // 5. Drop {app}\data and {app} itself if everything above left them empty.
+    RemoveDir(AppDir + '\data');
     RemoveDir(AppDir);
 
-    // 5. Check if files remain (in-use locks) and offer restart to complete cleanup
+    // 6. Check if files remain (in-use locks) and offer restart to complete cleanup
     NeedRestart := False;
     if DirExists(AppDir + '\.venv') or DirExists(AppDir + '\backend') or
        DirExists(AppDir + '\frontend') then
@@ -393,13 +422,32 @@ begin
     end;
 
     if NeedRestart then begin
-      // Schedule leftover dirs for removal on next login via RunOnce registry
+      // Schedule only the leftover locked dirs for removal on next login (preserve data/)
+      try
+        Exec('powershell.exe',
+          '-NoProfile -ExecutionPolicy Bypass -Command "' +
+          '$dirs = @(''.venv'',''backend'',''frontend''); ' +
+          'foreach ($d in $dirs) { ' +
+          '  $p = Join-Path ''' + AppDir + ''' $d; ' +
+          '  if (Test-Path $p) { ' +
+          '    Remove-Item $p -Recurse -Force -ErrorAction SilentlyContinue ' +
+          '  } ' +
+          '}; ' +
+          '$remaining = Get-ChildItem ''' + AppDir + ''' -ErrorAction SilentlyContinue; ' +
+          'if (-not $remaining) { Remove-Item ''' + AppDir + ''' -Force -ErrorAction SilentlyContinue }"',
+          '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+      except
+      end;
+      // Also schedule via RunOnce as a last resort for stubborn locks
       try
         Exec('powershell.exe',
           '-NoProfile -ExecutionPolicy Bypass -Command "' +
           'New-ItemProperty -Path ''HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce'' ' +
           '-Name ''MyAIPlaygroundCleanup'' ' +
-          '-Value (''cmd /c rd /s /q \"' + AppDir + '\"'') ' +
+          '-Value (''cmd /c ' +
+          'if exist \"' + AppDir + '\.venv\" rd /s /q \"' + AppDir + '\.venv\" ^& ' +
+          'if exist \"' + AppDir + '\backend\" rd /s /q \"' + AppDir + '\backend\" ^& ' +
+          'if exist \"' + AppDir + '\frontend\" rd /s /q \"' + AppDir + '\frontend\"'') ' +
           '-PropertyType String -Force -ErrorAction SilentlyContinue"',
           '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
       except

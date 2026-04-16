@@ -1,4 +1,5 @@
-const API_ORIGIN = 'http://127.0.0.1:8000';
+const API_PORT = import.meta.env.VITE_API_PORT || '8000';
+const API_ORIGIN = `http://127.0.0.1:${API_PORT}`;
 const API_BASE = `${API_ORIGIN}/api`;
 
 /** All known localStorage keys that should be server-persisted. */
@@ -17,7 +18,7 @@ const SETTING_KEYS = [
 ];
 
 /**
- * Initialise settings from the backend (`data/settings.json`).
+ * Initialise settings from the backend (`data/user/settings.json`).
  *
  * Must be called **before** React renders so every `localStorage.getItem`
  * already returns the values that belong to this installation.

@@ -88,6 +88,11 @@ class ModelService:
         self._log_file_handle = None
         atexit.register(self._shutdown)
 
+        # Override default to e2b when no GPU is available
+        if not self.cuda_available and self._active_model_key != "e2b":
+            logger.info("No GPU detected — defaulting to e2b model")
+            self._active_model_key = "e2b"
+
     # ── Log file ─────────────────────────────────────────────────
 
     @property
@@ -267,7 +272,7 @@ class ModelService:
         binary = self._find_server_binary()
         if binary is None:
             raise RuntimeError(
-                "llama-server não encontrado em data/llama-server/. "
+                "llama-server não encontrado em data/system/llama-server/. "
                 "Execute install.cmd para baixar os binários."
             )
 

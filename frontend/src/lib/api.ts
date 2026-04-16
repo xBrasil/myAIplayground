@@ -9,7 +9,8 @@ import type {
   ServerConfig,
 } from '../types';
 
-const API_ORIGIN = 'http://127.0.0.1:8000';
+const API_PORT = import.meta.env.VITE_API_PORT || '8000';
+const API_ORIGIN = `http://127.0.0.1:${API_PORT}`;
 const API_BASE = `${API_ORIGIN}/api`;
 
 export function getUploadAssetUrl(attachmentPath?: string | null): string | null {
