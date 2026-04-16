@@ -386,7 +386,7 @@ if (-not $llamaInstalled) {
         # Save version
         $latestTag | Out-File -FilePath $llamaVersionFile -Encoding UTF8 -NoNewline
         $llamaInstalled = $true
-        $variant = if ($cudaDllPattern) { "CUDA" } elseif ($hasAmdGpu) { "HIP" } else { "CPU" }
+        $variant = if ($cudaDllPattern) { "CUDA" } elseif ($hasAmdGpu) { "HIP" } elseif ($IsMacOS) { "Metal" } else { "CPU" }
         Write-Status "  $(T 'script.install.llamaInstalledOk' @{version=$latestTag; variant=$variant})" -ForegroundColor Green
     } catch {
         Write-Status "  $(T 'script.install.llamaDownloadError' @{error="$_"})" -ForegroundColor Red

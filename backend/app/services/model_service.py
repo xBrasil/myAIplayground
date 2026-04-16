@@ -4,6 +4,7 @@ import logging
 import os
 import platform
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -476,7 +477,6 @@ class ModelService:
                            backend="metal", display_name=chip_name)
 
         # 2. NVIDIA → CUDA (short-circuit if nvidia-smi is not on PATH)
-        import shutil
         if shutil.which("nvidia-smi"):
             try:
                 result = subprocess.run(
@@ -519,19 +519,18 @@ class ModelService:
         elif system == "Windows":
             try:
                 result = subprocess.run(
-                    ["wmic", "path", "Win32_VideoController",
-                     "get", "Name", "/value"],
+                    ["powershell", "-NoProfile", "-Command",
+                     "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name"],
                     capture_output=True, text=True, timeout=10,
-                    creationflags=0x08000000,  # CREATE_NO_WINDOW
+                    creationflags=subprocess.CREATE_NO_WINDOW,
                 )
                 for line in result.stdout.splitlines():
-                    if "=" in line:
-                        name = line.split("=", 1)[1].strip()
-                        if re.search(r'AMD|Radeon', name, re.IGNORECASE) \
-                                and not re.search(r'Microsoft', name, re.IGNORECASE):
-                            return GpuInfo(available=True, vendor="amd",
-                                           backend="hip",
-                                           display_name=name)
+                    name = line.strip()
+                    if name and re.search(r'AMD|Radeon', name, re.IGNORECASE) \
+                            and not re.search(r'Microsoft', name, re.IGNORECASE):
+                        return GpuInfo(available=True, vendor="amd",
+                                       backend="hip",
+                                       display_name=name)
             except Exception:
                 pass
 

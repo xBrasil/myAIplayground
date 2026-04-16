@@ -69,7 +69,7 @@ find_free_port() {
     fi
   done
   err "No free port found in range $start-$((start + max_tries - 1)). All $max_tries candidate ports are busy."
-  exit 1
+  return 1
 }
 
 # Try to free default ports first

@@ -56,7 +56,7 @@ function Free-Port {
     param([int]$Port)
     try {
         $repoRootLower = $repoRoot.ToLowerInvariant()
-        $portPattern = [regex]::Escape(":$Port")
+        $portPattern = [regex]::Escape(":$Port") + '\s'
         $netstat = netstat -ano -p TCP 2>$null | Select-String $portPattern | Select-String "LISTENING"
         foreach ($line in $netstat) {
             $pid = ($line -split '\s+')[-1]
@@ -89,7 +89,7 @@ function Find-FreePort {
     param([int]$StartPort, [int]$MaxTries = 10)
     for ($i = 0; $i -lt $MaxTries; $i++) {
         $port = $StartPort + $i
-        $portPattern = [regex]::Escape(":$port")
+        $portPattern = [regex]::Escape(":$port") + '\s'
         $listener = netstat -ano -p TCP 2>$null | Select-String $portPattern | Select-String "LISTENING"
         if (-not $listener) { return $port }
     }

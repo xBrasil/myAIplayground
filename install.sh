@@ -211,40 +211,45 @@ for a in data.get('assets', []):
         echo "  Downloading: $ASSET_NAME ($LATEST_TAG)..."
         mkdir -p "$LLAMA_DIR"
         TMP_FILE="/tmp/llama-server-download"
-        curl -L -o "$TMP_FILE" "$ASSET_URL"
+        curl -L --fail -o "$TMP_FILE" "$ASSET_URL"
 
-        # Extract (handle both .zip and .tar.gz)
-        rm -rf "$LLAMA_DIR"/*
-        case "$ASSET_NAME" in
-          *.tar.gz|*.tgz)
-            tar xzf "$TMP_FILE" -C "$LLAMA_DIR"
-            ;;
-          *.zip)
-            if command -v unzip &>/dev/null; then
-              unzip -o "$TMP_FILE" -d "$LLAMA_DIR"
-            else
-              "$VENV_PYTHON" -c "import zipfile; zipfile.ZipFile('$TMP_FILE').extractall('$LLAMA_DIR')"
-            fi
-            ;;
-          *)
-            err "Unknown archive format: $ASSET_NAME"
-            ;;
-        esac
-        rm -f "$TMP_FILE"
+        if [ ! -s "$TMP_FILE" ]; then
+          err "Download failed or file is empty: $ASSET_NAME"
+          rm -f "$TMP_FILE"
+        else
+          # Extract (handle both .zip and .tar.gz)
+          rm -rf "$LLAMA_DIR"/*
+          case "$ASSET_NAME" in
+            *.tar.gz|*.tgz)
+              tar xzf "$TMP_FILE" -C "$LLAMA_DIR"
+              ;;
+            *.zip)
+              if command -v unzip &>/dev/null; then
+                unzip -o "$TMP_FILE" -d "$LLAMA_DIR"
+              else
+                "$VENV_PYTHON" -c "import zipfile; zipfile.ZipFile('$TMP_FILE').extractall('$LLAMA_DIR')"
+              fi
+              ;;
+            *)
+              err "Unknown archive format: $ASSET_NAME"
+              ;;
+          esac
+          rm -f "$TMP_FILE"
 
-        # Move files from subdirectories to root if needed
-        NESTED=$(find "$LLAMA_DIR" -name "llama-server" -type f | head -1)
-        if [ -n "$NESTED" ] && [ "$(dirname "$NESTED")" != "$LLAMA_DIR" ]; then
-          mv "$(dirname "$NESTED")"/* "$LLAMA_DIR"/ 2>/dev/null || true
+          # Move files from subdirectories to root if needed
+          NESTED=$(find "$LLAMA_DIR" -name "llama-server" -type f | head -1)
+          if [ -n "$NESTED" ] && [ "$(dirname "$NESTED")" != "$LLAMA_DIR" ]; then
+            mv "$(dirname "$NESTED")"/* "$LLAMA_DIR"/ 2>/dev/null || true
+          fi
+
+          # Make executable
+          chmod +x "$LLAMA_DIR/llama-server" 2>/dev/null || true
+
+          # Save version
+          echo -n "$LATEST_TAG" > "$LLAMA_VERSION_FILE"
+          LLAMA_INSTALLED=true
+          ok "llama-server installed ($LATEST_TAG)"
         fi
-
-        # Make executable
-        chmod +x "$LLAMA_DIR/llama-server" 2>/dev/null || true
-
-        # Save version
-        echo -n "$LATEST_TAG" > "$LLAMA_VERSION_FILE"
-        LLAMA_INSTALLED=true
-        ok "llama-server installed ($LATEST_TAG)"
       else
         err "No matching binary found for pattern: $ASSET_PATTERN"
         echo "  Download manually from: https://github.com/ggml-org/llama.cpp/releases"

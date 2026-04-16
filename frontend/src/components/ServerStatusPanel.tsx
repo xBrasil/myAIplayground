@@ -58,7 +58,7 @@ export default function ServerStatusPanel({ open, health, onClose }: ServerStatu
               <dt>{t('serverPanel.gpu')}</dt>
               <dd>
                 {health.gpu_vendor !== 'none'
-                  ? `${health.gpu_display_name} (${health.gpu_backend.toUpperCase()})`
+                  ? `${health.gpu_display_name} (${health.gpu_backend?.toUpperCase()})`
                   : t('serverPanel.gpuNo')
                 }
               </dd>
