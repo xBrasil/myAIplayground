@@ -296,7 +296,12 @@ if [ -f "$DATA_DIR/app.db" ] && [ ! -f "$DATA_DIR/user/app.db" ]; then
 fi
 if [ -d "$DATA_DIR/uploads" ] && [ "$(ls -A "$DATA_DIR/uploads" 2>/dev/null)" ]; then
   warn "Migrating data/uploads/ -> data/user/uploads/"
-  mv "$DATA_DIR/uploads/"* "$DATA_DIR/user/uploads/" 2>/dev/null || true
+  find "$DATA_DIR/uploads" -maxdepth 1 -mindepth 1 -print0 | while IFS= read -r -d '' item; do
+    name=$(basename "$item")
+    if [ ! -e "$DATA_DIR/user/uploads/$name" ]; then
+      mv "$item" "$DATA_DIR/user/uploads/"
+    fi
+  done
   rmdir "$DATA_DIR/uploads" 2>/dev/null || true
 fi
 if [ -f "$DATA_DIR/settings.json" ] && [ ! -f "$DATA_DIR/user/settings.json" ]; then
@@ -309,14 +314,35 @@ if [ -f "$DATA_DIR/legal-acceptance.json" ] && [ ! -f "$DATA_DIR/user/legal-acce
 fi
 if [ -d "$DATA_DIR/model-cache" ] && [ "$(ls -A "$DATA_DIR/model-cache" 2>/dev/null)" ]; then
   warn "Migrating data/model-cache/ -> data/system/model-cache/"
-  mv "$DATA_DIR/model-cache"/* "$DATA_DIR/system/model-cache/" 2>/dev/null || true
-  rmdir "$DATA_DIR/model-cache" 2>/dev/null || true
+  if [ ! -d "$DATA_DIR/system/model-cache" ] || [ -z "$(ls -A "$DATA_DIR/system/model-cache" 2>/dev/null)" ]; then
+    # Destination empty or absent — move the whole directory
+    rm -rf "$DATA_DIR/system/model-cache" 2>/dev/null
+    mv "$DATA_DIR/model-cache" "$DATA_DIR/system/model-cache"
+  else
+    # Merge: move items that don't already exist at destination (dotfile-safe)
+    find "$DATA_DIR/model-cache" -maxdepth 1 -mindepth 1 -print0 | while IFS= read -r -d '' item; do
+      name=$(basename "$item")
+      if [ ! -e "$DATA_DIR/system/model-cache/$name" ]; then
+        mv "$item" "$DATA_DIR/system/model-cache/"
+      fi
+    done
+    rmdir "$DATA_DIR/model-cache" 2>/dev/null || true
+  fi
 fi
 if [ -d "$DATA_DIR/llama-server" ] && [ "$(ls -A "$DATA_DIR/llama-server" 2>/dev/null)" ]; then
   warn "Migrating data/llama-server/ -> data/system/llama-server/"
-  mkdir -p "$DATA_DIR/system/llama-server"
-  mv "$DATA_DIR/llama-server"/* "$DATA_DIR/system/llama-server/" 2>/dev/null || true
-  rmdir "$DATA_DIR/llama-server" 2>/dev/null || true
+  if [ ! -d "$DATA_DIR/system/llama-server" ] || [ -z "$(ls -A "$DATA_DIR/system/llama-server" 2>/dev/null)" ]; then
+    rm -rf "$DATA_DIR/system/llama-server" 2>/dev/null
+    mv "$DATA_DIR/llama-server" "$DATA_DIR/system/llama-server"
+  else
+    find "$DATA_DIR/llama-server" -maxdepth 1 -mindepth 1 -print0 | while IFS= read -r -d '' item; do
+      name=$(basename "$item")
+      if [ ! -e "$DATA_DIR/system/llama-server/$name" ]; then
+        mv "$item" "$DATA_DIR/system/llama-server/"
+      fi
+    done
+    rmdir "$DATA_DIR/llama-server" 2>/dev/null || true
+  fi
 fi
 for legacyLog in install.log backend.log backend-err.log frontend.log frontend-err.log; do
   if [ -f "$DATA_DIR/$legacyLog" ]; then

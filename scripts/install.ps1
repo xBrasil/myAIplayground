@@ -207,7 +207,7 @@ if (-not $SkipCudaTorch) {
 if ($hasNvidiaGpu) {
     Write-Status "  $(T 'script.install.gpuDetected')" -ForegroundColor Green
 } elseif ($hasAmdGpu) {
-    Write-Status "  AMD GPU detected (HIP/Radeon)" -ForegroundColor Green
+    Write-Status "  $(T 'script.install.amdGpuDetected')" -ForegroundColor Green
 } else {
     Write-Status "  $(T 'script.install.gpuNotDetected')" -ForegroundColor Yellow
 }
@@ -290,7 +290,7 @@ if ($isWindows) {
     } elseif ($hasAmdGpu) {
         $assetPattern = "*-bin-win-hip-radeon-x64*"
         $cudaDllPattern = $null  # AMD HIP does not need separate cudart
-        Write-Status "  AMD GPU: selecting HIP/Radeon binary" -ForegroundColor Green
+        Write-Status "  $(T 'script.install.amdHipBinary')" -ForegroundColor Green
     } else {
         $assetPattern = "*-bin-win-cpu-x64*"
         Write-Status "  $(T 'script.install.noCpuFallback')" -ForegroundColor Yellow
@@ -423,8 +423,22 @@ $legacyModelCache = Join-Path $repoRoot "data\model-cache"
 $systemModelCache = Join-Path $repoRoot "data\system\model-cache"
 if ((Test-Path $legacyModelCache) -and (Get-ChildItem $legacyModelCache -ErrorAction SilentlyContinue | Select-Object -First 1)) {
     Write-Status "  Migrating data/model-cache/ -> data/system/model-cache/" -ForegroundColor Yellow
-    Get-ChildItem $legacyModelCache -Force | Move-Item -Destination $systemModelCache -Force
-    Remove-Item $legacyModelCache -Recurse -Force -ErrorAction SilentlyContinue
+    if (-not (Test-Path $systemModelCache)) {
+        Move-Item $legacyModelCache $systemModelCache -Force
+    } else {
+        foreach ($item in (Get-ChildItem $legacyModelCache -Force)) {
+            $dest = Join-Path $systemModelCache $item.Name
+            if (-not (Test-Path $dest)) {
+                Move-Item $item.FullName -Destination $systemModelCache -Force
+            } elseif (-not $item.PSIsContainer) {
+                Move-Item $item.FullName -Destination $dest -Force
+            }
+            # Skip directories that already exist at destination
+        }
+        if (-not (Get-ChildItem $legacyModelCache -Force -ErrorAction SilentlyContinue | Select-Object -First 1)) {
+            Remove-Item $legacyModelCache -Force -ErrorAction SilentlyContinue
+        }
+    }
 }
 $legacyLlama = Join-Path $repoRoot "data\llama-server"
 $systemLlama = Join-Path $repoRoot "data\system\llama-server"
@@ -433,8 +447,17 @@ if ((Test-Path $legacyLlama) -and (Get-ChildItem $legacyLlama -ErrorAction Silen
     if (-not (Test-Path $systemLlama)) {
         Move-Item $legacyLlama $systemLlama -Force
     } else {
-        Get-ChildItem $legacyLlama -Force | Move-Item -Destination $systemLlama -Force
-        Remove-Item $legacyLlama -Recurse -Force -ErrorAction SilentlyContinue
+        foreach ($item in (Get-ChildItem $legacyLlama -Force)) {
+            $dest = Join-Path $systemLlama $item.Name
+            if (-not (Test-Path $dest)) {
+                Move-Item $item.FullName -Destination $systemLlama -Force
+            } elseif (-not $item.PSIsContainer) {
+                Move-Item $item.FullName -Destination $dest -Force
+            }
+        }
+        if (-not (Get-ChildItem $legacyLlama -Force -ErrorAction SilentlyContinue | Select-Object -First 1)) {
+            Remove-Item $legacyLlama -Force -ErrorAction SilentlyContinue
+        }
     }
 }
 foreach ($legacyLog in @('install.log', 'backend.log', 'backend-err.log', 'frontend.log', 'frontend-err.log')) {

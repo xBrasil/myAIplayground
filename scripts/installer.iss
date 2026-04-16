@@ -450,9 +450,9 @@ begin
           'New-ItemProperty -Path ''HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce'' ' +
           '-Name ''MyAIPlaygroundCleanup'' ' +
           '-Value (''cmd /c ' +
-          'if exist \"' + SafeApp + '\.venv\" rd /s /q \"' + SafeApp + '\.venv\" ^& ' +
-          'if exist \"' + SafeApp + '\backend\" rd /s /q \"' + SafeApp + '\backend\" ^& ' +
-          'if exist \"' + SafeApp + '\frontend\" rd /s /q \"' + SafeApp + '\frontend\"'') ' +
+          'if exist \"' + AppDir + '\.venv\" rd /s /q \"' + AppDir + '\.venv\" ^& ' +
+          'if exist \"' + AppDir + '\backend\" rd /s /q \"' + AppDir + '\backend\" ^& ' +
+          'if exist \"' + AppDir + '\frontend\" rd /s /q \"' + AppDir + '\frontend\"'') ' +
           '-PropertyType String -Force -ErrorAction SilentlyContinue"',
           '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
       except
