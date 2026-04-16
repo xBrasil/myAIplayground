@@ -295,23 +295,10 @@ if ($isWindows) {
         $assetPattern = "*-bin-win-cpu-x64*"
         Write-Status "  $(T 'script.install.noCpuFallback')" -ForegroundColor Yellow
     }
-} elseif ($IsMacOS) {
-    if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq "Arm64") {
-        $assetPattern = "*-bin-macos-arm64*"
-        Write-Status "  Apple Silicon detected: selecting Metal binary" -ForegroundColor Green
-    } else {
-        $assetPattern = "*-bin-macos-x64*"
-    }
 } else {
-    # Linux
-    if ($hasNvidiaGpu) {
-        $assetPattern = "*-bin-ubuntu-*vulkan*x64*"  # Vulkan as universal GPU option
-    } elseif ($hasAmdGpu) {
-        $assetPattern = "*-bin-ubuntu-rocm*-x64*"
-        Write-Status "  AMD GPU: selecting ROCm binary" -ForegroundColor Green
-    } else {
-        $assetPattern = "*-bin-ubuntu-x64*"
-    }
+    # Linux/macOS use install.sh, not this script — this is a fallback
+    $assetPattern = "*-bin-win-cpu-x64*"
+    Write-Status "  $(T 'script.install.noCpuFallback')" -ForegroundColor Yellow
 }
 
 # Check if already installed and up-to-date
@@ -319,7 +306,7 @@ $currentVersion = if (Test-Path $llamaVersionFile) {
     (Get-Content $llamaVersionFile -Raw).Trim()
 } else { "" }
 
-$serverExe = if ($isWindows) { Join-Path $llamaServerDir "llama-server.exe" } else { Join-Path $llamaServerDir "llama-server" }
+$serverExe = Join-Path $llamaServerDir "llama-server.exe"
 
 if ((Test-Path $serverExe) -and $currentVersion) {
     Write-Status "  $(T 'script.install.llamaAlreadyInstalled' @{version=$currentVersion})" -ForegroundColor Green
@@ -375,15 +362,10 @@ if (-not $llamaInstalled) {
             } | Move-Item -Destination $llamaServerDir -Force
         }
 
-        # Make executable on Unix
-        if (-not $isWindows -and (Test-Path (Join-Path $llamaServerDir "llama-server"))) {
-            chmod +x (Join-Path $llamaServerDir "llama-server")
-        }
-
         # Save version
         $latestTag | Out-File -FilePath $llamaVersionFile -Encoding UTF8 -NoNewline
         $llamaInstalled = $true
-        $variant = if ($cudaDllPattern) { "CUDA" } elseif ($hasAmdGpu) { "HIP" } elseif ($IsMacOS) { "Metal" } else { "CPU" }
+        $variant = if ($cudaDllPattern) { "CUDA" } elseif ($hasAmdGpu) { "HIP" } else { "CPU" }
         Write-Status "  $(T 'script.install.llamaInstalledOk' @{version=$latestTag; variant=$variant})" -ForegroundColor Green
     } catch {
         Write-Status "  $(T 'script.install.llamaDownloadError' @{error="$_"})" -ForegroundColor Red
