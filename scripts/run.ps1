@@ -55,13 +55,25 @@ New-Item -ItemType Directory -Force -Path (Join-Path $dataDir "system\logs") | O
 function Free-Port {
     param([int]$Port)
     try {
-        $netstat = netstat -ano -p TCP 2>$null | Select-String "127.0.0.1:$Port" | Select-String "LISTENING"
+        $repoRootLower = $repoRoot.ToLowerInvariant().TrimEnd('\') + '\'
+        $portPattern = [regex]::Escape(":$Port") + '\s'
+        $netstat = netstat -ano -p TCP 2>$null | Select-String $portPattern | Select-String "LISTENING"
         foreach ($line in $netstat) {
             $pid = ($line -split '\s+')[-1]
             if ($pid -match '^\d+$' -and [int]$pid -gt 0) {
                 try {
                     $proc = Get-Process -Id ([int]$pid) -ErrorAction SilentlyContinue
-                    if ($proc -and $proc.Path -like "$repoRoot*") {
+                    $cimProc = Get-CimInstance Win32_Process -Filter "ProcessId = $pid" -ErrorAction SilentlyContinue
+
+                    $procPath = if ($proc -and $proc.Path) { $proc.Path.ToLowerInvariant() } else {
+                        if ($cimProc -and $cimProc.ExecutablePath) { $cimProc.ExecutablePath.ToLowerInvariant() } else { $null }
+                    }
+                    $commandLine = if ($cimProc -and $cimProc.CommandLine) { $cimProc.CommandLine.ToLowerInvariant() } else { $null }
+
+                    $belongsToRepo = ($procPath -and $procPath.StartsWith($repoRootLower)) -or
+                                     ($commandLine -and $commandLine.Contains($repoRootLower))
+
+                    if ($belongsToRepo) {
                         Write-Host "  Killing stale process PID $pid on port $Port" -ForegroundColor Yellow
                         Stop-Process -Id ([int]$pid) -Force -ErrorAction SilentlyContinue
                         Start-Sleep -Milliseconds 500
@@ -77,10 +89,12 @@ function Find-FreePort {
     param([int]$StartPort, [int]$MaxTries = 10)
     for ($i = 0; $i -lt $MaxTries; $i++) {
         $port = $StartPort + $i
-        $listener = netstat -ano -p TCP 2>$null | Select-String "127.0.0.1:$port" | Select-String "LISTENING"
+        $portPattern = [regex]::Escape(":$port") + '\s'
+        $listener = netstat -ano -p TCP 2>$null | Select-String $portPattern | Select-String "LISTENING"
         if (-not $listener) { return $port }
     }
-    return $StartPort
+    $endPort = $StartPort + $MaxTries - 1
+    throw (T 'script.run.noFreePort' @{start="$StartPort"; end="$endPort"; tries="$MaxTries"})
 }
 
 # Try to free default ports first (kill stale processes from previous runs)
@@ -102,9 +116,10 @@ if ($frontendPort -ne 5173) {
 $env:API_PORT = $backendPort
 $env:VITE_API_PORT = $backendPort
 
-# Write ports state file for tray.py
+# Write ports state file for tray.py (no BOM — PS 5.1 Set-Content adds one)
 $portsFile = Join-Path $dataDir "system\.ports"
-@{ backend = $backendPort; frontend = $frontendPort } | ConvertTo-Json | Set-Content -Path $portsFile -Encoding UTF8
+$portsJson = @{ backend = $backendPort; frontend = $frontendPort } | ConvertTo-Json
+[IO.File]::WriteAllText($portsFile, $portsJson)
 
 $backendUrl  = "http://127.0.0.1:${backendPort}/api/health"
 $frontendUrl = "http://127.0.0.1:${frontendPort}"
@@ -112,43 +127,38 @@ $frontendUrl = "http://127.0.0.1:${frontendPort}"
 # --- Track child processes ---
 $script:children = @()
 
-function Get-ProcessTree {
-    param([int]$ParentId)
-    $result = @()
-    try {
-        $kids = Get-CimInstance Win32_Process -Filter "ParentProcessId = $ParentId" -ErrorAction SilentlyContinue
-        foreach ($kid in $kids) {
-            $result += Get-ProcessTree -ParentId $kid.ProcessId
-            $result += $kid.ProcessId
-        }
-    } catch {}
-    return $result
-}
-
 function Stop-Children {
     foreach ($p in $script:children) {
         if (-not $p.HasExited) {
             Write-Host (T 'script.run.killingTree' @{id="$($p.Id)"}) -ForegroundColor Yellow
             try {
-                # Kill entire descendant tree (llama-server, node, etc.) bottom-up
-                $tree = Get-ProcessTree -ParentId $p.Id
-                foreach ($pid in $tree) {
-                    Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
-                }
-                Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+                # taskkill /T kills the entire process tree reliably on Windows
+                taskkill /F /T /PID $p.Id 2>$null | Out-Null
             } catch {}
         }
     }
     # Fallback: kill any remaining processes on our ports that belong to this repo
+    $repoRootLower = $repoRoot.ToLowerInvariant().TrimEnd('\') + '\'
     foreach ($port in @($backendPort, $frontendPort)) {
         try {
-            $netstat = netstat -ano -p TCP 2>$null | Select-String "127.0.0.1:$port" | Select-String "LISTENING"
+            $portPattern = [regex]::Escape(":$port") + '\s'
+            $netstat = netstat -ano -p TCP 2>$null | Select-String $portPattern | Select-String "LISTENING"
             foreach ($line in $netstat) {
                 $pid = ($line -split '\s+')[-1]
                 if ($pid -match '^\d+$' -and [int]$pid -gt 0) {
                     try {
                         $proc = Get-Process -Id ([int]$pid) -ErrorAction SilentlyContinue
-                        if ($proc -and $proc.Path -like "$repoRoot*") {
+                        $cimProc = Get-CimInstance Win32_Process -Filter "ProcessId = $pid" -ErrorAction SilentlyContinue
+
+                        $procPath = if ($proc -and $proc.Path) { $proc.Path.ToLowerInvariant() } else {
+                            if ($cimProc -and $cimProc.ExecutablePath) { $cimProc.ExecutablePath.ToLowerInvariant() } else { $null }
+                        }
+                        $commandLine = if ($cimProc -and $cimProc.CommandLine) { $cimProc.CommandLine.ToLowerInvariant() } else { $null }
+
+                        $belongsToRepo = ($procPath -and $procPath.StartsWith($repoRootLower)) -or
+                                         ($commandLine -and $commandLine.Contains($repoRootLower))
+
+                        if ($belongsToRepo) {
                             Stop-Process -Id ([int]$pid) -Force -ErrorAction SilentlyContinue
                         }
                     } catch {}
@@ -170,7 +180,7 @@ if ($backendAlreadyRunning) {
 } else {
     Write-Step (T 'script.run.startingBackend')
     $backendProc = Start-Process -FilePath $venvPython `
-        -ArgumentList "-m", "uvicorn", "app.main:app", "--reload", "--host", "127.0.0.1", "--port", "$backendPort", "--log-config", "log_config.json" `
+        -ArgumentList "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "$backendPort", "--log-config", "log_config.json" `
         -WorkingDirectory $backendDir `
         -NoNewWindow -PassThru `
         -RedirectStandardOutput $backendLog `
@@ -184,6 +194,7 @@ if ($frontendAlreadyRunning) {
     Write-Step (T 'script.run.frontendAlreadyRunning')
 } else {
     Write-Step (T 'script.run.startingFrontend')
+    $env:MYAI_NO_WATCH = "1"
     # Wrap in powershell to prepend timestamps to each line
     $frontendCmd = @"
 & cmd.exe /c 'npm run dev -- --host=127.0.0.1 --port=$frontendPort --strictPort' 2>&1 |
@@ -264,9 +275,9 @@ try {
                 exit $p.ExitCode
             }
         }
-        # Also check if backend API is still reachable (os._exit in a
-        # uvicorn --reload worker kills the child but the parent python
-        # process stays alive, so HasExited never becomes True).
+        # Also check if backend API is still reachable — the HTTP
+        # check detects a clean /api/shutdown exit even if the process
+        # object hasn't updated HasExited yet.
         if (-not (Test-HttpReady -Url $backendUrl)) {
             Start-Sleep -Seconds 2
             if (-not (Test-HttpReady -Url $backendUrl)) {

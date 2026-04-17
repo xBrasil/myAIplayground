@@ -6,7 +6,6 @@ import type { HealthResponse, ModelKey } from '../types';
 interface ModelSelectorModalProps {
   open: boolean;
   health: HealthResponse | null;
-  cudaAvailable: boolean;
   onClose: () => void;
   onSelectModel: (modelKey: ModelKey) => Promise<void>;
   onRefreshHealth: () => Promise<HealthResponse | null>;
@@ -53,7 +52,6 @@ type SwitchState = 'idle' | 'switching' | 'success' | 'error';
 export default function ModelSelectorModal({
   open,
   health,
-  cudaAvailable,
   onClose,
   onSelectModel,
   onRefreshHealth,
@@ -228,7 +226,7 @@ export default function ModelSelectorModal({
             {models.map((model) => {
               const isActive = model.key === activeKey;
               const isSelected = model.key === selectedKey;
-              const gpuBlocked = model.requiresGpu && !cudaAvailable;
+              const gpuBlocked = model.requiresGpu && (health == null || health.gpu_vendor === 'none');
               const capabilities = tList(model.capabilitiesKey);
               const limitations = tList(model.limitationsKey);
 

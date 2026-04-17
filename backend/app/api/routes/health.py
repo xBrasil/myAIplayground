@@ -1,6 +1,4 @@
 import os
-import signal
-import sys
 import threading
 
 from fastapi import APIRouter, HTTPException, Request
@@ -15,6 +13,7 @@ router = APIRouter(tags=["health"])
 @router.get("/health", response_model=HealthResponse)
 def healthcheck() -> HealthResponse:
     settings = get_settings()
+    gpu = model_service.gpu_info
     return HealthResponse(
         app_name=settings.app_name,
         environment=settings.app_env,
@@ -22,7 +21,10 @@ def healthcheck() -> HealthResponse:
         active_model_key=model_service.active_model_key,
         model_status=model_service.model_status,
         model_loaded=model_service.is_loaded,
-        cuda_available=model_service.cuda_available,
+        cuda_available=(gpu.vendor == "nvidia"),
+        gpu_vendor=gpu.vendor,
+        gpu_backend=model_service.server_backend,
+        gpu_display_name=gpu.display_name,
         context_size=model_service.context_size,
         model_setup_status=model_service.setup_status,
         model_loading_enabled=settings.enable_model_loading,
@@ -46,30 +48,12 @@ def shutdown(request: Request) -> dict:
 
     def _deferred_exit() -> None:
         import time
-        import subprocess
         time.sleep(0.5)
         model_service._shutdown()
-        if sys.platform == "win32":
-            # With uvicorn --reload, the parent process spawns this worker.
-            # os._exit(0) only kills the worker; the parent stays alive.
-            # Kill the parent's entire process tree to clean up everything.
-            ppid = os.getppid()
-            try:
-                subprocess.run(
-                    ["taskkill", "/F", "/T", "/PID", str(ppid)],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    creationflags=0x08000000,  # CREATE_NO_WINDOW
-                )
-            except Exception:
-                pass
-            os._exit(0)
-        else:
-            # On Unix, kill our own process group to clean up parent + workers
-            try:
-                os.killpg(os.getpgid(os.getpid()), signal.SIGTERM)
-            except OSError:
-                os._exit(0)
+        # uvicorn runs without --reload, so there is no reloader parent.
+        # Just exit — the launcher script (run.ps1 / run.sh) detects
+        # the death and cleans up the frontend process.
+        os._exit(0)
 
     threading.Thread(target=_deferred_exit, daemon=True).start()
     return {"ok": True}

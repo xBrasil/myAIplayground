@@ -556,10 +556,13 @@ def _monitor_health(icon) -> None:
     if ready:
         if _splash:
             _splash.update_status(T("script.tray.splash.openingBrowser"))
-            time.sleep(0.5)
-            _splash.close()
         icon.title = T("script.tray.tooltip.running")
         webbrowser.open(_get_frontend_url())
+        # Close splash after browser starts so the user sees it until the
+        # browser window appears on screen.
+        if _splash:
+            time.sleep(1.5)
+            _splash.close()
     else:
         if _splash:
             _splash.close()

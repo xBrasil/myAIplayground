@@ -93,11 +93,30 @@ ok "Node.js: $(node --version), npm: $(npm --version)"
 
 # GPU detection
 HAS_NVIDIA=false
-if command -v nvidia-smi &>/dev/null; then
+HAS_AMD=false
+HAS_ROCM=false
+IS_APPLE_SILICON=false
+
+if [ "$PLATFORM" = "macos" ] && [ "$ARCH" = "arm64" ]; then
+  IS_APPLE_SILICON=true
+  ok "Apple Silicon detected (Metal acceleration)"
+elif command -v nvidia-smi &>/dev/null; then
   HAS_NVIDIA=true
   ok "NVIDIA GPU detected"
+elif command -v lspci &>/dev/null && lspci 2>/dev/null | grep -Ei 'VGA compatible controller|3D controller|Display controller' | grep -Eiq 'AMD|ATI|Radeon'; then
+  HAS_AMD=true
+  if command -v rocminfo &>/dev/null; then
+    HAS_ROCM=true
+    ok "AMD GPU detected (ROCm available)"
+  else
+    warn "AMD GPU detected, but ROCm runtime not found; will use Vulkan mode"
+  fi
+elif command -v rocminfo &>/dev/null; then
+  HAS_AMD=true
+  HAS_ROCM=true
+  ok "AMD GPU detected (ROCm via rocminfo)"
 else
-  warn "No NVIDIA GPU detected (will use CPU mode)"
+  warn "No GPU detected (will use CPU mode)"
 fi
 
 # ── 2. Python venv + backend deps ──────────────────────────────
@@ -145,15 +164,22 @@ fi
 if [ "$LLAMA_INSTALLED" = false ]; then
   # Determine asset pattern
   ASSET_PATTERN=""
+  ASSET_EXCLUDE=""
   if [ "$PLATFORM" = "macos" ]; then
     if [ "$ARCH" = "arm64" ]; then
       ASSET_PATTERN="bin-macos-arm64"
+      ASSET_EXCLUDE="kleidiai"  # Exclude kleidiai variant
     else
       ASSET_PATTERN="bin-macos-x64"
     fi
   else
     # Linux
     if [ "$HAS_NVIDIA" = true ]; then
+      ASSET_PATTERN="bin-ubuntu.*vulkan.*x64"
+    elif [ "$HAS_ROCM" = true ]; then
+      ASSET_PATTERN="bin-ubuntu-rocm.*x64"
+    elif [ "$HAS_AMD" = true ]; then
+      # AMD GPU without ROCm runtime: use Vulkan build
       ASSET_PATTERN="bin-ubuntu.*vulkan.*x64"
     else
       ASSET_PATTERN="bin-ubuntu-x64"
@@ -171,45 +197,87 @@ if [ "$LLAMA_INSTALLED" = false ]; then
     LATEST_TAG=$(echo "$RELEASE_JSON" | "$VENV_PYTHON" -c "import sys,json; print(json.load(sys.stdin).get('tag_name',''))" 2>/dev/null || echo "")
 
     if [ -n "$LATEST_TAG" ]; then
-      # Find matching asset URL
+      # Find matching asset URL (exclude cudart bundles and kleidiai variants)
       ASSET_URL=$(echo "$RELEASE_JSON" | "$VENV_PYTHON" -c "
 import sys, json, re
+exclude = '$ASSET_EXCLUDE'
 data = json.load(sys.stdin)
 for a in data.get('assets', []):
     name = a['name']
     if re.search(r'$ASSET_PATTERN', name) and 'cudart' not in name:
+        if exclude and exclude in name:
+            continue
         print(a['browser_download_url'])
         break
 " 2>/dev/null || echo "")
 
       if [ -n "$ASSET_URL" ]; then
-        echo "  Downloading: $(basename "$ASSET_URL") ($LATEST_TAG)..."
+        ASSET_NAME="$(basename "$ASSET_URL")"
+        echo "  Downloading: $ASSET_NAME ($LATEST_TAG)..."
         mkdir -p "$LLAMA_DIR"
-        TMP_ZIP="/tmp/llama-server-download.zip"
-        curl -L -o "$TMP_ZIP" "$ASSET_URL"
+        TMP_FILE="$(mktemp "${TMPDIR:-/tmp}/llama-server-download.XXXXXX")" || {
+          err "Failed to create temporary file for download"
+          exit 1
+        }
+        curl -L --fail -o "$TMP_FILE" "$ASSET_URL"
 
-        # Extract
-        rm -rf "$LLAMA_DIR"/*
-        if command -v unzip &>/dev/null; then
-          unzip -o "$TMP_ZIP" -d "$LLAMA_DIR"
+        if [ ! -s "$TMP_FILE" ]; then
+          err "Download failed or file is empty: $ASSET_NAME"
+          rm -f "$TMP_FILE"
         else
-          "$VENV_PYTHON" -c "import zipfile; zipfile.ZipFile('$TMP_ZIP').extractall('$LLAMA_DIR')"
+          # Extract (handle both .zip and .tar.gz)
+          rm -rf "$LLAMA_DIR"/*
+          if ! {
+            case "$ASSET_NAME" in
+              *.tar.gz|*.tgz)
+                tar xzf "$TMP_FILE" -C "$LLAMA_DIR"
+                ;;
+              *.zip)
+                if command -v unzip &>/dev/null; then
+                  unzip -o "$TMP_FILE" -d "$LLAMA_DIR"
+                else
+                  "$VENV_PYTHON" -c "import zipfile; zipfile.ZipFile('$TMP_FILE').extractall('$LLAMA_DIR')"
+                fi
+                ;;
+              *)
+                err "Unknown archive format: $ASSET_NAME"
+                false
+                ;;
+            esac
+          }; then
+            rm -f "$TMP_FILE"
+            exit 1
+          fi
+          rm -f "$TMP_FILE"
+
+          # Move files from subdirectories to root if needed
+          NESTED=$(find "$LLAMA_DIR" -name "llama-server" -type f | head -1)
+          if [ -n "$NESTED" ] && [ "$(dirname "$NESTED")" != "$LLAMA_DIR" ]; then
+            mv "$(dirname "$NESTED")"/* "$LLAMA_DIR"/ 2>/dev/null || true
+          fi
+
+          # Make executable
+          chmod +x "$LLAMA_DIR/llama-server" 2>/dev/null || true
+
+          # Save version only if the binary is present and executable
+          if [ -x "$LLAMA_DIR/llama-server" ]; then
+            echo -n "$LATEST_TAG" > "$LLAMA_VERSION_FILE"
+            # Record the backend type for runtime flash-attn decisions
+            if [ "$PLATFORM" = "macos" ] && [ "$ARCH" = "arm64" ]; then
+              echo -n "metal" > "$LLAMA_DIR/backend.txt"
+            elif [ "$HAS_ROCM" = true ]; then
+              echo -n "rocm" > "$LLAMA_DIR/backend.txt"
+            elif [ "$HAS_NVIDIA" = true ] || [ "$HAS_AMD" = true ]; then
+              echo -n "vulkan" > "$LLAMA_DIR/backend.txt"
+            else
+              echo -n "cpu" > "$LLAMA_DIR/backend.txt"
+            fi
+            LLAMA_INSTALLED=true
+            ok "llama-server installed ($LATEST_TAG)"
+          else
+            err "llama-server install failed: '$LLAMA_DIR/llama-server' is missing or not executable"
+          fi
         fi
-        rm -f "$TMP_ZIP"
-
-        # Move files from subdirectories to root if needed
-        NESTED=$(find "$LLAMA_DIR" -name "llama-server" -type f | head -1)
-        if [ -n "$NESTED" ] && [ "$(dirname "$NESTED")" != "$LLAMA_DIR" ]; then
-          mv "$(dirname "$NESTED")"/* "$LLAMA_DIR"/ 2>/dev/null || true
-        fi
-
-        # Make executable
-        chmod +x "$LLAMA_DIR/llama-server" 2>/dev/null || true
-
-        # Save version
-        echo -n "$LATEST_TAG" > "$LLAMA_VERSION_FILE"
-        LLAMA_INSTALLED=true
-        ok "llama-server installed ($LATEST_TAG)"
       else
         err "No matching binary found for pattern: $ASSET_PATTERN"
         echo "  Download manually from: https://github.com/ggml-org/llama.cpp/releases"
@@ -241,7 +309,12 @@ if [ -f "$DATA_DIR/app.db" ] && [ ! -f "$DATA_DIR/user/app.db" ]; then
 fi
 if [ -d "$DATA_DIR/uploads" ] && [ "$(ls -A "$DATA_DIR/uploads" 2>/dev/null)" ]; then
   warn "Migrating data/uploads/ -> data/user/uploads/"
-  mv "$DATA_DIR/uploads/"* "$DATA_DIR/user/uploads/" 2>/dev/null || true
+  find "$DATA_DIR/uploads" -maxdepth 1 -mindepth 1 -print0 | while IFS= read -r -d '' item; do
+    name=$(basename "$item")
+    if [ ! -e "$DATA_DIR/user/uploads/$name" ]; then
+      mv "$item" "$DATA_DIR/user/uploads/"
+    fi
+  done
   rmdir "$DATA_DIR/uploads" 2>/dev/null || true
 fi
 if [ -f "$DATA_DIR/settings.json" ] && [ ! -f "$DATA_DIR/user/settings.json" ]; then
@@ -252,13 +325,37 @@ if [ -f "$DATA_DIR/legal-acceptance.json" ] && [ ! -f "$DATA_DIR/user/legal-acce
   warn "Migrating data/legal-acceptance.json -> data/user/legal-acceptance.json"
   mv "$DATA_DIR/legal-acceptance.json" "$DATA_DIR/user/legal-acceptance.json"
 fi
-if [ -d "$DATA_DIR/model-cache" ] && [ ! -d "$DATA_DIR/system/model-cache" ]; then
+if [ -d "$DATA_DIR/model-cache" ] && [ "$(ls -A "$DATA_DIR/model-cache" 2>/dev/null)" ]; then
   warn "Migrating data/model-cache/ -> data/system/model-cache/"
-  mv "$DATA_DIR/model-cache" "$DATA_DIR/system/model-cache"
+  if [ ! -d "$DATA_DIR/system/model-cache" ] || [ -z "$(ls -A "$DATA_DIR/system/model-cache" 2>/dev/null)" ]; then
+    # Destination empty or absent — move the whole directory
+    rm -rf "$DATA_DIR/system/model-cache" 2>/dev/null
+    mv "$DATA_DIR/model-cache" "$DATA_DIR/system/model-cache"
+  else
+    # Merge: move items that don't already exist at destination (dotfile-safe)
+    find "$DATA_DIR/model-cache" -maxdepth 1 -mindepth 1 -print0 | while IFS= read -r -d '' item; do
+      name=$(basename "$item")
+      if [ ! -e "$DATA_DIR/system/model-cache/$name" ]; then
+        mv "$item" "$DATA_DIR/system/model-cache/"
+      fi
+    done
+    rmdir "$DATA_DIR/model-cache" 2>/dev/null || true
+  fi
 fi
-if [ -d "$DATA_DIR/llama-server" ] && [ ! -d "$DATA_DIR/system/llama-server" ]; then
+if [ -d "$DATA_DIR/llama-server" ] && [ "$(ls -A "$DATA_DIR/llama-server" 2>/dev/null)" ]; then
   warn "Migrating data/llama-server/ -> data/system/llama-server/"
-  mv "$DATA_DIR/llama-server" "$DATA_DIR/system/llama-server"
+  if [ ! -d "$DATA_DIR/system/llama-server" ] || [ -z "$(ls -A "$DATA_DIR/system/llama-server" 2>/dev/null)" ]; then
+    rm -rf "$DATA_DIR/system/llama-server" 2>/dev/null
+    mv "$DATA_DIR/llama-server" "$DATA_DIR/system/llama-server"
+  else
+    find "$DATA_DIR/llama-server" -maxdepth 1 -mindepth 1 -print0 | while IFS= read -r -d '' item; do
+      name=$(basename "$item")
+      if [ ! -e "$DATA_DIR/system/llama-server/$name" ]; then
+        mv "$item" "$DATA_DIR/system/llama-server/"
+      fi
+    done
+    rmdir "$DATA_DIR/llama-server" 2>/dev/null || true
+  fi
 fi
 for legacyLog in install.log backend.log backend-err.log frontend.log frontend-err.log; do
   if [ -f "$DATA_DIR/$legacyLog" ]; then

@@ -68,7 +68,8 @@ find_free_port() {
       return
     fi
   done
-  echo "$start"
+  err "No free port found in range $start-$((start + max_tries - 1)). All $max_tries candidate ports are busy."
+  return 1
 }
 
 # Try to free default ports first
@@ -76,8 +77,8 @@ free_port 8000
 free_port 5173
 
 # Determine available ports
-BACKEND_PORT=$(find_free_port 8000)
-FRONTEND_PORT=$(find_free_port 5173)
+if ! BACKEND_PORT=$(find_free_port 8000); then exit 1; fi
+if ! FRONTEND_PORT=$(find_free_port 5173); then exit 1; fi
 
 [ "$BACKEND_PORT" -ne 8000 ] && warn "Port 8000 is busy — using port $BACKEND_PORT for backend"
 [ "$FRONTEND_PORT" -ne 5173 ] && warn "Port 5173 is busy — using port $FRONTEND_PORT for frontend"
@@ -123,7 +124,7 @@ if check_http "$BACKEND_URL"; then
 else
   step "Starting backend..."
   cd "$BACKEND_DIR"
-  "$VENV_PYTHON" -m uvicorn app.main:app --reload --host 127.0.0.1 --port "$BACKEND_PORT" --log-config log_config.json \
+  "$VENV_PYTHON" -m uvicorn app.main:app --host 127.0.0.1 --port "$BACKEND_PORT" --log-config log_config.json \
     >"$BACKEND_LOG" 2>"$BACKEND_ERR_LOG" &
   BACKEND_PID=$!
   cd "$REPO_ROOT"
@@ -135,6 +136,7 @@ if check_http "$FRONTEND_URL"; then
 else
   step "Starting frontend..."
   cd "$FRONTEND_DIR"
+  export MYAI_NO_WATCH=1
   npm run dev -- --host=127.0.0.1 --port="$FRONTEND_PORT" --strictPort 2>&1 |
     while IFS= read -r line; do
       printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$line"
@@ -213,9 +215,9 @@ _monitor() {
       cleanup
       exit 1
     fi
-    # Also check if backend API is still reachable (os._exit in a
-    # uvicorn --reload worker kills the child but the parent python
-    # process stays alive, so kill -0 never fails).
+    # Also check if backend API is still reachable — the HTTP
+    # check detects a clean /api/shutdown exit even if kill -0 on
+    # the PID hasn't updated yet.
     if ! check_http "$BACKEND_URL"; then
       sleep 2
       if ! check_http "$BACKEND_URL"; then

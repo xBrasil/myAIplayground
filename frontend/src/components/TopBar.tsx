@@ -24,7 +24,12 @@ export default function TopBar({ health, onOpenSettings, onOpenModelSelector }: 
     <div className="topbar">
       <div className="topbar__brand">
         <strong>My AI Playground</strong>
-        <span>{health?.cuda_available ? t('topbar.cudaReady') : t('topbar.cudaNotDetected')}</span>
+        <span>
+          {!health || health.gpu_vendor === 'none'
+            ? t('topbar.gpuNotDetected')
+            : t('topbar.gpuReady', { name: health.gpu_display_name, backend: health.gpu_backend.toUpperCase() })
+          }
+        </span>
       </div>
 
       <div className="topbar__controls">
