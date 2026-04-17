@@ -79,7 +79,8 @@ class ChatService:
 
     def _read_text_file(self, file_path: str) -> str:
         try:
-            return Path(file_path).read_text("utf-8", errors="ignore")[:self._MAX_READ_CHARS]
+            with Path(file_path).open("r", encoding="utf-8", errors="ignore") as fh:
+                return fh.read(self._MAX_READ_CHARS)
         except Exception:
             return "(Erro ao ler o arquivo)"
 

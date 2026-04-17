@@ -264,7 +264,7 @@ var
   Created: BOOL;
 begin
   if CurStep = ssPostInstall then begin
-    LogFile := ExpandConstant('{app}\data\install.log');
+    LogFile := ExpandConstant('{app}\data\system\logs\install.log');
 
     // Update status labels
     WizardForm.StatusLabel.Caption := CustomMessage('SetupRunning');
@@ -339,10 +339,15 @@ end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
-  DataDir, AppDir: String;
+  DataDir, AppDir, SafeApp: String;
   ResultCode: Integer;
   NeedRestart: Boolean;
 begin
+  // Escape single quotes in {app} for safe embedding in PowerShell single-quoted strings
+  AppDir := ExpandConstant('{app}');
+  SafeApp := AppDir;
+  StringChangeEx(SafeApp, '''', '''''', False);
+
   if CurUninstallStep = usUninstall then begin
     // --- Stop running app processes before removing files ---
     // Try graceful shutdown via backend API on default and fallback ports.
@@ -358,7 +363,7 @@ begin
     // Kill any remaining Python/Node processes that belong to our app
     try
       Exec('powershell.exe',
-        '-NoProfile -ExecutionPolicy Bypass -Command "Get-Process python,pythonw,node -ErrorAction SilentlyContinue | Where-Object { $_.Path -like (Join-Path ''' + ExpandConstant('{app}') + ''' ''*'') } | Stop-Process -Force -ErrorAction SilentlyContinue"',
+        '-NoProfile -ExecutionPolicy Bypass -Command "$appPath = (Join-Path ''' + SafeApp + ''' ''''); Get-Process python,pythonw,node -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($appPath, [System.StringComparison]::OrdinalIgnoreCase) } | Stop-Process -Force -ErrorAction SilentlyContinue"',
         '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     except
     end;
@@ -372,9 +377,10 @@ begin
 
     // Kill any process still listening on our ports, including fallback range
     // Backend: 8000-8009, Frontend: 5173-5182, llama-server: 8081
+    // Only kills processes whose executable path or command line references {app}
     try
       Exec('powershell.exe',
-        '-NoProfile -ExecutionPolicy Bypass -Command "$ports = @(8081) + @(8000..8009) + @(5173..5182); foreach ($port in $ports) { try { $lines = netstat -ano 2>$null | Select-String ''127\.0\.0\.1:'' | Select-String ('':'' + $port + ''\s'') | Select-String ''LISTENING''; foreach ($l in $lines) { if ($l -match ''\s(\d+)\s*$'') { taskkill /F /T /PID $Matches[1] 2>$null } } } catch {} }"',
+        '-NoProfile -ExecutionPolicy Bypass -Command "$app = ''' + SafeApp + '''; $ports = @(8081) + @(8000..8009) + @(5173..5182); foreach ($port in $ports) { try { $lines = netstat -ano 2>$null | Select-String ''127\.0\.0\.1:'' | Select-String ('':'' + $port + ''\s'') | Select-String ''LISTENING''; $pids = @(); foreach ($l in $lines) { if ($l -match ''\s(\d+)\s*$'') { $pids += $Matches[1] } }; $pids = $pids | Select-Object -Unique; foreach ($pid in $pids) { try { $proc = Get-CimInstance Win32_Process -Filter (''ProcessId = '' + $pid) -ErrorAction SilentlyContinue; if ($proc -and ((($proc.ExecutablePath) -and $proc.ExecutablePath.StartsWith($app, [System.StringComparison]::OrdinalIgnoreCase)) -or (($proc.CommandLine) -and ($proc.CommandLine.IndexOf($app, [System.StringComparison]::OrdinalIgnoreCase) -ge 0)))) { taskkill /F /T /PID $pid 2>$null } } catch {} } } catch {} }"',
         '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     except
     end;
@@ -384,7 +390,6 @@ begin
   end;
 
   if CurUninstallStep = usPostUninstall then begin
-    AppDir := ExpandConstant('{app}');
 
     // 1. Remove artifacts created by install.ps1 / install.cmd that Inno doesn't track
     DelTree(AppDir + '\.venv', True, True, True);
@@ -428,13 +433,13 @@ begin
           '-NoProfile -ExecutionPolicy Bypass -Command "' +
           '$dirs = @(''.venv'',''backend'',''frontend''); ' +
           'foreach ($d in $dirs) { ' +
-          '  $p = Join-Path ''' + AppDir + ''' $d; ' +
+          '  $p = Join-Path ''' + SafeApp + ''' $d; ' +
           '  if (Test-Path $p) { ' +
           '    Remove-Item $p -Recurse -Force -ErrorAction SilentlyContinue ' +
           '  } ' +
           '}; ' +
-          '$remaining = Get-ChildItem ''' + AppDir + ''' -ErrorAction SilentlyContinue; ' +
-          'if (-not $remaining) { Remove-Item ''' + AppDir + ''' -Force -ErrorAction SilentlyContinue }"',
+          '$remaining = Get-ChildItem ''' + SafeApp + ''' -ErrorAction SilentlyContinue; ' +
+          'if (-not $remaining) { Remove-Item ''' + SafeApp + ''' -Force -ErrorAction SilentlyContinue }"',
           '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
       except
       end;

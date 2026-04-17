@@ -12,8 +12,22 @@ interface VoiceSettingsProps {
 
 /** Map app locale to BCP-47 language prefix for filtering voices. */
 function localeLangPrefix(locale: Locale): string {
-  if (locale === 'pt-BR') return 'pt';
+  if (locale.startsWith('pt')) return 'pt';
+  if (locale.startsWith('es')) return 'es';
+  if (locale.startsWith('fr')) return 'fr';
   return 'en';
+}
+
+/**
+ * Pick the best default voice from a list, using this priority:
+ * 1. First with "Online (Natural)" but NOT "Multilingual"
+ * 2. First with "Online (Natural)" (even if Multilingual)
+ * 3. First voice in the list
+ */
+function pickBestVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | undefined {
+  const natural = voices.filter((v) => v.name.includes('Online (Natural)'));
+  const nonMulti = natural.find((v) => !v.name.includes('Multilingual'));
+  return nonMulti ?? natural[0] ?? voices[0];
 }
 
 export default function VoiceSettings({ value, onChange, locale }: VoiceSettingsProps) {
@@ -39,15 +53,27 @@ export default function VoiceSettings({ value, onChange, locale }: VoiceSettings
   const filteredVoices = useMemo(() => {
     const prefix = localeLangPrefix(locale);
     const filtered = voices.filter((v) => v.lang.toLowerCase().startsWith(prefix));
-    return filtered.length > 0 ? filtered : voices;
+    if (filtered.length === 0) return voices;
+
+    // Sort: exact locale match first (e.g. pt-BR before pt-PT when locale is pt-BR)
+    const exactLocale = locale.toLowerCase();
+    filtered.sort((a, b) => {
+      const aExact = a.lang.toLowerCase().replace('_', '-') === exactLocale ? 0 : 1;
+      const bExact = b.lang.toLowerCase().replace('_', '-') === exactLocale ? 0 : 1;
+      return aExact - bExact;
+    });
+
+    return filtered;
   }, [voices, locale]);
 
-  // If current voice isn't in filtered list, auto-select first match
+  // If current voice isn't in filtered list, auto-select best match
   useEffect(() => {
     if (filteredVoices.length > 0 && !filteredVoices.some((v) => v.name === value)) {
-      const first = filteredVoices[0];
-      savePreferredVoiceName(first.name);
-      onChange(first.name);
+      const best = pickBestVoice(filteredVoices);
+      if (best) {
+        savePreferredVoiceName(best.name);
+        onChange(best.name);
+      }
     }
   }, [filteredVoices, value, onChange]);
 

@@ -30,7 +30,7 @@
 | **Visão de imagens locais** | Em modelos com visão (Gemma 4 E2B/E4B), o modelo pode ver e descrever imagens de pastas permitidas |
 | **Tool calling** | O modelo pode chamar ferramentas (web, filesystem, visão) automaticamente; chamadas ficam salvas no histórico e são exibidas de forma auditável |
 | **Instruções personalizadas** | System prompt customizável pelo usuário nos Ajustes — aplicado a todas as conversas |
-| **Inferência local** | llama.cpp server com CUDA, flash attention, contexto por modelo (128K–256K tokens) |
+| **Inferência local** | llama.cpp server com aceleração GPU (NVIDIA CUDA, AMD HIP/ROCm, Apple Metal) ou CPU, flash attention, contexto por modelo (128K–256K tokens) |
 | **Streaming** | Respostas exibidas token a token em tempo real |
 | **Auto-continuação** | Respostas longas continuam automaticamente quando o limite de tokens é atingido (até 5 rodadas) |
 | **Gravação de voz** | Gravar, pausar, retomar e parar antes de enviar; áudio convertido para WAV 16 kHz; timer com contagem regressiva |
@@ -93,16 +93,16 @@ O My AI Playground roda modelos de IA localmente no seu hardware. Os requisitos 
 |---|---|
 | **SO** | Windows 10/11 (64 bits) |
 | **RAM** | 8 GB |
-| **VRAM (GPU)** | 4 GB (NVIDIA com CUDA) ou modo CPU |
+| **VRAM (GPU)** | 4 GB (NVIDIA CUDA, AMD HIP/ROCm ou Apple Metal) ou modo CPU |
 | **Disco** | ~3 GB para o modelo + ~1 GB para dependências |
-| **CPU** | Qualquer x86-64 com suporte AVX2 |
+| **CPU** | Qualquer x86-64 com suporte AVX2 (ou Apple Silicon arm64) |
 
 ### Recomendados (modelo Gemma 4 E4B — 4B parâmetros)
 
 | Componente | Requisito |
 |---|---|
 | **RAM** | 16 GB |
-| **VRAM (GPU)** | 6 GB (NVIDIA com CUDA) |
+| **VRAM (GPU)** | 6 GB (NVIDIA CUDA, AMD HIP/ROCm ou Apple Metal) |
 | **Disco** | ~5 GB para o modelo |
 
 ### Para o modelo maior (Gemma 4 26B-A4B — 26B parâmetros, MoE)
@@ -110,7 +110,7 @@ O My AI Playground roda modelos de IA localmente no seu hardware. Os requisitos 
 | Componente | Requisito |
 |---|---|
 | **RAM** | 32 GB |
-| **VRAM (GPU)** | 16 GB+ (NVIDIA com CUDA) |
+| **VRAM (GPU)** | 16 GB+ (NVIDIA CUDA, AMD HIP/ROCm ou Apple Metal) |
 | **Disco** | ~15 GB para o modelo |
 
 > **Nota:** sem VRAM suficiente, o llama.cpp fará offloading para a RAM do sistema (modo CPU/parcial), resultando em inferência significativamente mais lenta. Se você receber erros de **Out of Memory (OOM)**, experimente um modelo menor ou reduza `N_CTX` no arquivo `data/system/.env`.
@@ -132,7 +132,7 @@ Na [página de releases](https://github.com/xBrasil/myAIplayground/releases) est
 - **Windows 10/11** (64 bits)
 - **Python 3.11+**
 - **Node.js 20+**
-- **GPU NVIDIA** com drivers atualizados (recomendado; funciona sem GPU em modo CPU)
+- **GPU** com drivers atualizados — NVIDIA (CUDA), AMD (HIP no Windows, ROCm no Linux) ou Apple Silicon (Metal) — recomendado; funciona sem GPU em modo CPU
 
 #### Instalação
 
@@ -144,7 +144,7 @@ O instalador:
 - Detecta e instala Python e Node.js automaticamente via `winget` (solicitando elevação UAC se necessário)
 - Cria o ambiente virtual `.venv` e instala dependências do backend
 - Instala dependências npm do frontend
-- Baixa o binário mais recente do `llama-server` (CUDA ou CPU, conforme sua GPU)
+- Baixa o binário mais recente do `llama-server` (CUDA, HIP, ROCm, Metal ou CPU, conforme sua GPU)
 - Cria `data/system/.env` a partir de `backend/.env.example`
 
 #### Execução
@@ -171,8 +171,8 @@ O launcher:
 
 - **Python 3.11+** com `venv` (`python3-venv` no Ubuntu/Debian)
 - **Node.js 20+**
-- **GPU NVIDIA** com drivers atualizados (recomendado; funciona sem GPU em modo CPU)
-- `curl` e `unzip` instalados
+- **GPU** com drivers atualizados — NVIDIA (CUDA), AMD (ROCm) ou Apple Silicon (Metal) — recomendado; funciona sem GPU em modo CPU
+- `curl`, `unzip` e `tar` instalados
 
 ### Instalação
 
@@ -231,7 +231,8 @@ O modelo E4B é o padrão. Todos são executados pelo llama.cpp via GGUF, sem Py
 - **pystray** (ícone na bandeja do sistema — system tray)
 
 ### Inferência
-- **llama.cpp server** (binário pré-compilado, CUDA ou CPU)
+- **llama.cpp server** (binário pré-compilado — NVIDIA CUDA, AMD HIP/ROCm, Apple Metal ou CPU)
+- Detecção automática de GPU (NVIDIA, AMD, Apple Silicon) com fallback para CPU
 - Gerenciado automaticamente pelo backend — download, inicialização e fallback
 
 ---
@@ -368,9 +369,9 @@ Criado por [Rodolfo Motta Saraiva](https://rmsaraiva.com/) como projeto pessoal 
 
 ### System Requirements
 
-| Model | RAM | VRAM (NVIDIA CUDA) | Disk |
+| Model | RAM | VRAM (GPU) | Disk |
 |---|---|---|---|
-| Gemma 4 E2B (2B) | 8 GB | 4 GB (or CPU-only) | ~3 GB |
+| Gemma 4 E2B (2B) | 8 GB | 4 GB (NVIDIA CUDA, AMD HIP/ROCm or Apple Metal — or CPU-only) | ~3 GB |
 | Gemma 4 E4B (4B) | 16 GB | 6 GB | ~5 GB |
 | Gemma 4 26B-A4B (26B MoE) | 32 GB | 16 GB+ | ~15 GB |
 
@@ -382,9 +383,9 @@ Criado por [Rodolfo Motta Saraiva](https://rmsaraiva.com/) como projeto pessoal 
 
 - **Python 3.11+** (on Linux/macOS, the `venv` module — `python3-venv` on Ubuntu/Debian)
 - **Node.js 20+**
-- **NVIDIA GPU** with up-to-date drivers (recommended; runs on CPU otherwise)
+- **GPU** with up-to-date drivers — NVIDIA (CUDA), AMD (HIP on Windows, ROCm on Linux) or Apple Silicon (Metal) — recommended; runs on CPU otherwise
 - **Windows 10/11 (64-bit)**, modern Linux, or macOS (arm64/x64)
-- On Linux/macOS: `curl` and `unzip`
+- On Linux/macOS: `curl`, `unzip` and `tar`
 
 #### Windows — graphical installer
 
