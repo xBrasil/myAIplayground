@@ -116,9 +116,10 @@ if ($frontendPort -ne 5173) {
 $env:API_PORT = $backendPort
 $env:VITE_API_PORT = $backendPort
 
-# Write ports state file for tray.py
+# Write ports state file for tray.py (no BOM — PS 5.1 Set-Content adds one)
 $portsFile = Join-Path $dataDir "system\.ports"
-@{ backend = $backendPort; frontend = $frontendPort } | ConvertTo-Json | Set-Content -Path $portsFile -Encoding UTF8
+$portsJson = @{ backend = $backendPort; frontend = $frontendPort } | ConvertTo-Json
+[IO.File]::WriteAllText($portsFile, $portsJson)
 
 $backendUrl  = "http://127.0.0.1:${backendPort}/api/health"
 $frontendUrl = "http://127.0.0.1:${frontendPort}"
