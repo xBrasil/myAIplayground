@@ -33,6 +33,25 @@ class ChatService:
         "fr-FR": "French",
     }
 
+    _TITLE_LABELS: dict[str, dict[str, str]] = {
+        "en-US": {"audio": "Audio sent", "image": "Image sent", "file": "File sent",
+                  "document": "Document sent", "multi_file": "Multiple files sent",
+                  "multi_file_n": "{n} files sent", "new": "New conversation"},
+        "pt-BR": {"audio": "Áudio enviado", "image": "Imagem enviada", "file": "Arquivo enviado",
+                  "document": "Documento enviado", "multi_file": "Múltiplos arquivos enviados",
+                  "multi_file_n": "{n} arquivos enviados", "new": "Nova conversa"},
+        "es-ES": {"audio": "Audio enviado", "image": "Imagen enviada", "file": "Archivo enviado",
+                  "document": "Documento enviado", "multi_file": "Múltiples archivos enviados",
+                  "multi_file_n": "{n} archivos enviados", "new": "Nueva conversación"},
+        "fr-FR": {"audio": "Audio envoyé", "image": "Image envoyée", "file": "Fichier envoyé",
+                  "document": "Document envoyé", "multi_file": "Plusieurs fichiers envoyés",
+                  "multi_file_n": "{n} fichiers envoyés", "new": "Nouvelle conversation"},
+    }
+
+    def _tl(self, locale: str, key: str) -> str:
+        labels = self._TITLE_LABELS.get(locale, self._TITLE_LABELS["en-US"])
+        return labels.get(key, self._TITLE_LABELS["en-US"][key])
+
     def __init__(self) -> None:
         self._settings = get_settings()
         self._risk_cache_text: str | None = None
@@ -42,12 +61,12 @@ class ChatService:
     def model_loaded(self) -> bool:
         return model_service.is_loaded
 
-    def _ensure_conversation(self, db: Session, conversation_id: str | None, seed_text: str) -> Conversation:
+    def _ensure_conversation(self, db: Session, conversation_id: str | None, seed_text: str, locale: str = "en-US") -> Conversation:
         if conversation_id:
             existing = storage_service.get_conversation(db, conversation_id)
             if existing is not None:
                 return existing
-        title = seed_text[:60].strip() or "Nova conversa"
+        title = seed_text[:60].strip() or self._tl(locale, "new")
         return storage_service.create_conversation(db, title)
 
     def _default_multimodal_instruction(self, input_type: str) -> str:
@@ -61,18 +80,16 @@ class ChatService:
             return "Analyze the image sent and respond based on the visual content."
         return "Analyze the content sent and respond."
 
-    def _audio_transcription_instruction(self) -> str:
-        return (
-            "Transcribe the following speech segment in Brazilian Portuguese into Brazilian Portuguese text.\n\n"
-            "Follow these specific instructions for formatting the answer:\n"
-            "* Only output the transcription, with no newlines.\n"
-            "* When transcribing numbers, write the digits."
-        )
-
     def _transcribe_audio(self, attachment_path: str) -> str:
         try:
-            return whisper_service.transcribe(attachment_path)
+            result = whisper_service.transcribe(attachment_path)
+            if result:
+                logger.info("Audio transcription OK (%d chars): %s", len(result), attachment_path)
+            else:
+                logger.warning("Audio transcription returned empty for: %s", attachment_path)
+            return result
         except Exception:
+            logger.exception("Audio transcription failed: %s", attachment_path)
             return ""
 
     _MAX_READ_CHARS = 2_000_000  # ~2 MB hard cap per file read
@@ -82,7 +99,7 @@ class ChatService:
             with Path(file_path).open("r", encoding="utf-8", errors="ignore") as fh:
                 return fh.read(self._MAX_READ_CHARS)
         except Exception:
-            return "(Erro ao ler o arquivo)"
+            return "(Error reading file)"
 
     def _read_document_file(self, file_path: str) -> str:
         return extract_document_text(file_path, self._MAX_READ_CHARS)
@@ -106,10 +123,10 @@ class ChatService:
         sections: list[str] = []
         for i, (name, path) in enumerate(zip(names, paths), 1):
             if Path(path).suffix.lower() in self._IMAGE_EXTS:
-                sections.append(f"[Arquivo {i}: {name}]\n\n(Imagem — análise visual não disponível para o modelo atual)")
+                sections.append(f"[File {i}: {name}]\n\n(Image — visual analysis not available for the current model)")
             else:
                 content = self._read_any_file(path)
-                sections.append(f"[Arquivo {i}: {name}]\n\n{content}")
+                sections.append(f"[File {i}: {name}]\n\n{content}")
 
         combined = "\n\n".join(sections)
         user_text = user_content.strip()
@@ -131,25 +148,26 @@ class ChatService:
         input_type: str,
         attachment_name: str,
         attachment_summary: str,
+        locale: str = "en-US",
     ) -> str:
         trimmed = content.strip()
         if trimmed:
             return trimmed
         if input_type == "audio":
-            return attachment_name or "Áudio enviado"
+            return attachment_name or self._tl(locale, "audio")
         if input_type == "image":
-            return attachment_name or "Imagem enviada"
+            return attachment_name or self._tl(locale, "image")
         if input_type == "file":
-            return attachment_summary or attachment_name or "Arquivo enviado"
+            return attachment_summary or attachment_name or self._tl(locale, "file")
         if input_type == "document":
-            return attachment_summary or attachment_name or "Documento enviado"
+            return attachment_summary or attachment_name or self._tl(locale, "document")
         if input_type == "multi_file":
             try:
                 names = json.loads(attachment_name)
-                return f"{len(names)} arquivos enviados"
+                return self._tl(locale, "multi_file_n").replace("{n}", str(len(names)))
             except Exception:
-                return "Múltiplos arquivos enviados"
-        return attachment_name or "Nova conversa"
+                return self._tl(locale, "multi_file")
+        return attachment_name or self._tl(locale, "new")
 
     def _stored_upload_content(
         self,
@@ -164,6 +182,9 @@ class ChatService:
             # so we only store the user's own text here for clean display.
             return trimmed
         if input_type == "audio":
+            if model_service.supports_audio:
+                # Model processes the raw audio — skip Whisper transcription
+                return trimmed
             transcript = self._transcribe_audio(attachment_path)
             return transcript or trimmed
         return trimmed
@@ -222,6 +243,11 @@ class ChatService:
                 "you can already see it directly — just describe or answer about it without using any tool. "
                 "The view_image tool is ONLY for viewing images stored on the user's local file system, "
                 "NOT for images the user has uploaded in the chat."
+            )
+        if model_service.supports_audio:
+            prompt += (
+                "\nYou are an audio-capable model. When the user sends audio in the conversation, "
+                "you can hear and understand it directly — respond based on the spoken content."
             )
         if enable_web_access:
             prompt += (
@@ -320,7 +346,7 @@ class ChatService:
             ):
                 file_content = self._read_text_file(message.attachment_path)
                 user_text = message.content.strip()
-                header = f"[Arquivo: {message.attachment_name}]\n\n{file_content}"
+                header = f"[File: {message.attachment_name}]\n\n{file_content}"
                 prompt = f"{header}\n\n{user_text}" if user_text else header
                 messages.append({"role": "user", "content": prompt})
                 continue
@@ -333,7 +359,7 @@ class ChatService:
             ):
                 doc_content = self._read_document_file(message.attachment_path)
                 user_text = message.content.strip()
-                header = f"[Documento: {message.attachment_name}]\n\n{doc_content}"
+                header = f"[Document: {message.attachment_name}]\n\n{doc_content}"
                 prompt = f"{header}\n\n{user_text}" if user_text else header
                 messages.append({"role": "user", "content": prompt})
                 continue
@@ -363,12 +389,12 @@ class ChatService:
                             try:
                                 data_url = input_adapter_service.load_image_base64(path)
                                 content_parts.append({"type": "image_url", "image_url": {"url": data_url}})
-                                content_parts.append({"type": "text", "text": f"[Arquivo {i}: {name}]"})
+                                content_parts.append({"type": "text", "text": f"[File {i}: {name}]"})
                             except Exception:
-                                pending_text.append(f"[Arquivo {i}: {name}]\n\n(Erro ao carregar imagem)")
+                                pending_text.append(f"[File {i}: {name}]\n\n(Error loading image)")
                         else:
                             file_content = self._read_any_file(path)
-                            pending_text.append(f"[Arquivo {i}: {name}]\n\n{file_content}")
+                            pending_text.append(f"[File {i}: {name}]\n\n{file_content}")
                     if pending_text:
                         content_parts.append({"type": "text", "text": "\n\n".join(pending_text)})
                     user_text = message.content.strip()
@@ -384,8 +410,35 @@ class ChatService:
                     messages.append({"role": "user", "content": prompt})
                 continue
 
+            # Audio attachments: send raw audio for native audio models
+            if (
+                message.role == "user"
+                and message.attachment_path
+                and message.input_type == "audio"
+                and model_service.supports_audio
+            ):
+                try:
+                    b64_data, audio_fmt = self._load_audio_base64(message.attachment_path)
+                    text_content = self._default_multimodal_instruction("audio")
+                    messages.append({
+                        "role": "user",
+                        "content": [
+                            {"type": "input_audio", "input_audio": {"data": b64_data, "format": audio_fmt}},
+                            {"type": "text", "text": text_content},
+                        ],
+                    })
+                    continue
+                except Exception:
+                    logger.exception("Failed to load audio for native input, falling back to transcript: %s", message.attachment_path)
+                    # Fall through to transcript/placeholder path below
+
             # Audio and plain text — use stored transcript / content
-            messages.append({"role": message.role, "content": message.content})
+            content = message.content
+            if not content.strip() and message.input_type == "audio":
+                # Transcription failed or returned empty — tell the model so it
+                # can inform the user instead of seeing a blank message.
+                content = "(The user sent an audio message but the transcription was unavailable.)"
+            messages.append({"role": message.role, "content": content})
 
         return self._trim_messages_to_budget(messages)
 
@@ -407,6 +460,8 @@ class ChatService:
                             total += model_service.estimate_tokens(text)
                         if "image_url" in part:
                             total += 512  # rough estimate for image tokens
+                        if "input_audio" in part:
+                            total += 256  # rough estimate for audio tokens
         return total
 
     def _trim_messages_to_budget(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -436,9 +491,9 @@ class ChatService:
                 chars_to_remove = len(content) - 200
             if chars_to_remove > 0:
                 truncated = content[: len(content) - chars_to_remove]
-                msg["content"] = truncated + "\n\n[...conteúdo truncado para caber no contexto do modelo]"
+                msg["content"] = truncated + "\n\n[...content truncated to fit model context]"
                 logger.info(
-                    "Conteúdo truncado: removidos ~%d tokens (overflow=%d, contexto=%d)",
+                    "Content truncated: removed ~%d tokens (overflow=%d, context=%d)",
                     overflow, overflow, context_size,
                 )
             break
@@ -462,12 +517,12 @@ class ChatService:
             total = self._estimate_message_tokens(result)
             if total <= budget:
                 logger.info(
-                    "Sliding window: removida mensagem antiga (%s), %d mensagens restantes",
+                    "Sliding window: dropped old message (%s), %d messages remaining",
                     dropped.get("role"), len(result),
                 )
                 return result
 
-        logger.warning("Após sliding window, mensagens ainda excedem orçamento de tokens.")
+        logger.warning("After sliding window, messages still exceed token budget.")
         return system_msgs + non_system
 
     def _get_tools(
@@ -585,7 +640,7 @@ class ChatService:
         allowed_folders: list[str] | None = None,
         user_location: str | None = None,
     ) -> tuple[Conversation, Message]:
-        conversation = self._ensure_conversation(db, conversation_id, text)
+        conversation = self._ensure_conversation(db, conversation_id, text, locale)
         storage_service.append_message(db, conversation.id, "user", text, input_type="text", model_key=model_service.active_model_key)
         conversation = storage_service.get_conversation(db, conversation.id)
         tools = self._get_tools(enable_web_access, enable_local_files, allowed_folders)
@@ -615,7 +670,7 @@ class ChatService:
         allowed_folders: list[str] | None = None,
         user_location: str | None = None,
     ) -> tuple[Conversation, object]:
-        conversation = self._ensure_conversation(db, conversation_id, text)
+        conversation = self._ensure_conversation(db, conversation_id, text, locale)
         storage_service.clear_follow_ups(db, conversation.id)
         storage_service.append_message(db, conversation.id, "user", text, input_type="text", model_key=model_service.active_model_key)
         conversation = storage_service.get_conversation(db, conversation.id)
@@ -768,9 +823,9 @@ class ChatService:
         user_location: str | None = None,
     ) -> tuple[Conversation, Message]:
         stored_content = self._stored_upload_content(text, input_type, attachment_path, attachment_summary)
-        seed_text = self._conversation_seed_for_upload(stored_content, input_type, attachment_name, attachment_summary)
+        seed_text = self._conversation_seed_for_upload(stored_content, input_type, attachment_name, attachment_summary, locale)
 
-        conversation = self._ensure_conversation(db, conversation_id, seed_text)
+        conversation = self._ensure_conversation(db, conversation_id, seed_text, locale)
         storage_service.clear_follow_ups(db, conversation.id)
         storage_service.append_message(
             db,
@@ -815,9 +870,9 @@ class ChatService:
         user_location: str | None = None,
     ) -> tuple[Conversation, object]:
         stored_content = self._stored_upload_content(text, input_type, attachment_path, attachment_summary)
-        seed_text = self._conversation_seed_for_upload(stored_content, input_type, attachment_name, attachment_summary)
+        seed_text = self._conversation_seed_for_upload(stored_content, input_type, attachment_name, attachment_summary, locale)
 
-        conversation = self._ensure_conversation(db, conversation_id, seed_text)
+        conversation = self._ensure_conversation(db, conversation_id, seed_text, locale)
         storage_service.clear_follow_ups(db, conversation.id)
         storage_service.append_message(
             db,

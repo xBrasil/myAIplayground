@@ -84,3 +84,46 @@ export async function createUtterance(text: string, preferredName: string): Prom
 export function stopSpeaking(): void {
   window.speechSynthesis.cancel();
 }
+
+/** Notify SpeakButton instances that auto-TTS started/stopped */
+const AUTO_TTS_START = 'auto-tts-start';
+const AUTO_TTS_STOP = 'auto-tts-stop';
+
+export function onAutoTtsStart(cb: (text: string) => void): () => void {
+  const handler = (e: Event) => cb((e as CustomEvent<string>).detail);
+  window.addEventListener(AUTO_TTS_START, handler);
+  return () => window.removeEventListener(AUTO_TTS_START, handler);
+}
+
+export function onAutoTtsStop(cb: () => void): () => void {
+  window.addEventListener(AUTO_TTS_STOP, cb);
+  return () => window.removeEventListener(AUTO_TTS_STOP, cb);
+}
+
+export async function autoSpeakText(text: string, preferredName: string): Promise<void> {
+  window.speechSynthesis.cancel();
+  const utterance = await createUtterance(text, preferredName);
+  const done = () => window.dispatchEvent(new CustomEvent(AUTO_TTS_STOP));
+  utterance.onend = done;
+  utterance.onerror = done;
+  window.dispatchEvent(new CustomEvent(AUTO_TTS_START, { detail: text }));
+  window.speechSynthesis.speak(utterance);
+}
+
+/** Strip markdown syntax so TTS reads clean text */
+export function stripMarkdown(md: string): string {
+  return md
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/`([^`]*)`/g, '$1')
+    .replace(/!\[.*?\]\(.*?\)/g, '')
+    .replace(/\[([^\]]*)\]\(.*?\)/g, '$1')
+    .replace(/(\*{1,3}|_{1,3})(.*?)\1/g, '$2')
+    .replace(/~~(.*?)~~/g, '$1')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^>\s+/gm, '')
+    .replace(/^[-*_]{3,}\s*$/gm, '')
+    .replace(/^[\s]*[-*+]\s+/gm, '')
+    .replace(/^[\s]*\d+\.\s+/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}

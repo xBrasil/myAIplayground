@@ -23,6 +23,8 @@ interface SettingsPanelProps {
   onChangeAllowedFolders: (folders: string[]) => void;
   locationSharing: boolean;
   onChangeLocationSharing: (value: boolean) => void;
+  autoReadResponse: boolean;
+  onToggleAutoReadResponse: (value: boolean) => void;
   onDeleteAll: () => Promise<void>;
 }
 
@@ -46,6 +48,8 @@ export default function SettingsPanel({
   onChangeAllowedFolders,
   locationSharing,
   onChangeLocationSharing,
+  autoReadResponse,
+  onToggleAutoReadResponse,
   onDeleteAll,
 }: SettingsPanelProps) {
   const { t, locale, setLocale } = useI18n();
@@ -138,21 +142,6 @@ export default function SettingsPanel({
                 ⚠ {t('settings.customInstructionsDisabledNote')}
               </p>
             )}
-          </section>
-
-          <section className="settings-section">
-            <h4>{t('settings.experience')}</h4>
-            <label className="toggle-row">
-              <span>{t('settings.enterToSend')}</span>
-              <input
-                type="checkbox"
-                checked={enterToSend}
-                onChange={(event) => onToggleEnterToSend(event.target.checked)}
-              />
-            </label>
-            <p className="settings-help">
-              {t('settings.enterToSendHelp')}
-            </p>
           </section>
 
           <section className="settings-section">
@@ -277,6 +266,32 @@ export default function SettingsPanel({
                 onChange={(event) => onChangeLocationSharing(event.target.checked)}
               />
             </label>
+          </section>
+
+          <section className="settings-section">
+            <h4>{t('settings.experience')}</h4>
+            <label className="toggle-row">
+              <span>{t('settings.enterToSend')}</span>
+              <input
+                type="checkbox"
+                checked={enterToSend}
+                onChange={(event) => onToggleEnterToSend(event.target.checked)}
+              />
+            </label>
+            <p className="settings-help">
+              {t('settings.enterToSendHelp')}
+            </p>
+            <label className="toggle-row">
+              <span>{t('settings.autoReadResponse')}</span>
+              <input
+                type="checkbox"
+                checked={autoReadResponse}
+                onChange={(event) => onToggleAutoReadResponse(event.target.checked)}
+              />
+            </label>
+            <p className="settings-help">
+              {t('settings.autoReadResponseHelp')}
+            </p>
           </section>
 
           <section className="settings-section">

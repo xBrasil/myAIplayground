@@ -10,19 +10,17 @@ BACKEND_DIR="$REPO_ROOT/backend"
 VENV_PYTHON="$REPO_ROOT/.venv/bin/python"
 DATA_DIR="$REPO_ROOT/data"
 BACKEND_LOG="$DATA_DIR/system/logs/backend.log"
-BACKEND_ERR_LOG="$DATA_DIR/system/logs/backend-err.log"
 FRONTEND_LOG="$DATA_DIR/system/logs/frontend.log"
-FRONTEND_ERR_LOG="$DATA_DIR/system/logs/frontend-err.log"
 
 NO_BROWSER=false
 if [ "${1:-}" = "--no-browser" ]; then
   NO_BROWSER=true
 fi
 
-step() { echo -e "\n[$(date '+%H:%M:%S')] ==> $1"; }
-ok()   { echo -e "  [$(date '+%H:%M:%S')] \033[32m$1\033[0m"; }
-warn() { echo -e "  [$(date '+%H:%M:%S')] \033[33m$1\033[0m"; }
-err()  { echo -e "  [$(date '+%H:%M:%S')] \033[31m$1\033[0m"; }
+step() { echo -e "\n[$(date '+%Y-%m-%d %H:%M:%S')] ==> $1"; }
+ok()   { echo -e "  [$(date '+%Y-%m-%d %H:%M:%S')] \033[32m$1\033[0m"; }
+warn() { echo -e "  [$(date '+%Y-%m-%d %H:%M:%S')] \033[33m$1\033[0m"; }
+err()  { echo -e "  [$(date '+%Y-%m-%d %H:%M:%S')] \033[31m$1\033[0m"; }
 
 # ── Pre-flight checks ───────────────────────────────────────────
 if [ ! -f "$FRONTEND_DIR/package.json" ]; then
@@ -38,6 +36,42 @@ if [ ! -f "$DATA_DIR/system/.env" ] && [ ! -f "$DATA_DIR/.env" ]; then
   exit 1
 fi
 mkdir -p "$DATA_DIR/system/logs"
+
+# ── Single-instance guard ───────────────────────────────────────
+LOCK_FILE="$DATA_DIR/system/.run.lock"
+if command -v flock >/dev/null 2>&1; then
+  # Linux: use flock (auto-released on crash)
+  exec 9>"$LOCK_FILE"
+  if ! flock -n 9; then
+    warn "My AI Playground is already running. Opening browser..."
+    FRONTEND_PORT=5173
+    if [ -f "$DATA_DIR/system/.ports" ]; then
+      FP=$(grep -o '"frontend":[[:space:]]*[0-9]*' "$DATA_DIR/system/.ports" | grep -o '[0-9]*$' || true)
+      [ -n "$FP" ] && FRONTEND_PORT=$FP
+    fi
+    case "$(uname -s)" in
+      Linux*)  xdg-open "http://127.0.0.1:$FRONTEND_PORT" 2>/dev/null || true ;;
+      Darwin*) open "http://127.0.0.1:$FRONTEND_PORT" 2>/dev/null || true ;;
+    esac
+    exit 0
+  fi
+else
+  # macOS / other: PID-file guard with stale-PID detection
+  if [ -f "$LOCK_FILE" ]; then
+    OLD_PID=$(cat "$LOCK_FILE" 2>/dev/null || true)
+    if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
+      warn "My AI Playground is already running (PID $OLD_PID). Opening browser..."
+      FRONTEND_PORT=5173
+      if [ -f "$DATA_DIR/system/.ports" ]; then
+        FP=$(grep -o '"frontend":[[:space:]]*[0-9]*' "$DATA_DIR/system/.ports" | grep -o '[0-9]*$' || true)
+        [ -n "$FP" ] && FRONTEND_PORT=$FP
+      fi
+      open "http://127.0.0.1:$FRONTEND_PORT" 2>/dev/null || true
+      exit 0
+    fi
+  fi
+  echo $$ > "$LOCK_FILE"
+fi
 
 # ── Port resolution ─────────────────────────────────────────────
 # Kill stale processes from this repo on a given port
@@ -110,6 +144,7 @@ cleanup() {
     wait "$FRONTEND_PID" 2>/dev/null || true
   fi
   rm -f "$PORTS_FILE"
+  rm -f "$LOCK_FILE"
 }
 trap cleanup EXIT INT TERM
 
@@ -125,7 +160,7 @@ else
   step "Starting backend..."
   cd "$BACKEND_DIR"
   "$VENV_PYTHON" -m uvicorn app.main:app --host 127.0.0.1 --port "$BACKEND_PORT" --log-config log_config.json \
-    >"$BACKEND_LOG" 2>"$BACKEND_ERR_LOG" &
+    >"$BACKEND_LOG" 2>&1 &
   BACKEND_PID=$!
   cd "$REPO_ROOT"
 fi
@@ -165,11 +200,11 @@ while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
 
   # Check for dead processes
   if [ -n "$BACKEND_PID" ] && ! kill -0 "$BACKEND_PID" 2>/dev/null; then
-    err "Backend exited unexpectedly. Check $BACKEND_ERR_LOG"
+    err "Backend exited unexpectedly. Check $BACKEND_LOG"
     exit 1
   fi
   if [ -n "$FRONTEND_PID" ] && ! kill -0 "$FRONTEND_PID" 2>/dev/null; then
-    err "Frontend exited unexpectedly. Check $FRONTEND_ERR_LOG"
+    err "Frontend exited unexpectedly. Check $FRONTEND_LOG"
     exit 1
   fi
 

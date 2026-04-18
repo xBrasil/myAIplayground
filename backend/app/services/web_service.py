@@ -110,20 +110,20 @@ def fetch_url(url: str) -> dict[str, str]:
     try:
         parsed = urlparse(url)
     except Exception:
-        result["error"] = "URL inválida."
+        result["error"] = "Invalid URL."
         return result
 
     if parsed.scheme not in _ALLOWED_SCHEMES:
-        result["error"] = f"Protocolo não permitido: {parsed.scheme}. Use http ou https."
+        result["error"] = f"Protocol not allowed: {parsed.scheme}. Use http or https."
         return result
 
     if not parsed.hostname:
-        result["error"] = "URL sem hostname."
+        result["error"] = "URL has no hostname."
         return result
 
     # Block private IPs (SSRF protection)
     if _is_private_host(parsed.hostname):
-        result["error"] = "Acesso a endereços internos/privados não é permitido."
+        result["error"] = "Access to internal/private addresses is not allowed."
         return result
 
     # Fetch (manual redirects to re-validate each hop against SSRF)
@@ -145,7 +145,7 @@ def fetch_url(url: str) -> dict[str, str]:
                 if response.is_redirect:
                     location = response.headers.get("location", "")
                     if not location:
-                        result["error"] = "Redirecionamento sem cabeçalho Location."
+                        result["error"] = "Redirect without Location header."
                         return result
                     redirect_parsed = urlparse(location)
                     # Resolve relative redirects
@@ -153,19 +153,19 @@ def fetch_url(url: str) -> dict[str, str]:
                         location = urljoin(current_url, location)
                         redirect_parsed = urlparse(location)
                     if redirect_parsed.scheme not in _ALLOWED_SCHEMES:
-                        result["error"] = f"Redirecionamento para protocolo não permitido: {redirect_parsed.scheme}."
+                        result["error"] = f"Redirect to disallowed protocol: {redirect_parsed.scheme}."
                         return result
                     if not redirect_parsed.hostname:
-                        result["error"] = "Redirecionamento para URL sem hostname."
+                        result["error"] = "Redirect to URL without hostname."
                         return result
                     if _is_private_host(redirect_parsed.hostname):
-                        result["error"] = "Redirecionamento bloqueado: destino é endereço interno/privado."
+                        result["error"] = "Redirect blocked: destination is an internal/private address."
                         return result
                     current_url = location
                     continue
                 break
             else:
-                result["error"] = f"Muitos redirecionamentos (limite: {_MAX_REDIRECTS})."
+                result["error"] = f"Too many redirects (limit: {_MAX_REDIRECTS})."
                 return result
             response.raise_for_status()
 
@@ -191,11 +191,11 @@ def fetch_url(url: str) -> dict[str, str]:
             result["content"] = text[:_MAX_TEXT_CHARS]
 
     except httpx.TimeoutException:
-        result["error"] = f"Timeout ao acessar {url} (limite: {_REQUEST_TIMEOUT}s)."
+        result["error"] = f"Timeout accessing {url} (limit: {_REQUEST_TIMEOUT}s)."
     except httpx.HTTPStatusError as exc:
-        result["error"] = f"Erro HTTP {exc.response.status_code} ao acessar {url}."
+        result["error"] = f"HTTP error {exc.response.status_code} accessing {url}."
     except Exception as exc:
-        result["error"] = f"Erro ao acessar {url}: {type(exc).__name__}: {exc}"
+        result["error"] = f"Error accessing {url}: {type(exc).__name__}: {exc}"
 
     return result
 

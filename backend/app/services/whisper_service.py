@@ -21,7 +21,7 @@ class WhisperService:
         if self._model is not None:
             return
         if WhisperModel is None:
-            raise RuntimeError("faster-whisper não está instalado no ambiente Python do backend.")
+            raise RuntimeError("faster-whisper is not installed in the backend Python environment.")
         with self._lock:
             if self._model is not None:
                 return
@@ -32,7 +32,7 @@ class WhisperService:
                     compute_type="float16",
                 )
             except Exception:
-                logger.warning("CUDA indisponível para Whisper, usando CPU")
+                logger.warning("CUDA unavailable for Whisper, using CPU")
                 self._model = WhisperModel(
                     self._settings.whisper_model_size,
                     device="cpu",

@@ -51,12 +51,18 @@ export interface ModelOption {
   cached: boolean;
 }
 
+export interface ModelSetupStatus {
+  key: string;
+  label?: string;
+  detail?: string;
+}
+
 export interface ModelSelectionResponse {
   active_model_key: ModelKey;
   model_id: string;
   model_status: ModelStatus;
   model_loaded: boolean;
-  model_setup_status: string;
+  model_setup_status: ModelSetupStatus;
 }
 
 export interface StreamConversationEvent {
@@ -104,7 +110,7 @@ export interface HealthResponse {
   gpu_backend: 'cuda' | 'hip' | 'rocm' | 'metal' | 'vulkan' | 'cpu';
   gpu_display_name: string;
   context_size: number;
-  model_setup_status: string;
+  model_setup_status: ModelSetupStatus;
   model_loading_enabled: boolean;
   available_models: ModelOption[];
 }

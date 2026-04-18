@@ -23,9 +23,20 @@
   "serverPanel.contextSize": "Context",
   "serverPanel.tokens": "{{count}} tokens",
   "serverPanel.setupStatus": "Detail",
+  "serverPanel.status.disabled": "Model loading disabled in backend/.env (ENABLE_MODEL_LOADING=false).",
+  "serverPanel.status.server_not_found": "llama-server not found. Run install.cmd to download the binaries.",
+  "serverPanel.status.loading": "Loading {{label}}…",
+  "serverPanel.status.error": "Failed to load model: {{detail}}",
+  "serverPanel.status.incomplete": "Model loading was attempted but did not complete.",
+  "serverPanel.status.not_loaded": "Model not yet loaded. Restart the backend to start loading.",
+  "serverPanel.status.ready": "{{label}} ready for local inference.",
   "serverPanel.stopServer": "Stop server",
   "serverPanel.confirmStop": "Are you sure you want to stop the server? The application will close.",
   "serverPanel.disconnectedMessage": "The server has disconnected. Close this tab and run the application again.",
+
+  "model.summary.Gemma4E2B": "Faster",
+  "model.summary.Gemma4E4B": "Balanced",
+  "model.summary.Gemma426BA4B": "Smarter",
 
   "sidebar.newConversation": "New conversation",
   "sidebar.rename": "Rename",
@@ -75,6 +86,7 @@
   "messages.tip.enableFiles": "AI can read your local files to help with documents, code, and more. Enable it in Settings.",
   "messages.tip.enableLocation": "Share your location so the AI can give you locally relevant answers. Enable it in Settings.",
   "messages.tip.enableInstructions": "Personalize how the AI responds with custom instructions. Set them up in Settings.",
+  "messages.tip.enableAutoRead": "Want responses read aloud automatically when you send audio? Enable it in Settings.",
   "messages.tip.tryModels": "Try different models! Smaller ones are faster, larger ones are smarter.",
   "messages.tip.sendMedia": "You can send images, audio recordings and files — not just text!",
   "messages.tip.keyboard": "Tip: Press Enter to send. Use Shift+Enter for a new line.",
@@ -130,6 +142,8 @@
   "settings.experience": "Experience",
   "settings.enterToSend": "Send with Enter",
   "settings.enterToSendHelp": "When enabled, Enter sends the message and Shift+Enter adds a line break.",
+  "settings.autoReadResponse": "Auto-read audio responses",
+  "settings.autoReadResponseHelp": "When enabled, the model's response is automatically read aloud after you send an audio message.",
   "settings.voice": "Voice",
   "settings.voiceLabel": "Windows 11 Voice",
   "settings.localStorage": "Local storage",
@@ -315,7 +329,9 @@
   "script.install.dataDirs": "Ensuring local data directories",
   "script.install.preparingEnv": "Preparing data/system/.env",
   "script.install.envCreated": "data/system/.env file created with ENABLE_MODEL_LOADING=true.",
+  "script.install.envUpdated": "data/system/.env updated from .env.example.",
   "script.install.envExists": "data/system/.env file already exists; keeping current configuration.",
+  "script.install.envExampleMissing": "backend/.env.example not found at '{{path}}'. The installer package appears to be incomplete or corrupted — please reinstall from a fresh download.",
   "script.install.defaultModel": "Pre-downloading default model for offline use",
   "script.install.defaultModelOk": "Default model ready.",
   "script.install.defaultModelFailed": "Could not pre-download default model: {{error}}. It will be fetched on first chat.",
@@ -353,6 +369,7 @@
   "script.run.serviceNotReady": "{{services}} did not become ready in {{timeout}}s. Check the logs in data\\",
   "script.run.unexpectedExit": "{{name}} exited unexpectedly (exit code {{code}}). Check the logs in data\\",
   "script.run.noFreePort": "No free port found in range {{start}}-{{end}}. All {{tries}} candidate ports are busy.",
+  "script.run.alreadyRunning": "My AI Playground is already running. Opening browser...",
 
   "script.tray.openBrowser": "Open in Browser",
   "script.tray.viewLogs": "View Logs",
@@ -370,6 +387,7 @@
   "script.tray.splash.loadingBackend": "Loading backend…",
   "script.tray.splash.loadingFrontend": "Loading frontend…",
   "script.tray.splash.openingBrowser": "Opening browser…",
+  "script.tray.notification.trayInfo": "My AI Playground is running in the system tray. Use the tray icon to restart, view logs, or quit.",
 
   "script.runCmd.failed": "Startup failed. See the messages above."
 }

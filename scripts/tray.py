@@ -71,6 +71,64 @@ def _get_backend_shutdown_url() -> str:
 
 
 # ---------------------------------------------------------------------------
+# Single-instance guard
+# ---------------------------------------------------------------------------
+_instance_mutex = None  # prevent GC on Windows
+
+
+def _acquire_instance_lock() -> bool:
+    """Try to acquire an OS-level single-instance lock.
+
+    Windows: named mutex (auto-released if the process crashes).
+    Unix:    flock on a lock file (auto-released if the process crashes).
+
+    Returns True if lock acquired (we are the first instance).
+    Returns False if another instance already holds the lock.
+    """
+    global _instance_mutex
+
+    if IS_WINDOWS:
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.CreateMutexW.restype = wintypes.HANDLE
+        kernel32.CreateMutexW.argtypes = [wintypes.LPVOID, wintypes.BOOL, wintypes.LPCWSTR]
+        kernel32.CloseHandle.restype = wintypes.BOOL
+        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+
+        ERROR_ALREADY_EXISTS = 183
+        # Backslash-prefixed name lives in the Win32 named-object namespace
+        name = "Global\\MyAIPlayground_SingleInstance"
+        handle = kernel32.CreateMutexW(None, wintypes.BOOL(False), name)
+        if not handle:
+            return False
+        if ctypes.get_last_error() == ERROR_ALREADY_EXISTS:
+            kernel32.CloseHandle(handle)
+            return False
+        _instance_mutex = handle  # prevent GC
+        return True
+    else:
+        import fcntl
+
+        lock_path = DATA_DIR / "system" / ".tray.lock"
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        # Open (create if missing) and keep the fd alive for the process lifetime
+        fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o644)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            # Write our PID for debugging
+            os.ftruncate(fd, 0)
+            os.write(fd, str(os.getpid()).encode())
+            # Keep fd open (and thus locked) for the process lifetime
+            _acquire_instance_lock._fd = fd  # type: ignore[attr-defined]
+            return True
+        except OSError:
+            os.close(fd)
+            return False
+
+
+# ---------------------------------------------------------------------------
 # Stale-process cleanup — kill anything already occupying our ports
 # ---------------------------------------------------------------------------
 def _is_our_process(pid: int) -> bool:
@@ -247,14 +305,6 @@ class SplashScreen:
         root.title("My AI Playground")
         root.configure(bg=BG)
         root.resizable(False, False)
-        # Remove title bar for a cleaner splash look
-        root.overrideredirect(True)
-        # Start on top so the user sees it, then drop topmost after a moment
-        # so other windows can cover it when the user clicks away.
-        root.attributes("-topmost", True)
-        root.after(800, lambda: root.attributes("-topmost", False))
-        # Allow clicking the splash to push it behind other windows
-        root.bind("<Button-1>", lambda _e: root.lower())
 
         # DPI scaling — tkinter already scales font *point* sizes when
         # DPI awareness is enabled, so we only scale *pixel* values
@@ -269,6 +319,22 @@ class SplashScreen:
         sx = root.winfo_screenwidth() // 2 - W // 2
         sy = root.winfo_screenheight() // 2 - H // 2
         root.geometry(f"{W}x{H}+{sx}+{sy}")
+
+        # Disable the close button but keep the title bar so the window
+        # appears in the taskbar.  Minimize/maximize remain functional.
+        root.protocol("WM_DELETE_WINDOW", lambda: None)
+
+        # Set window icon (favicon.ico)
+        try:
+            ico = str(REPO_ROOT / "frontend" / "public" / "favicon.ico")
+            root.iconbitmap(ico)
+        except Exception:
+            pass
+
+        # Start on top so the user sees it, then drop topmost after a moment
+        # so other windows can cover it when the user clicks away.
+        root.attributes("-topmost", True)
+        root.after(800, lambda: root.attributes("-topmost", False))
 
         # Rounded-corner border effect via a frame
         bw = max(S(2), 2)
@@ -558,6 +624,11 @@ def _monitor_health(icon) -> None:
             _splash.update_status(T("script.tray.splash.openingBrowser"))
         icon.title = T("script.tray.tooltip.running")
         webbrowser.open(_get_frontend_url())
+        # Show a tray notification so the user knows where to find the icon
+        try:
+            icon.notify(T("script.tray.notification.trayInfo"), "My AI Playground")
+        except Exception:
+            pass
         # Close splash after browser starts so the user sees it until the
         # browser window appears on screen.
         if _splash:
@@ -613,6 +684,12 @@ def main() -> None:
                 pass
 
     _load_i18n()
+
+    # --- Single-instance guard ---
+    if not _acquire_instance_lock():
+        # Another instance is already running — open browser and exit quietly
+        webbrowser.open(_get_frontend_url())
+        return
 
     # --- Kill stale processes from a previous unclean shutdown ---
     _kill_stale_processes()

@@ -47,24 +47,24 @@ def _is_path_within_allowed(target: Path, allowed_folders: list[str]) -> bool:
 def _validate_path(path_str: str, allowed_folders: list[str]) -> tuple[Path | None, str]:
     """Validate and resolve a path. Returns (resolved_path, error_message)."""
     if not allowed_folders:
-        return None, "Nenhuma pasta permitida foi configurada. Configure pastas permitidas nos Ajustes."
+        return None, "No allowed folders configured. Set up allowed folders in Settings."
 
     try:
         target = Path(path_str).resolve()
     except (ValueError, OSError) as exc:
-        return None, f"Caminho inválido: {exc}"
+        return None, f"Invalid path: {exc}"
 
     if not _is_path_within_allowed(target, allowed_folders):
         return None, (
-            f"Acesso negado: o caminho '{path_str}' está fora das pastas permitidas. "
-            f"Pastas permitidas: {', '.join(allowed_folders)}"
+            f"Access denied: the path '{path_str}' is outside the allowed folders. "
+            f"Allowed folders: {', '.join(allowed_folders)}"
         )
 
     # Check for symlink pointing outside allowed folders
     if target.is_symlink():
         real_target = target.resolve()
         if not _is_path_within_allowed(real_target, allowed_folders):
-            return None, "Acesso negado: symlink aponta para fora das pastas permitidas."
+            return None, "Access denied: symlink points outside allowed folders."
 
     return target, ""
 
@@ -82,11 +82,11 @@ def list_directory(path: str, allowed_folders: list[str]) -> dict[str, object]:
         return result
 
     if not target.exists():
-        result["error"] = f"Diretório não encontrado: {path}"
+        result["error"] = f"Directory not found: {path}"
         return result
 
     if not target.is_dir():
-        result["error"] = f"O caminho não é um diretório: {path}"
+        result["error"] = f"Path is not a directory: {path}"
         return result
 
     try:
@@ -110,9 +110,9 @@ def list_directory(path: str, allowed_folders: list[str]) -> dict[str, object]:
 
         result["entries"] = entries
     except PermissionError:
-        result["error"] = f"Sem permissão para acessar: {path}"
+        result["error"] = f"Permission denied: {path}"
     except OSError as exc:
-        result["error"] = f"Erro ao listar diretório: {exc}"
+        result["error"] = f"Error listing directory: {exc}"
 
     return result
 
@@ -127,11 +127,11 @@ def read_file(path: str, allowed_folders: list[str]) -> dict[str, str]:
         return result
 
     if not target.exists():
-        result["error"] = f"Arquivo não encontrado: {path}"
+        result["error"] = f"File not found: {path}"
         return result
 
     if not target.is_file():
-        result["error"] = f"O caminho não é um arquivo: {path}"
+        result["error"] = f"Path is not a file: {path}"
         return result
 
     suffix = target.suffix.lower()
@@ -140,7 +140,7 @@ def read_file(path: str, allowed_folders: list[str]) -> dict[str, str]:
     try:
         size = target.stat().st_size
     except OSError as exc:
-        result["error"] = f"Erro ao verificar tamanho do arquivo: {exc}"
+        result["error"] = f"Error checking file size: {exc}"
         return result
 
     # Handle document files (PDF, DOCX, XLSX, PPTX) via document_service
@@ -148,34 +148,34 @@ def read_file(path: str, allowed_folders: list[str]) -> dict[str, str]:
         try:
             from app.services.document_service import extract_text as extract_document_text
             text = extract_document_text(str(target), max_chars=_MAX_FILE_SIZE)
-            if text.startswith("Erro") or text.startswith("Error"):
+            if text.startswith("(Error") or text.startswith("(Unrecognized"):
                 result["error"] = text
             else:
                 result["content"] = text
         except Exception as exc:
-            result["error"] = f"Erro ao extrair texto do documento: {exc}"
+            result["error"] = f"Error extracting text from document: {exc}"
         return result
 
     # Block binary files
     if suffix in _BINARY_EXTENSIONS:
-        result["error"] = f"Arquivo binário não pode ser lido como texto: {target.name}"
+        result["error"] = f"Binary file cannot be read as text: {target.name}"
         return result
 
     if size > _MAX_FILE_SIZE:
         try:
             with open(target, "r", encoding="utf-8", errors="ignore") as f:
                 result["content"] = f.read(_MAX_FILE_SIZE)
-            result["error"] = f"(Arquivo truncado: {size:,} bytes total, primeiros {_MAX_FILE_SIZE:,} bytes mostrados)"
+            result["error"] = f"(File truncated: {size:,} bytes total, first {_MAX_FILE_SIZE:,} bytes shown)"
         except Exception as exc:
-            result["error"] = f"Erro ao ler arquivo: {exc}"
+            result["error"] = f"Error reading file: {exc}"
         return result
 
     try:
         result["content"] = target.read_text(encoding="utf-8", errors="ignore")
     except PermissionError:
-        result["error"] = f"Sem permissão para ler: {path}"
+        result["error"] = f"Permission denied: {path}"
     except OSError as exc:
-        result["error"] = f"Erro ao ler arquivo: {exc}"
+        result["error"] = f"Error reading file: {exc}"
 
     return result
 

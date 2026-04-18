@@ -58,6 +58,6 @@ def delete_all_conversations(
     payload: DeleteAllConversationsRequest,
     db: Session = Depends(get_db),
 ) -> DeleteConversationResponse:
-    if payload.confirmation_text != "APAGAR TUDO":
-        raise HTTPException(status_code=400, detail="Digite APAGAR TUDO para confirmar.")
+    if payload.confirmation_text != "DELETE ALL":
+        raise HTTPException(status_code=400, detail="Type DELETE ALL to confirm.")
     return storage_service.delete_all_conversations(db)

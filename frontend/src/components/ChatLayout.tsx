@@ -15,6 +15,7 @@ interface ChatLayoutProps {
   webAccess: boolean;
   localFiles: boolean;
   locationSharing: boolean;
+  autoReadResponse: boolean;
   conversations: Conversation[];
   currentConversation: Conversation | null;
   streamingText: string;
@@ -57,6 +58,7 @@ export default function ChatLayout({
   webAccess,
   localFiles,
   locationSharing,
+  autoReadResponse,
   conversations,
   currentConversation,
   streamingText,
@@ -285,6 +287,7 @@ export default function ChatLayout({
             localFiles,
             locationSharing,
             customInstructionsEnabled,
+            autoReadResponse,
             conversationCount: conversations.length,
             onOpenSettings,
           }}

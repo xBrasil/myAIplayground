@@ -12,9 +12,32 @@ $repoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 . (Join-Path $repoRoot "scripts\i18n.ps1")
 Initialize-I18n -RepoRoot $repoRoot
 
+# --- Single-instance guard (named mutex) ---
+$mutexName = "Global\MyAIPlayground_Run_SingleInstance"
+$createdNew = $false
+$mutex = [System.Threading.Mutex]::new($false, $mutexName, [ref]$createdNew)
+if (-not $createdNew) {
+    # Another run.ps1 is already active — open browser to existing instance and exit
+    $mutex.Dispose()
+    Write-Host (T 'script.run.alreadyRunning') -ForegroundColor Yellow
+    $dataDir = Join-Path $repoRoot "data"
+    $portsFile = Join-Path $dataDir "system\.ports"
+    $frontendPort = 5173
+    if (Test-Path $portsFile) {
+        try {
+            $ports = Get-Content $portsFile -Raw | ConvertFrom-Json
+            $frontendPort = $ports.frontend
+        } catch {}
+    }
+    Start-Process "http://127.0.0.1:${frontendPort}"
+    exit 0
+}
+# Release mutex on exit so a new instance can start after we stop
+Register-EngineEvent PowerShell.Exiting -Action { $mutex.ReleaseMutex(); $mutex.Dispose() } | Out-Null
+
 function Write-Step {
     param([string]$Message)
-    $ts = Get-Date -Format 'HH:mm:ss'
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
     Write-Host "`n[$ts] ==> $Message" -ForegroundColor Cyan
 }
 
@@ -179,12 +202,13 @@ if ($backendAlreadyRunning) {
     Write-Step (T 'script.run.backendAlreadyRunning')
 } else {
     Write-Step (T 'script.run.startingBackend')
+    $backendStdout = Join-Path $dataDir "system\logs\backend-stdout.log"
     $backendProc = Start-Process -FilePath $venvPython `
         -ArgumentList "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "$backendPort", "--log-config", "log_config.json" `
         -WorkingDirectory $backendDir `
         -NoNewWindow -PassThru `
-        -RedirectStandardOutput $backendLog `
-        -RedirectStandardError (Join-Path $dataDir "system\logs\backend-err.log")
+        -RedirectStandardOutput $backendStdout `
+        -RedirectStandardError $backendLog
     $script:children += $backendProc
 }
 

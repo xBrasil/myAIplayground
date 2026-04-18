@@ -143,7 +143,10 @@ export default function ModelSelectorModal({
         if (!h) return;
 
         if (h.model_status === 'loading') {
-          setStatusMessage(h.model_setup_status || t('modelSelector.switching'));
+          setStatusMessage(h.model_setup_status ? t(`serverPanel.status.${h.model_setup_status.key}`, {
+            label: h.model_setup_status.label ?? '',
+            detail: h.model_setup_status.detail ?? '',
+          }) : t('modelSelector.switching'));
           return;
         }
 
@@ -156,7 +159,7 @@ export default function ModelSelectorModal({
 
         if (h.model_status === 'error') {
           stopPolling();
-          const detail = h.model_setup_status || t('modelSelector.errorUnexpected');
+          const detail = h.model_setup_status?.detail || t('modelSelector.errorUnexpected');
           setSwitchState('error');
           setStatusMessage(t('modelSelector.errorTitle'));
           setErrorDetail(detail);
@@ -240,7 +243,7 @@ export default function ModelSelectorModal({
                 >
                   <div className="model-card__header">
                     <strong className="model-card__name">{model.label}</strong>
-                    <span className="model-card__summary">{model.summary}</span>
+                    <span className="model-card__summary">{t(`model.summary.${model.summary}`)}</span>
                     <div className="model-card__badges">
                       {isActive && <span className="badge badge--current">{t('modelSelector.current')}</span>}
                       {gpuBlocked

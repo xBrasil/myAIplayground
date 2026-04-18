@@ -4,7 +4,7 @@
     "formatters": {
         "default": {
             "()": "uvicorn.logging.DefaultFormatter",
-            "fmt": "%(asctime)s %(levelprefix)s %(message)s",
+            "fmt": "%(asctime)s %(levelprefix)s %(name)s - %(message)s",
             "datefmt": "%Y-%m-%d %H:%M:%S"
         },
         "access": {
@@ -22,8 +22,12 @@
         "access": {
             "formatter": "access",
             "class": "logging.StreamHandler",
-            "stream": "ext://sys.stdout"
+            "stream": "ext://sys.stderr"
         }
+    },
+    "root": {
+        "handlers": ["default"],
+        "level": "INFO"
     },
     "loggers": {
         "uvicorn": {"handlers": ["default"], "level": "INFO", "propagate": false},

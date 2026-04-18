@@ -1,45 +1,24 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { useI18n } from '../lib/i18n';
-import { createUtterance, stopSpeaking } from '../lib/speech';
+import { createUtterance, onAutoTtsStart, onAutoTtsStop, stopSpeaking, stripMarkdown } from '../lib/speech';
 
 interface SpeakButtonProps {
   text: string;
   preferredVoice: string;
 }
 
-/** Strip markdown syntax so TTS reads clean text */
-function stripMarkdown(md: string): string {
-  return md
-    // Remove code blocks
-    .replace(/```[\s\S]*?```/g, '')
-    // Remove inline code
-    .replace(/`([^`]*)`/g, '$1')
-    // Remove images
-    .replace(/!\[.*?\]\(.*?\)/g, '')
-    // Remove links, keep text
-    .replace(/\[([^\]]*)\]\(.*?\)/g, '$1')
-    // Remove bold/italic markers
-    .replace(/(\*{1,3}|_{1,3})(.*?)\1/g, '$2')
-    // Remove strikethrough
-    .replace(/~~(.*?)~~/g, '$1')
-    // Remove heading markers
-    .replace(/^#{1,6}\s+/gm, '')
-    // Remove blockquote markers
-    .replace(/^>\s+/gm, '')
-    // Remove horizontal rules
-    .replace(/^[-*_]{3,}\s*$/gm, '')
-    // Remove list markers
-    .replace(/^[\s]*[-*+]\s+/gm, '')
-    .replace(/^[\s]*\d+\.\s+/gm, '')
-    // Collapse multiple newlines
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
-
 export default function SpeakButton({ text, preferredVoice }: SpeakButtonProps) {
   const { t } = useI18n();
   const [speaking, setSpeaking] = useState(false);
+
+  useEffect(() => {
+    const offStart = onAutoTtsStart((spokenText) => {
+      if (spokenText === stripMarkdown(text)) setSpeaking(true);
+    });
+    const offStop = onAutoTtsStop(() => setSpeaking(false));
+    return () => { offStart(); offStop(); };
+  }, [text]);
 
   async function handleClick() {
     if (speaking) {

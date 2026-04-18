@@ -8,6 +8,7 @@ const WEB_ACCESS_KEY = 'gemma-local-studio.web-access';
 const LOCAL_FILES_KEY = 'gemma-local-studio.local-files';
 const ALLOWED_FOLDERS_KEY = 'gemma-local-studio.allowed-folders';
 const LOCATION_SHARING_KEY = 'gemma-local-studio.location-sharing';
+const AUTO_READ_RESPONSE_KEY = 'gemma-local-studio.auto-read-response';
 
 export function loadEnterToSendPreference(): boolean {
   const stored = window.localStorage.getItem(ENTER_TO_SEND_KEY);
@@ -96,4 +97,18 @@ export function saveLocationSharing(value: boolean): void {
   const v = String(value);
   window.localStorage.setItem(LOCATION_SHARING_KEY, v);
   persistSetting(LOCATION_SHARING_KEY, v);
+}
+
+export function loadAutoReadResponse(): boolean {
+  const stored = window.localStorage.getItem(AUTO_READ_RESPONSE_KEY);
+  if (stored === null) {
+    return false;
+  }
+  return stored === 'true';
+}
+
+export function saveAutoReadResponse(value: boolean): void {
+  const v = String(value);
+  window.localStorage.setItem(AUTO_READ_RESPONSE_KEY, v);
+  persistSetting(AUTO_READ_RESPONSE_KEY, v);
 }
