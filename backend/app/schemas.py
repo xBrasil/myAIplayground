@@ -39,7 +39,7 @@ class MessageRead(BaseModel):
 
 
 class ConversationCreate(BaseModel):
-    title: str = Field(default="Nova conversa", min_length=1)
+    title: str = Field(default="New conversation", min_length=1)
 
 
 class ConversationRename(BaseModel):
@@ -51,6 +51,7 @@ class ConversationRead(BaseModel):
     title: str
     created_at: datetime
     updated_at: datetime
+    follow_ups: list[str] = []
     messages: list[MessageRead] = []
 
     model_config = {"from_attributes": True}
@@ -69,6 +70,12 @@ class ModelOption(BaseModel):
     cached: bool
 
 
+class ModelSetupStatus(BaseModel):
+    key: str
+    label: str | None = None
+    detail: str | None = None
+
+
 class HealthResponse(BaseModel):
     app_name: str
     environment: str
@@ -81,7 +88,7 @@ class HealthResponse(BaseModel):
     gpu_backend: Literal["cuda", "hip", "rocm", "metal", "vulkan", "cpu"]
     gpu_display_name: str
     context_size: int
-    model_setup_status: str
+    model_setup_status: ModelSetupStatus
     model_loading_enabled: bool
     available_models: list[ModelOption]
 
@@ -131,7 +138,7 @@ class ModelSelectionResponse(BaseModel):
     model_id: str
     model_status: Literal["idle", "loading", "loaded", "error"]
     model_loaded: bool
-    model_setup_status: str
+    model_setup_status: ModelSetupStatus
 
 
 class ServerConfigResponse(BaseModel):

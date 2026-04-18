@@ -26,8 +26,8 @@ import {
   streamUploadMessage,
   streamMultiUploadMessage,
 } from './lib/api';
-import { loadEnterToSendPreference, loadLastModelKey, loadCustomInstructions, loadCustomInstructionsEnabled, loadWebAccess, loadLocalFiles, loadAllowedFolders, loadLocationSharing, saveEnterToSendPreference, saveLastModelKey, saveCustomInstructions, saveCustomInstructionsEnabled, saveWebAccess, saveLocalFiles, saveAllowedFolders, saveLocationSharing } from './lib/preferences';
-import { loadPreferredVoiceName, stopSpeaking } from './lib/speech';
+import { loadEnterToSendPreference, loadLastModelKey, loadCustomInstructions, loadCustomInstructionsEnabled, loadWebAccess, loadLocalFiles, loadAllowedFolders, loadLocationSharing, loadAutoReadResponse, saveEnterToSendPreference, saveLastModelKey, saveCustomInstructions, saveCustomInstructionsEnabled, saveWebAccess, saveLocalFiles, saveAllowedFolders, saveLocationSharing, saveAutoReadResponse } from './lib/preferences';
+import { autoSpeakText, loadPreferredVoiceName, stripMarkdown, stopSpeaking } from './lib/speech';
 import type { ChatStreamEvent, Conversation, HealthResponse, InputType, Message, ModelKey } from './types';
 
 const DRAFT_ID = 'draft';
@@ -81,6 +81,8 @@ export default function App() {
   const [localFiles, setLocalFiles] = useState(loadLocalFiles());
   const [allowedFolders, setAllowedFolders] = useState(loadAllowedFolders());
   const [locationSharing, setLocationSharing] = useState(loadLocationSharing());
+  const [autoReadResponse, setAutoReadResponse] = useState(loadAutoReadResponse());
+  const autoReadResponseRef = useRef(autoReadResponse);
   const [userLocation, setUserLocation] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
@@ -172,15 +174,16 @@ export default function App() {
   useEffect(() => {
     void refreshHealth()
       .then((h) => {
+        if (!h) return;
         const stored = loadLastModelKey();
-        if (stored && h && stored !== h.active_model_key) {
+        if (stored && stored !== h.active_model_key) {
           return selectModel(stored as ModelKey)
             .then(() => refreshHealth())
             .catch(() => null);
         }
       })
-      .catch(() => null);
-    void reloadConversations().catch((err: Error) => setError(err.message));
+      .then(() => reloadConversations())
+      .catch((err: Error) => setError(err.message));
   }, []);
 
   useEffect(() => {
@@ -343,7 +346,7 @@ export default function App() {
     try {
       setBusy(true);
       setError(null);
-      await deleteAllConversations('APAGAR TUDO');
+      await deleteAllConversations('DELETE ALL');
       setCurrentConversationId(null);
       await reloadConversations();
       setSettingsOpen(false);
@@ -548,6 +551,12 @@ export default function App() {
           setActiveToolCalls([]);
           setStreamingText('');
           streamingTextRef.current = '';
+          if (autoReadResponseRef.current && file.type.startsWith('audio/')) {
+            const reply = [...(event.conversation.messages ?? [])].reverse().find((m: { role: string }) => m.role === 'assistant');
+            if (reply?.content) {
+              void autoSpeakText(stripMarkdown(reply.content), preferredVoice);
+            }
+          }
         }
       }, controller.signal, locale, effectiveCustomInstructions, webAccess, localFiles, allowedFolders, userLocation);
       await refreshHealth().catch(() => null);
@@ -649,6 +658,12 @@ export default function App() {
           setActiveToolCalls([]);
           setStreamingText('');
           streamingTextRef.current = '';
+          if (autoReadResponseRef.current && files.some((f) => f.type.startsWith('audio/'))) {
+            const reply = [...(event.conversation.messages ?? [])].reverse().find((m: { role: string }) => m.role === 'assistant');
+            if (reply?.content) {
+              void autoSpeakText(stripMarkdown(reply.content), preferredVoice);
+            }
+          }
         }
       }, controller.signal, locale, effectiveCustomInstructions, webAccess, localFiles, allowedFolders, userLocation);
       await refreshHealth().catch(() => null);
@@ -916,6 +931,12 @@ export default function App() {
     setLocationSharing(value);
   }
 
+  function handleToggleAutoReadResponse(value: boolean) {
+    saveAutoReadResponse(value);
+    setAutoReadResponse(value);
+    autoReadResponseRef.current = value;
+  }
+
   async function handleSelectModel(modelKey: ModelKey) {
     try {
       setError(null);
@@ -980,6 +1001,8 @@ export default function App() {
         onChangeAllowedFolders={handleChangeAllowedFolders}
         locationSharing={locationSharing}
         onChangeLocationSharing={handleChangeLocationSharing}
+        autoReadResponse={autoReadResponse}
+        onToggleAutoReadResponse={handleToggleAutoReadResponse}
         onDeleteAll={handleDeleteAllConversations}
       />
       <ModelSelectorModal
@@ -999,6 +1022,7 @@ export default function App() {
         webAccess={webAccess}
         localFiles={localFiles}
         locationSharing={locationSharing}
+        autoReadResponse={autoReadResponse}
         conversations={conversations}
         currentConversation={currentConversation}
         streamingText={effectiveStreamingText}

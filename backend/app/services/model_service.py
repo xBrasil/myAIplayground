@@ -21,10 +21,9 @@ from app.schemas import ModelOption, ModelSelectionResponse
 logger = logging.getLogger(__name__)
 
 try:
-    from huggingface_hub import hf_hub_download, try_to_load_from_cache
+    from huggingface_hub import hf_hub_download
 except ImportError:  # pragma: no cover
     hf_hub_download = None
-    try_to_load_from_cache = None
 
 
 @dataclass(frozen=True)
@@ -46,6 +45,7 @@ class ModelProfile:
     mmproj_file: str = ""
     kv_cache_quant: bool = False
     n_ctx: int = 32768
+    audio_capable: bool = False
 
 
 class ModelService:
@@ -58,25 +58,27 @@ class ModelService:
             "e2b": ModelProfile(
                 key="e2b",
                 label="Gemma 4 E2B",
-                summary="Mais rápido",
+                summary="Gemma4E2B",
                 gguf_repo=self._settings.gguf_repo_e2b,
                 gguf_file=self._settings.gguf_file_e2b,
                 mmproj_file=self._settings.mmproj_file_e2b,
                 n_ctx=131072,
+                audio_capable=True,
             ),
             "e4b": ModelProfile(
                 key="e4b",
                 label="Gemma 4 E4B",
-                summary="Mais inteligente",
+                summary="Gemma4E4B",
                 gguf_repo=self._settings.gguf_repo_e4b,
                 gguf_file=self._settings.gguf_file_e4b,
                 mmproj_file=self._settings.mmproj_file_e4b,
                 n_ctx=131072,
+                audio_capable=True,
             ),
             "26b": ModelProfile(
                 key="26b",
                 label="Gemma 4 26B A4B",
-                summary="Mais capaz (MoE)",
+                summary="Gemma426BA4B",
                 gguf_repo=self._settings.gguf_repo_26b,
                 gguf_file=self._settings.gguf_file_26b,
                 mmproj_file=self._settings.mmproj_file_26b,
@@ -94,6 +96,7 @@ class ModelService:
         self._server_url = f"http://127.0.0.1:{self._server_port}"
         self._client = httpx.Client(timeout=self._HTTP_TIMEOUT)
         self._has_vision = False
+        self._has_audio = False
         self._actual_n_ctx: int = 0
         self._gpu_info: GpuInfo = self._detect_gpu()
         self._log_file_handle = None
@@ -179,6 +182,8 @@ class ModelService:
                 if candidate.is_file():
                     return candidate
 
+    _VALID_BACKENDS = frozenset({"cuda", "hip", "rocm", "metal", "vulkan", "cpu"})
+
     @property
     def server_backend(self) -> str:
         """Return the installed llama-server backend (from backend.txt)."""
@@ -186,7 +191,13 @@ class ModelService:
         if backend_file.is_file():
             try:
                 # utf-8-sig strips BOM left by PowerShell 5.1 Out-File -Encoding UTF8
-                return backend_file.read_text(encoding="utf-8-sig").strip().lower()
+                value = backend_file.read_text(encoding="utf-8-sig").strip().lower()
+                if value in self._VALID_BACKENDS:
+                    return value
+                logger.warning(
+                    "backend.txt contains invalid value '%s', using fallback: %s",
+                    value, self._gpu_info.backend,
+                )
             except Exception:
                 pass
         # Fallback: use detected GPU backend (pre-v2.0 installs)
@@ -198,7 +209,7 @@ class ModelService:
         proc = self._server_process
         if proc is None:
             return
-        logger.info("Parando llama-server (PID %s)...", proc.pid)
+        logger.info("Stopping llama-server (PID %s)...", proc.pid)
         try:
             if sys.platform == "win32":
                 # On Windows, terminate() doesn't propagate to children.
@@ -247,14 +258,14 @@ class ModelService:
             n_ctx = data.get("default_generation_settings", {}).get("n_ctx", 0)
             if n_ctx > 0:
                 self._actual_n_ctx = n_ctx
-                logger.info("Contexto real alocado: %d tokens", n_ctx)
+                logger.info("Actual context allocated: %d tokens", n_ctx)
         except Exception as exc:
-            logger.warning("Não foi possível consultar /props: %s", exc)
+            logger.warning("Could not query /props: %s", exc)
 
     def _warmup(self) -> None:
         """Send a tiny completion request to pre-compile CUDA graphs / warm caches."""
         try:
-            logger.info("Enviando warmup request...")
+            logger.info("Sending warmup request...")
             t0 = time.monotonic()
             r = self._client.post(
                 f"{self._server_url}/v1/chat/completions",
@@ -266,9 +277,37 @@ class ModelService:
             )
             r.raise_for_status()
             elapsed = time.monotonic() - t0
-            logger.info("Warmup concluído em %.1fs", elapsed)
+            logger.info("Warmup completed in %.1fs", elapsed)
         except Exception as exc:
-            logger.warning("Warmup falhou (não-fatal): %s", exc)
+            logger.warning("Warmup failed (non-fatal): %s", exc)
+
+    # Minimum llama-server build for native audio (Gemma 4 conformer, PR #21421)
+    _MIN_AUDIO_BUILD = 8827
+
+    def _check_audio_support(self) -> None:
+        """Disable native audio if the server build predates audio support."""
+        if not self._has_audio:
+            return
+        version_file = self._server_dir() / "version.txt"
+        try:
+            version = version_file.read_text(encoding="utf-8-sig").strip()
+            match = re.match(r"b(\d+)", version)
+            if match:
+                build = int(match.group(1))
+                if build < self._MIN_AUDIO_BUILD:
+                    logger.warning(
+                        "llama-server %s does not support native audio (requires >= b%d) — using Whisper transcription.",
+                        version, self._MIN_AUDIO_BUILD,
+                    )
+                    self._has_audio = False
+                    return
+                logger.info("Native audio support: OK (build %s)", version)
+                return
+        except Exception:
+            pass
+        # version.txt missing or unparseable — assume audio is supported
+        # (custom/source builds that include the conformer code)
+        logger.info("Native audio support: OK (unknown version)")
 
     @property
     def context_size(self) -> int:
@@ -300,8 +339,8 @@ class ModelService:
         binary = self._find_server_binary()
         if binary is None:
             raise RuntimeError(
-                "llama-server não encontrado em data/system/llama-server/. "
-                "Execute install.cmd para baixar os binários."
+                "llama-server not found in data/system/llama-server/. "
+                "Run install.cmd to download the binaries."
             )
 
         profile = self._profiles[model_key]
@@ -332,7 +371,7 @@ class ModelService:
                 base_cmd.extend(["--image-max-tokens", str(self._settings.image_max_tokens)])
                 has_vision = True
             except Exception as exc:
-                logger.warning("mmproj não encontrado para %s, visão desabilitada: %s", model_key, exc)
+                logger.warning("mmproj not found for %s, vision disabled: %s", model_key, exc)
 
         if profile.kv_cache_quant:
             base_cmd.extend(["--cache-type-k", "q8_0", "--cache-type-v", "q8_0"])
@@ -349,10 +388,10 @@ class ModelService:
 
         for ctx_value in ctx_attempts:
             cmd = base_cmd + ["-c", ctx_value]
-            logger.info("Iniciando llama-server: %s", " ".join(cmd))
+            logger.info("Starting llama-server: %s", " ".join(cmd))
 
             self._open_log()
-            logger.info("Log do llama-server: %s", self._log_path)
+            logger.info("llama-server log: %s", self._log_path)
 
             self._server_process = subprocess.Popen(
                 cmd,
@@ -368,33 +407,35 @@ class ModelService:
                 daemon=True,
             ).start()
             self._has_vision = has_vision
+            self._has_audio = has_vision and profile.audio_capable
 
             if self._wait_for_server_health():
                 if ctx_value != ctx_attempts[0]:
                     logger.warning(
-                        "Falha com n_ctx=%s, iniciou com n_ctx=%s (fallback)",
+                        "Failed with n_ctx=%s, started with n_ctx=%s (fallback)",
                         ctx_attempts[0], ctx_value,
                     )
                 self._query_props()
                 self._warmup()
+                self._check_audio_support()
                 return
 
             tail = self._read_log_tail()
             self._stop_server()
             if ctx_value == ctx_attempts[-1]:
-                error_detail = f"llama-server não iniciou (log: {self._log_path})"
+                error_detail = f"llama-server failed to start (log: {self._log_path})"
                 if tail:
-                    error_detail += f"\n\nÚltimas linhas do log:\n{tail}"
+                    error_detail += f"\n\nLast log lines:\n{tail}"
                 raise RuntimeError(error_detail)
             logger.warning(
-                "llama-server não iniciou com -c %s, tentando fallback...", ctx_value
+                "llama-server failed to start with -c %s, trying fallback...", ctx_value
             )
 
     # ── Model download ───────────────────────────────────────────
 
     def _download_gguf(self, repo_id: str, filename: str) -> str:
         if hf_hub_download is None:
-            raise RuntimeError("huggingface_hub não está instalado.")
+            raise RuntimeError("huggingface_hub is not installed.")
         path = hf_hub_download(
             repo_id=repo_id,
             filename=filename,
@@ -414,17 +455,24 @@ class ModelService:
         return str(p)
 
     def _is_model_cached(self, profile: ModelProfile) -> bool:
-        if try_to_load_from_cache is None:
-            return False
+        """Check if the GGUF file exists in any snapshot of the HF cache.
+
+        Uses a direct filesystem check instead of ``try_to_load_from_cache``
+        because the latter can return ``None`` on Windows machines where
+        Developer Mode is off and symlinks are replaced with copies.
+        """
+        cache_dir = self._settings.resolved_model_cache_dir
+        repo_folder = f"models--{profile.gguf_repo.replace('/', '--')}"
+        snapshots_dir = cache_dir / repo_folder / "snapshots"
         try:
-            result = try_to_load_from_cache(
-                repo_id=profile.gguf_repo,
-                filename=profile.gguf_file,
-                cache_dir=str(self._settings.resolved_model_cache_dir),
-            )
-            return result is not None and isinstance(result, str)
-        except Exception:
-            return False
+            if not snapshots_dir.is_dir():
+                return False
+            for sha_dir in snapshots_dir.iterdir():
+                if (sha_dir / profile.gguf_file).exists():
+                    return True
+        except OSError:
+            pass
+        return False
 
     def is_model_cached(self, model_key: str) -> bool:
         profile = self._profiles.get(model_key)
@@ -455,9 +503,9 @@ class ModelService:
             tail = self._read_log_tail()
             self._server_process = None
             self._model_status = "error"
-            msg = "llama-server encerrou inesperadamente."
+            msg = "llama-server terminated unexpectedly."
             if tail:
-                msg += f"\n\nÚltimas linhas do log ({self._log_path}):\n{tail}"
+                msg += f"\n\nLast log lines ({self._log_path}):\n{tail}"
             self._last_error = msg
             logger.error(msg)
             return False
@@ -466,6 +514,10 @@ class ModelService:
     @property
     def supports_vision(self) -> bool:
         return self._has_vision
+
+    @property
+    def supports_audio(self) -> bool:
+        return self._has_audio
 
     # ── GPU detection ────────────────────────────────────────────
 
@@ -586,22 +638,22 @@ class ModelService:
         ]
 
     @property
-    def setup_status(self) -> str:
+    def setup_status(self) -> dict:
         if not self._settings.enable_model_loading:
-            return "Carregamento do modelo desativado no backend/.env (ENABLE_MODEL_LOADING=false)."
+            return {"key": "disabled"}
         if self._find_server_binary() is None:
-            return "llama-server não encontrado. Execute install.cmd para baixar os binários."
+            return {"key": "server_not_found"}
         if self._model_status == "loading":
             profile = self._profiles[self._active_model_key]
-            return f"Carregando {profile.label} ({profile.summary.lower()})..."
+            return {"key": "loading", "label": profile.label}
         if self._last_error:
-            return f"Falha ao carregar o modelo: {self._last_error}"
+            return {"key": "error", "detail": self._last_error}
         if not self.is_loaded:
             if self._load_attempted:
-                return "O carregamento do modelo foi tentado, mas não foi concluído."
-            return "O modelo ainda não foi carregado. Reinicie o backend para iniciar o carregamento."
+                return {"key": "incomplete"}
+            return {"key": "not_loaded"}
         profile = self._profiles[self._active_model_key]
-        return f"{profile.label} pronto para inferência local."
+        return {"key": "ready", "label": profile.label}
 
     # ── Loading / switching ──────────────────────────────────────
 
@@ -627,7 +679,7 @@ class ModelService:
             if self.is_loaded:
                 return
             if self._find_server_binary() is None:
-                logger.warning("llama-server não encontrado, pulando carregamento.")
+                logger.warning("llama-server not found, skipping loading.")
                 return
             self._load_selected_model(self._active_model_key)
 
@@ -642,7 +694,7 @@ class ModelService:
 
     def select_model_async(self, model_key: str) -> ModelSelectionResponse:
         if model_key not in self._profiles:
-            raise ValueError("Modelo solicitado não suportado.")
+            raise ValueError("Requested model not supported.")
 
         with self._lock:
             if self._model_status == "loading":
@@ -710,7 +762,7 @@ class ModelService:
                     return msg
             except Exception:
                 pass
-            return f"Servidor retornou erro {exc.response.status_code}."
+            return f"Server returned error {exc.response.status_code}."
         return str(exc)
 
     @staticmethod
@@ -751,7 +803,7 @@ class ModelService:
         tool_executor: Any | None = None,
     ) -> Iterator[str | dict[str, Any]]:
         if not self.is_loaded:
-            yield f"Setup pendente do modelo: {self.setup_status}"
+            yield "The model is not loaded yet. Please wait for loading to complete."
             return
 
         prepared = self._prepare_messages(messages, enable_thinking)
@@ -824,12 +876,12 @@ class ModelService:
                     reduced = self._drop_oldest_non_system(prepared)
                     if reduced is not None:
                         logger.warning(
-                            "Contexto excedido, removendo mensagem mais antiga e retentando (%d → %d msgs).",
+                            "Context exceeded, dropping oldest message and retrying (%d → %d msgs).",
                             len(prepared), len(reduced),
                         )
                         prepared = reduced
                         continue
-                yield f"Erro durante geração: {self._extract_server_error(exc)}"
+                yield f"Error during generation: {self._extract_server_error(exc)}"
                 return
 
             # Handle tool calls
@@ -857,7 +909,7 @@ class ModelService:
                         fn_args = json.loads(tc["function"]["arguments"])
                     except json.JSONDecodeError:
                         fn_args = {}
-                    logger.info("Executando tool call: %s(%s)", fn_name, fn_args)
+                    logger.info("Executing tool call: %s(%s)", fn_name, fn_args)
                     yield {"type": "tool_start", "name": fn_name, "arguments": fn_args}
                     tool_result = tool_executor(fn_name, fn_args)
                     yield {"type": "tool_done", "name": fn_name, "arguments": fn_args}
@@ -907,7 +959,7 @@ class ModelService:
         tool_executor: Any | None = None,
     ) -> str:
         if not self.is_loaded:
-            return f"Setup pendente do modelo: {self.setup_status}"
+            return "The model is not loaded yet. Please wait for loading to complete."
 
         prepared = self._prepare_messages(messages, enable_thinking)
         parts: list[str] = []
@@ -964,7 +1016,7 @@ class ModelService:
                                 fn_args = json.loads(fn.get("arguments", "{}"))
                             except json.JSONDecodeError:
                                 fn_args = {}
-                            logger.info("Executando tool call (sync): %s(%s)", fn_name, fn_args)
+                            logger.info("Executing tool call (sync): %s(%s)", fn_name, fn_args)
                             tool_result = tool_executor(fn_name, fn_args)
 
                             # Handle multimodal tool results (e.g., view_image)
@@ -1003,12 +1055,12 @@ class ModelService:
                     reduced = self._drop_oldest_non_system(prepared)
                     if reduced is not None:
                         logger.warning(
-                            "Contexto excedido (sync), removendo mensagem mais antiga (%d → %d msgs).",
+                            "Context exceeded (sync), dropping oldest message (%d → %d msgs).",
                             len(prepared), len(reduced),
                         )
                         prepared = reduced
                         continue
-                parts.append(f"Erro durante geração: {self._extract_server_error(exc)}")
+                parts.append(f"Error during generation: {self._extract_server_error(exc)}")
                 break
 
         return "".join(parts)

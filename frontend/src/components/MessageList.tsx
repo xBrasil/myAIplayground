@@ -42,6 +42,7 @@ interface TipContext {
   localFiles: boolean;
   locationSharing: boolean;
   customInstructionsEnabled: boolean;
+  autoReadResponse: boolean;
   conversationCount: number;
   onOpenSettings: () => void;
 }
@@ -254,6 +255,7 @@ export default function MessageList({
       { key: 'messages.tip.enableFiles', actionable: true, condition: (ctx) => !ctx.localFiles },
       { key: 'messages.tip.enableLocation', actionable: true, condition: (ctx) => !ctx.locationSharing },
       { key: 'messages.tip.enableInstructions', actionable: true, condition: (ctx) => !ctx.customInstructionsEnabled },
+      { key: 'messages.tip.enableAutoRead', actionable: true, condition: (ctx) => !ctx.autoReadResponse },
       // Generic tips (always shown)
       { key: 'messages.localTip' },
       { key: 'messages.tip.tryModels' },

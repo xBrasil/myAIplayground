@@ -1,4 +1,5 @@
 from datetime import datetime
+import json
 
 from sqlalchemy import DateTime, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -25,6 +26,15 @@ class Conversation(Base):
         cascade="all, delete-orphan",
         order_by="Message.created_at",
     )
+
+    @property
+    def follow_ups(self) -> list[str]:
+        if not self.follow_ups_json:
+            return []
+        try:
+            return json.loads(self.follow_ups_json)
+        except (json.JSONDecodeError, TypeError):
+            return []
 
 
 class Message(Base):

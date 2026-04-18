@@ -87,7 +87,7 @@ class InputAdapterService:
             return NormalizedUpload(
                 kind="image",
                 file_name=file_name,
-                summary=f"Imagem enviada: {file_name}",
+                summary=f"Image sent: {file_name}",
                 raw_bytes=raw_bytes,
             )
 
@@ -95,7 +95,7 @@ class InputAdapterService:
             return NormalizedUpload(
                 kind="audio",
                 file_name=file_name,
-                summary=f"Áudio enviado: {file_name}",
+                summary=f"Audio sent: {file_name}",
                 raw_bytes=raw_bytes,
             )
 
@@ -104,7 +104,7 @@ class InputAdapterService:
             return NormalizedUpload(
                 kind="document",
                 file_name=file_name,
-                summary=f"Documento enviado: {file_name}",
+                summary=f"Document sent: {file_name}",
                 raw_bytes=raw_bytes,
             )
 
@@ -114,7 +114,7 @@ class InputAdapterService:
             return NormalizedUpload(
                 kind="file",
                 file_name=file_name,
-                summary=f"Arquivo textual enviado: {file_name}\n\n{preview}",
+                summary=f"Text file sent: {file_name}\n\n{preview}",
                 raw_bytes=raw_bytes,
             )
 
@@ -124,7 +124,7 @@ class InputAdapterService:
             return NormalizedUpload(
                 kind="file",
                 file_name=file_name,
-                summary=f"Arquivo textual enviado: {file_name}\n\n{preview}",
+                summary=f"Text file sent: {file_name}\n\n{preview}",
                 raw_bytes=raw_bytes,
             )
 
@@ -132,8 +132,8 @@ class InputAdapterService:
             kind="unsupported",
             file_name=file_name,
             summary=(
-                "Tipo de arquivo não suportado. Use texto, imagem (PNG, JPEG, WebP, GIF, SVG, "
-                "HEIC, AVIF, BMP, ICO, TIFF), áudio, PDF, Word, Excel ou PowerPoint."
+                "Unsupported file type. Use text, image (PNG, JPEG, WebP, GIF, SVG, "
+                "HEIC, AVIF, BMP, ICO, TIFF), audio, PDF, Word, Excel, or PowerPoint."
             ),
             raw_bytes=raw_bytes,
         )

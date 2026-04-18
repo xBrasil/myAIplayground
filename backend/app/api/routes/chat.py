@@ -45,9 +45,9 @@ def _check_upload_budget(total_tokens: int) -> None:
         raise HTTPException(
             status_code=413,
             detail=(
-                f"O conteúdo enviado é grande demais para o modelo atual "
-                f"(~{total_tokens:,} tokens estimados, limite: ~{budget:,} tokens). "
-                f"Envie um arquivo menor ou use um modelo com janela de contexto maior."
+                f"The uploaded content is too large for the current model "
+                f"(~{total_tokens:,} estimated tokens, limit: ~{budget:,} tokens). "
+                f"Send a smaller file or use a model with a larger context window."
             ),
         )
 
@@ -237,7 +237,7 @@ async def send_upload_message(
         if not isinstance(parsed_folders, list) or not all(isinstance(f, str) for f in parsed_folders):
             raise ValueError
     except (json.JSONDecodeError, ValueError):
-        raise HTTPException(status_code=400, detail="allowed_folders inválido.")
+        raise HTTPException(status_code=400, detail="Invalid allowed_folders.")
     normalized = await input_adapter_service.normalize_upload(file)
     if normalized.kind == "unsupported":
         raise HTTPException(status_code=400, detail=normalized.summary)
@@ -283,7 +283,7 @@ async def stream_upload_message(
         if not isinstance(parsed_folders, list) or not all(isinstance(f, str) for f in parsed_folders):
             raise ValueError
     except (json.JSONDecodeError, ValueError):
-        raise HTTPException(status_code=400, detail="allowed_folders inválido.")
+        raise HTTPException(status_code=400, detail="Invalid allowed_folders.")
     normalized = await input_adapter_service.normalize_upload(file)
     if normalized.kind == "unsupported":
         raise HTTPException(status_code=400, detail=normalized.summary)
@@ -362,16 +362,16 @@ async def stream_multi_upload_message(
         if not isinstance(parsed_folders, list) or not all(isinstance(f, str) for f in parsed_folders):
             raise ValueError
     except (json.JSONDecodeError, ValueError):
-        raise HTTPException(status_code=400, detail="allowed_folders inválido.")
+        raise HTTPException(status_code=400, detail="Invalid allowed_folders.")
     if not files:
-        raise HTTPException(status_code=400, detail="Nenhum arquivo enviado.")
+        raise HTTPException(status_code=400, detail="No files uploaded.")
 
     file_infos: list[dict] = []
     normalized_files = []
     for upload in files:
         normalized = await input_adapter_service.normalize_upload(upload)
         if normalized.kind == "unsupported":
-            raise HTTPException(status_code=400, detail=f"Arquivo não suportado: {normalized.file_name}")
+            raise HTTPException(status_code=400, detail=f"Unsupported file: {normalized.file_name}")
         normalized_files.append(normalized)
 
     # Save all files first, then estimate tokens on actual extracted content
@@ -462,7 +462,7 @@ async def save_partial(
 ):
     conversation = storage_service.get_conversation(db, conversation_id)
     if conversation is None:
-        raise HTTPException(status_code=404, detail="Conversa não encontrada")
+        raise HTTPException(status_code=404, detail="Conversation not found")
     if not payload.text.strip():
         return {"ok": True}
     chat_service.finalize_streamed_reply(db, conversation_id, payload.text.strip())
@@ -481,9 +481,9 @@ async def open_file(payload: FileActionRequest):
     try:
         target.relative_to(uploads_root)
     except ValueError:
-        raise HTTPException(status_code=403, detail="Acesso negado")
+        raise HTTPException(status_code=403, detail="Access denied")
     if not target.exists():
-        raise HTTPException(status_code=404, detail="Arquivo não encontrado")
+        raise HTTPException(status_code=404, detail="File not found")
     if sys.platform == "win32":
         os.startfile(str(target))
     elif sys.platform == "darwin":
@@ -501,9 +501,9 @@ async def reveal_file(payload: FileActionRequest):
     try:
         target.relative_to(uploads_root)
     except ValueError:
-        raise HTTPException(status_code=403, detail="Acesso negado")
+        raise HTTPException(status_code=403, detail="Access denied")
     if not target.exists():
-        raise HTTPException(status_code=404, detail="Arquivo não encontrado")
+        raise HTTPException(status_code=404, detail="File not found")
     if sys.platform == "win32":
         subprocess.Popen(["explorer", "/select,", str(target)])
     elif sys.platform == "darwin":
@@ -535,11 +535,11 @@ async def edit_last_message_stream(
 ) -> StreamingResponse:
     conversation = storage_service.get_conversation(db, conversation_id)
     if conversation is None:
-        raise HTTPException(status_code=404, detail="Conversa não encontrada")
+        raise HTTPException(status_code=404, detail="Conversation not found")
 
     user_messages = [m for m in conversation.messages if m.role == "user"]
     if not user_messages:
-        raise HTTPException(status_code=400, detail="Nenhuma mensagem de usuário encontrada")
+        raise HTTPException(status_code=400, detail="No user message found")
     last_user = user_messages[-1]
 
     msgs_after = [m for m in conversation.messages if m.created_at > last_user.created_at and m.role == "assistant"]
@@ -609,11 +609,11 @@ async def regenerate_last_stream(
 ) -> StreamingResponse:
     conversation = storage_service.get_conversation(db, conversation_id)
     if conversation is None:
-        raise HTTPException(status_code=404, detail="Conversa não encontrada")
+        raise HTTPException(status_code=404, detail="Conversation not found")
 
     assistant_messages = [m for m in conversation.messages if m.role == "assistant"]
     if not assistant_messages:
-        raise HTTPException(status_code=400, detail="Nenhuma resposta para regenerar")
+        raise HTTPException(status_code=400, detail="No response to regenerate")
     last_assistant = assistant_messages[-1]
     storage_service.delete_message(db, last_assistant.id)
     storage_service.clear_follow_ups(db, conversation_id)

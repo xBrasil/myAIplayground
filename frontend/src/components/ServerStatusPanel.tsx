@@ -47,7 +47,7 @@ export default function ServerStatusPanel({ open, health, onClose }: ServerStatu
           <div className="server-panel__body">
             <dl className="server-panel__info">
               <dt>{t('serverPanel.model')}</dt>
-              <dd>{activeModel ? `${activeModel.label} — ${activeModel.summary}` : '—'}</dd>
+              <dd>{activeModel ? `${activeModel.label} — ${t(`model.summary.${activeModel.summary}`)}` : '—'}</dd>
               <dt>{t('serverPanel.status')}</dt>
               <dd>
                 <span className={`status-badge status-badge--${health.model_status}`}>
@@ -71,7 +71,10 @@ export default function ServerStatusPanel({ open, health, onClose }: ServerStatu
               {health.model_setup_status && (
                 <>
                   <dt>{t('serverPanel.setupStatus')}</dt>
-                  <dd>{health.model_setup_status}</dd>
+                  <dd>{t(`serverPanel.status.${health.model_setup_status.key}`, {
+                    label: health.model_setup_status.label ?? '',
+                    detail: health.model_setup_status.detail ?? '',
+                  })}</dd>
                 </>
               )}
             </dl>

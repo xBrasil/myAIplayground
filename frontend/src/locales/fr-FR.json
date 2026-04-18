@@ -23,9 +23,20 @@
   "serverPanel.contextSize": "Contexte",
   "serverPanel.tokens": "{{count}} tokens",
   "serverPanel.setupStatus": "Détail",
+  "serverPanel.status.disabled": "Chargement du modèle désactivé dans backend/.env (ENABLE_MODEL_LOADING=false).",
+  "serverPanel.status.server_not_found": "llama-server introuvable. Exécutez install.cmd pour télécharger les binaires.",
+  "serverPanel.status.loading": "Chargement de {{label}}…",
+  "serverPanel.status.error": "Échec du chargement du modèle : {{detail}}",
+  "serverPanel.status.incomplete": "Le chargement du modèle a été tenté mais n'a pas abouti.",
+  "serverPanel.status.not_loaded": "Modèle pas encore chargé. Redémarrez le backend pour lancer le chargement.",
+  "serverPanel.status.ready": "{{label}} prêt pour l'inférence locale.",
   "serverPanel.stopServer": "Arrêter le serveur",
   "serverPanel.confirmStop": "Voulez-vous vraiment arrêter le serveur ? L'application sera fermée.",
   "serverPanel.disconnectedMessage": "Le serveur s'est déconnecté. Fermez cet onglet et relancez l'application.",
+
+  "model.summary.Gemma4E2B": "Plus rapide",
+  "model.summary.Gemma4E4B": "Équilibré",
+  "model.summary.Gemma426BA4B": "Plus intelligent",
 
   "sidebar.newConversation": "Nouvelle conversation",
   "sidebar.rename": "Renommer",
@@ -75,6 +86,7 @@
   "messages.tip.enableFiles": "L'IA peut lire vos fichiers locaux pour vous aider avec des documents, du code et plus. Activez dans les Paramètres.",
   "messages.tip.enableLocation": "Partagez votre position pour des réponses plus pertinentes. Activez dans les Paramètres.",
   "messages.tip.enableInstructions": "Personnalisez les réponses de l'IA avec des instructions personnalisées. Configurez dans les Paramètres.",
+  "messages.tip.enableAutoRead": "Vous voulez que la réponse soit lue à voix haute à chaque envoi d'audio ? Activez-le dans les Paramètres.",
   "messages.tip.tryModels": "Essayez différents modèles ! Les plus petits sont plus rapides, les plus grands sont plus intelligents.",
   "messages.tip.sendMedia": "Vous pouvez envoyer des images, des enregistrements audio et des fichiers — pas seulement du texte !",
   "messages.tip.keyboard": "Astuce : Appuyez sur Entrée pour envoyer. Utilisez Maj+Entrée pour un saut de ligne.",
@@ -130,6 +142,8 @@
   "settings.experience": "Expérience",
   "settings.enterToSend": "Envoyer avec Entrée",
   "settings.enterToSendHelp": "Lorsqu'activé, Entrée envoie le message et Maj+Entrée ajoute un saut de ligne.",
+  "settings.autoReadResponse": "Lire automatiquement les réponses audio",
+  "settings.autoReadResponseHelp": "Lorsqu'activé, la réponse du modèle est lue à voix haute automatiquement après l'envoi d'un message audio.",
   "settings.voice": "Voix",
   "settings.voiceLabel": "Voix Windows 11",
   "settings.localStorage": "Stockage local",
@@ -315,7 +329,9 @@
   "script.install.dataDirs": "Vérification des répertoires de données locaux",
   "script.install.preparingEnv": "Préparation de data/system/.env",
   "script.install.envCreated": "Fichier data/system/.env créé avec ENABLE_MODEL_LOADING=true.",
+  "script.install.envUpdated": "data/system/.env mis à jour depuis .env.example.",
   "script.install.envExists": "Le fichier data/system/.env existe déjà ; configuration actuelle conservée.",
+  "script.install.envExampleMissing": "backend/.env.example introuvable à « {{path}} ». Le paquet d'installation semble incomplet ou corrompu — veuillez réinstaller à partir d'un téléchargement neuf.",
   "script.install.defaultModel": "Téléchargement du modèle par défaut pour une utilisation hors ligne",
   "script.install.defaultModelOk": "Modèle par défaut prêt.",
   "script.install.defaultModelFailed": "Impossible de télécharger le modèle par défaut : {{error}}. Il sera téléchargé au premier chat.",
@@ -353,6 +369,7 @@
   "script.run.serviceNotReady": "{{services}} n'a pas été prêt en {{timeout}}s. Vérifiez les logs dans data\\",
   "script.run.unexpectedExit": "{{name}} s'est arrêté de façon inattendue (code de sortie {{code}}). Vérifiez les logs dans data\\",
   "script.run.noFreePort": "Aucun port libre trouvé dans la plage {{start}}-{{end}}. Les {{tries}} ports candidats sont tous occupés.",
+  "script.run.alreadyRunning": "My AI Playground est déjà en cours d'exécution. Ouverture du navigateur...",
 
   "script.tray.openBrowser": "Ouvrir dans le Navigateur",
   "script.tray.viewLogs": "Voir les Journaux",
@@ -370,6 +387,7 @@
   "script.tray.splash.loadingBackend": "Chargement du backend…",
   "script.tray.splash.loadingFrontend": "Chargement du frontend…",
   "script.tray.splash.openingBrowser": "Ouverture du navigateur…",
+  "script.tray.notification.trayInfo": "My AI Playground s'exécute dans la barre d'état système. Utilisez l'icône pour redémarrer, voir les logs ou quitter.",
 
   "script.runCmd.failed": "Le démarrage a échoué. Consultez les messages ci-dessus."
 }

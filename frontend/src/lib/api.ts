@@ -89,7 +89,7 @@ export async function fetchConversations(): Promise<Conversation[]> {
   return response.json();
 }
 
-export async function createConversation(title = 'Nova conversa'): Promise<Conversation> {
+export async function createConversation(title = 'New conversation'): Promise<Conversation> {
   const response = await fetch(`${API_BASE}/conversations`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

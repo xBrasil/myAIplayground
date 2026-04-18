@@ -20,9 +20,9 @@ def extract_text(file_path: str, max_chars: int = 256_000) -> str:
         if suffix == ".pptx":
             return _extract_pptx(file_path, max_chars)
     except Exception as exc:
-        logger.warning("Falha ao extrair texto de %s: %s", file_path, exc)
-        return f"(Erro ao extrair texto do documento: {exc})"
-    return "(Formato de documento não reconhecido)"
+        logger.warning("Failed to extract text from %s: %s", file_path, exc)
+        return f"(Error extracting text from document: {exc})"
+    return "(Unrecognized document format)"
 
 
 def _extract_pdf(path: str, max_chars: int) -> str:

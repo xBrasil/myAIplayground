@@ -41,13 +41,16 @@ export default function TopBar({ health, onOpenSettings, onOpenModelSelector }: 
         >
           <span className="model-select-button__label">{t('topbar.model')}</span>
           <span className="model-select-button__value">
-            {activeModel ? `${activeModel.label}: ${activeModel.summary}` : '...'}
+            {activeModel ? `${activeModel.label}: ${t(`model.summary.${activeModel.summary}`)}` : '...'}
           </span>
         </button>
 
         <div className={`topbar__status topbar__status--${health?.model_status || 'idle'}`}>
           <strong>{modelStatusLabel(health)}</strong>
-          <span>{health?.model_setup_status || t('topbar.waitingBackend')}</span>
+          <span>{health?.model_setup_status ? t(`serverPanel.status.${health.model_setup_status.key}`, {
+            label: health.model_setup_status.label ?? '',
+            detail: health.model_setup_status.detail ?? '',
+          }) : t('topbar.waitingBackend')}</span>
         </div>
 
         <button type="button" className="topbar__settings" onClick={onOpenSettings}>

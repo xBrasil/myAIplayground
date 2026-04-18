@@ -27,10 +27,10 @@ echo "── python3: $(command -v python3 2>/dev/null || echo 'NOT found') $(py
 echo "── node: $(command -v node 2>/dev/null || echo 'NOT found') $(node -v 2>/dev/null || true)"
 echo "── npm: $(command -v npm 2>/dev/null || echo 'NOT found') $(npm -v 2>/dev/null || true)"
 
-step() { echo -e "\n[$(date '+%H:%M:%S')] ==> $1"; }
-ok()   { echo -e "  [$(date '+%H:%M:%S')] \033[32m$1\033[0m"; }
-warn() { echo -e "  [$(date '+%H:%M:%S')] \033[33m$1\033[0m"; }
-err()  { echo -e "  [$(date '+%H:%M:%S')] \033[31m$1\033[0m"; }
+step() { echo -e "\n[$(date '+%Y-%m-%d %H:%M:%S')] ==> $1"; }
+ok()   { echo -e "  [$(date '+%Y-%m-%d %H:%M:%S')] \033[32m$1\033[0m"; }
+warn() { echo -e "  [$(date '+%Y-%m-%d %H:%M:%S')] \033[33m$1\033[0m"; }
+err()  { echo -e "  [$(date '+%Y-%m-%d %H:%M:%S')] \033[31m$1\033[0m"; }
 
 # ── Detect OS ────────────────────────────────────────────────────
 OS="$(uname -s)"
@@ -156,9 +156,23 @@ if [ -f "$LLAMA_VERSION_FILE" ]; then
 fi
 
 SERVER_BIN="$LLAMA_DIR/llama-server"
-if [ -x "$SERVER_BIN" ] && [ -n "$CURRENT_VERSION" ]; then
+
+# Minimum build required for Gemma 4 native audio support (PR #21421)
+MIN_VERSION="b8827"
+NEEDS_UPGRADE=false
+if [ -n "$CURRENT_VERSION" ]; then
+  cur_build="${CURRENT_VERSION#b}"
+  min_build="${MIN_VERSION#b}"
+  if [ "$cur_build" -lt "$min_build" ] 2>/dev/null; then
+    NEEDS_UPGRADE=true
+  fi
+fi
+
+if [ -x "$SERVER_BIN" ] && [ -n "$CURRENT_VERSION" ] && [ "$NEEDS_UPGRADE" = false ]; then
   ok "llama-server already installed ($CURRENT_VERSION)"
   LLAMA_INSTALLED=true
+elif [ "$NEEDS_UPGRADE" = true ]; then
+  warn "llama-server $CURRENT_VERSION -> upgrade to >= $MIN_VERSION"
 fi
 
 if [ "$LLAMA_INSTALLED" = false ]; then
@@ -364,11 +378,15 @@ for legacyLog in install.log backend.log backend-err.log frontend.log frontend-e
 done
 
 step "Preparing .env..."
-if [ ! -f "$ENV_FILE" ]; then
-  sed 's/ENABLE_MODEL_LOADING=false/ENABLE_MODEL_LOADING=true/' "$ENV_EXAMPLE" > "$ENV_FILE"
-  warn ".env created from .env.example (ENABLE_MODEL_LOADING=true)"
+ENV_IS_UPDATE=false
+if [ -f "$ENV_FILE" ]; then
+  ENV_IS_UPDATE=true
+fi
+sed 's/ENABLE_MODEL_LOADING=false/ENABLE_MODEL_LOADING=true/' "$ENV_EXAMPLE" > "$ENV_FILE"
+if [ "$ENV_IS_UPDATE" = true ]; then
+  ok ".env updated from .env.example"
 else
-  ok ".env already exists"
+  ok ".env created from .env.example"
 fi
 
 # ── Done ────────────────────────────────────────────────────────

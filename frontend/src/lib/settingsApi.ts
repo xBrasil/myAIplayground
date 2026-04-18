@@ -12,6 +12,7 @@ const SETTING_KEYS = [
   'gemma-local-studio.local-files',
   'gemma-local-studio.allowed-folders',
   'gemma-local-studio.location-sharing',
+  'gemma-local-studio.auto-read-response',
   'gemma-local-studio.voice',
   'locale',
   'sidebarWidth',

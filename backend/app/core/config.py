@@ -53,10 +53,11 @@ class Settings(BaseSettings):
     gguf_file_e4b: str = Field(default="gemma-4-E4B-it-Q4_K_M.gguf", alias="GGUF_FILE_E4B")
     gguf_file_26b: str = Field(default="gemma-4-26B-A4B-it-UD-IQ4_XS.gguf", alias="GGUF_FILE_26B")
 
-    # Vision projector (mmproj) files — empty disables vision for that model
-    mmproj_file_e2b: str = Field(default="mmproj-F16.gguf", alias="MMPROJ_FILE_E2B")
-    mmproj_file_e4b: str = Field(default="mmproj-F16.gguf", alias="MMPROJ_FILE_E4B")
-    mmproj_file_26b: str = Field(default="mmproj-F16.gguf", alias="MMPROJ_FILE_26B")
+    # Multimodal projector (mmproj) files — empty disables vision/audio for that model
+    # BF16 recommended for native audio quality (llama.cpp PR #21421)
+    mmproj_file_e2b: str = Field(default="mmproj-BF16.gguf", alias="MMPROJ_FILE_E2B")
+    mmproj_file_e4b: str = Field(default="mmproj-BF16.gguf", alias="MMPROJ_FILE_E4B")
+    mmproj_file_26b: str = Field(default="mmproj-BF16.gguf", alias="MMPROJ_FILE_26B")
 
     # llama.cpp engine settings
     n_ctx: int = Field(default=0, alias="N_CTX")

@@ -15,7 +15,7 @@ Initialize-I18n -RepoRoot $repoRoot
 
 function Write-Step {
     param([string]$Message)
-    $ts = Get-Date -Format 'HH:mm:ss'
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
     $line = "[$ts] ==> $Message"
     Write-Host "`n$line" -ForegroundColor Cyan
     try { Add-Content -Path $logFile -Value $line -Encoding UTF8 -ErrorAction SilentlyContinue } catch { }
@@ -23,8 +23,9 @@ function Write-Step {
 
 function Write-Status {
     param([string]$Message, [string]$ForegroundColor = "White")
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
     Write-Host "  $Message" -ForegroundColor $ForegroundColor
-    try { Add-Content -Path $logFile -Value "  $Message" -Encoding UTF8 -ErrorAction SilentlyContinue } catch { }
+    try { Add-Content -Path $logFile -Value "[$ts]   $Message" -Encoding UTF8 -ErrorAction SilentlyContinue } catch { }
 }
 
 function Test-Admin {
@@ -306,9 +307,24 @@ $currentVersion = if (Test-Path $llamaVersionFile) {
 
 $serverExe = Join-Path $llamaServerDir "llama-server.exe"
 
-if ((Test-Path $serverExe) -and $currentVersion) {
+# Minimum build required for Gemma 4 native audio support (PR #21421)
+$minVersion = "b8827"
+$needsUpgrade = $false
+if ($currentVersion -and $currentVersion -match '^b(\d+)$') {
+    $currentBuild = [int]$Matches[1]
+    if ($minVersion -match '^b(\d+)$') {
+        $minBuild = [int]$Matches[1]
+        if ($currentBuild -lt $minBuild) {
+            $needsUpgrade = $true
+        }
+    }
+}
+
+if ((Test-Path $serverExe) -and $currentVersion -and -not $needsUpgrade) {
     Write-Status "  $(T 'script.install.llamaAlreadyInstalled' @{version=$currentVersion})" -ForegroundColor Green
     $llamaInstalled = $true
+} elseif ($needsUpgrade) {
+    Write-Status "  llama-server $currentVersion -> upgrade to >= $minVersion" -ForegroundColor Yellow
 }
 
 if (-not $llamaInstalled) {
@@ -480,19 +496,21 @@ foreach ($legacyLog in @('install.log', 'backend.log', 'backend-err.log', 'front
 }
 
 Write-Step (T 'script.install.preparingEnv')
-if (-not (Test-Path $envFile)) {
-    if (Test-Path $envExample) {
-        $envContent = Get-Content $envExample -Raw
-        $envContent = $envContent -replace "ENABLE_MODEL_LOADING=false", "ENABLE_MODEL_LOADING=true"
-        Set-Content -Path $envFile -Value $envContent -Encoding UTF8
-        Write-Status (T 'script.install.envCreated') -ForegroundColor Yellow
+if (Test-Path $envExample) {
+    $envIsUpdate = Test-Path $envFile
+    $envContent = Get-Content $envExample -Raw
+    $envContent = $envContent -replace "ENABLE_MODEL_LOADING=false", "ENABLE_MODEL_LOADING=true"
+    Set-Content -Path $envFile -Value $envContent -Encoding UTF8
+    if ($envIsUpdate) {
+        Write-Status (T 'script.install.envUpdated') -ForegroundColor Yellow
     } else {
-        # Create a minimal .env if the example is missing
-        Set-Content -Path $envFile -Value "ENABLE_MODEL_LOADING=true" -Encoding UTF8
-        Write-Status "  .env created (minimal - .env.example not found)" -ForegroundColor Yellow
+        Write-Status (T 'script.install.envCreated') -ForegroundColor Yellow
     }
 } else {
-    Write-Status (T 'script.install.envExists') -ForegroundColor DarkYellow
+    # .env.example is shipped inside the installer (backend/.env.example).
+    # Its absence means a corrupt or tampered package — fail loudly instead of
+    # writing a stub .env that would hide the real problem behind runtime errors.
+    throw (T 'script.install.envExampleMissing' @{path=$envExample})
 }
 
 # ---- 6. Pre-download default model (so UI works offline on first launch) ----

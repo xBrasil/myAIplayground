@@ -23,9 +23,20 @@
   "serverPanel.contextSize": "Contexto",
   "serverPanel.tokens": "{{count}} tokens",
   "serverPanel.setupStatus": "Detalhe",
+  "serverPanel.status.disabled": "Carregamento do modelo desativado no backend/.env (ENABLE_MODEL_LOADING=false).",
+  "serverPanel.status.server_not_found": "llama-server não encontrado. Execute install.cmd para baixar os binários.",
+  "serverPanel.status.loading": "Carregando {{label}}…",
+  "serverPanel.status.error": "Falha ao carregar o modelo: {{detail}}",
+  "serverPanel.status.incomplete": "O carregamento do modelo foi tentado, mas não foi concluído.",
+  "serverPanel.status.not_loaded": "O modelo ainda não foi carregado. Reinicie o backend para iniciar o carregamento.",
+  "serverPanel.status.ready": "{{label}} pronto para inferência local.",
   "serverPanel.stopServer": "Parar servidor",
   "serverPanel.confirmStop": "Tem certeza que deseja parar o servidor? O aplicativo será encerrado.",
   "serverPanel.disconnectedMessage": "O servidor foi desconectado. Feche esta aba e execute o aplicativo novamente.",
+
+  "model.summary.Gemma4E2B": "Mais rápido",
+  "model.summary.Gemma4E4B": "Equilibrado",
+  "model.summary.Gemma426BA4B": "Mais inteligente",
 
   "sidebar.newConversation": "Nova conversa",
   "sidebar.rename": "Renomear",
@@ -75,6 +86,7 @@
   "messages.tip.enableFiles": "A IA pode ler seus arquivos locais para ajudar com documentos, código e mais. Ative nas Configurações.",
   "messages.tip.enableLocation": "Compartilhe sua localização para respostas mais relevantes ao seu contexto local. Ative nas Configurações.",
   "messages.tip.enableInstructions": "Personalize como a IA responde com instruções personalizadas. Configure nas Configurações.",
+  "messages.tip.enableAutoRead": "Quer que a resposta seja lida em voz alta sempre que mandar um áudio? Ative nas Configurações.",
   "messages.tip.tryModels": "Experimente modelos diferentes! Os menores são mais rápidos, os maiores são mais inteligentes.",
   "messages.tip.sendMedia": "Você pode enviar imagens, gravações de áudio e arquivos — não apenas texto!",
   "messages.tip.keyboard": "Dica: Pressione Enter para enviar. Use Shift+Enter para nova linha.",
@@ -130,6 +142,8 @@
   "settings.experience": "Experiência",
   "settings.enterToSend": "Enviar com Enter",
   "settings.enterToSendHelp": "Quando ativado, Enter envia a mensagem e Shift+Enter quebra linha.",
+  "settings.autoReadResponse": "Ler resposta de áudio automaticamente",
+  "settings.autoReadResponseHelp": "Quando ativado, a resposta do modelo é lida em voz alta automaticamente após você enviar uma mensagem de áudio.",
   "settings.voice": "Voz",
   "settings.voiceLabel": "Voz do Windows 11",
   "settings.localStorage": "Armazenamento local",
@@ -315,7 +329,9 @@
   "script.install.dataDirs": "Garantindo diretórios de dados locais",
   "script.install.preparingEnv": "Preparando data/system/.env",
   "script.install.envCreated": "Arquivo data/system/.env criado com ENABLE_MODEL_LOADING=true.",
+  "script.install.envUpdated": "data/system/.env atualizado a partir do .env.example.",
   "script.install.envExists": "Arquivo data/system/.env já existe; mantendo configuração atual.",
+  "script.install.envExampleMissing": "backend/.env.example não encontrado em '{{path}}'. O pacote do instalador parece estar incompleto ou corrompido — reinstale a partir de um download novo.",
   "script.install.defaultModel": "Baixando modelo padrão para uso offline",
   "script.install.defaultModelOk": "Modelo padrão pronto.",
   "script.install.defaultModelFailed": "Não foi possível baixar o modelo padrão: {{error}}. Ele será baixado no primeiro chat.",
@@ -353,6 +369,7 @@
   "script.run.serviceNotReady": "{{services}} não ficou pronto em {{timeout}}s. Verifique os logs em data\\",
   "script.run.unexpectedExit": "{{name}} encerrou inesperadamente (exit code {{code}}). Verifique os logs em data\\",
   "script.run.noFreePort": "Nenhuma porta livre no intervalo {{start}}-{{end}}. Todas as {{tries}} portas candidatas estão ocupadas.",
+  "script.run.alreadyRunning": "My AI Playground já está em execução. Abrindo o navegador...",
 
   "script.tray.openBrowser": "Abrir no Navegador",
   "script.tray.viewLogs": "Ver Logs",
@@ -370,6 +387,7 @@
   "script.tray.splash.loadingBackend": "Carregando backend…",
   "script.tray.splash.loadingFrontend": "Carregando frontend…",
   "script.tray.splash.openingBrowser": "Abrindo navegador…",
+  "script.tray.notification.trayInfo": "O My AI Playground está rodando na bandeja do sistema. Use o ícone na bandeja para reiniciar, ver logs ou encerrar.",
 
   "script.runCmd.failed": "Inicialização falhou. Veja as mensagens acima."
 }

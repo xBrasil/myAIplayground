@@ -39,6 +39,7 @@ PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 AllowNoIcons=yes
 CloseApplications=force
+UsePreviousAppDir=yes
 DisableWelcomePage=no
 ExtraDiskSpaceRequired=8000000000
 
@@ -192,48 +193,75 @@ begin
   Result := FileExists(ExpandConstant('{app}\.venv\Scripts\pythonw.exe'));
 end;
 
-// --- Auto-uninstall previous version before installing ---
-function GetPreviousUninstallString: String;
+// --- Helper: retrieve the install directory of a previous installation ---
+function GetPreviousInstallDir: String;
 var
   S: String;
 begin
   Result := '';
-  // Check current-user install first (PrivilegesRequired=lowest)
   if RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#SetupSetting("AppId")}_is1',
-     'UninstallString', S) then
+     'InstallLocation', S) then
     Result := S
   else if RegQueryStringValue(HKLM, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#SetupSetting("AppId")}_is1',
-     'UninstallString', S) then
+     'InstallLocation', S) then
     Result := S;
+end;
+
+// --- Stop running app before upgrade (no uninstall needed) ---
+procedure StopRunningApp(const AppDir: String);
+var
+  SafeApp: String;
+  ResultCode: Integer;
+begin
+  SafeApp := AppDir;
+  StringChangeEx(SafeApp, '''', '''''', False);
+
+  // 1. Graceful shutdown via backend API (try ports 8000-8009)
+  try
+    Exec('powershell.exe',
+      '-NoProfile -ExecutionPolicy Bypass -Command "foreach ($p in 8000..8009) { try { $r=[System.Net.HttpWebRequest]::Create(\"http://127.0.0.1:${p}/api/shutdown\"); $r.Method=''POST''; $r.Timeout=1500; $r.Headers.Add(''Origin'',''http://127.0.0.1:5173''); $null=$r.GetResponse(); break } catch {} finally { if ($r) { try { $r.Abort() } catch {} } } }"',
+      '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  except
+  end;
+  Sleep(1500);
+
+  // 2. Kill any remaining Python/Node processes that belong to our app
+  try
+    Exec('powershell.exe',
+      '-NoProfile -ExecutionPolicy Bypass -Command "$appPath = (Join-Path ''' + SafeApp + ''' ''''); Get-Process python,pythonw,node -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($appPath, [System.StringComparison]::OrdinalIgnoreCase) } | Stop-Process -Force -ErrorAction SilentlyContinue"',
+      '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  except
+  end;
+
+  // 3. Kill by window title
+  try
+    Exec('taskkill.exe', '/F /T /FI "WINDOWTITLE eq My AI Playground*"',
+      '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  except
+  end;
+
+  // 4. Kill processes on our ports (only those matching app path)
+  try
+    Exec('powershell.exe',
+      '-NoProfile -ExecutionPolicy Bypass -Command "$app = ''' + SafeApp + '''; $ports = @(8081) + @(8000..8009) + @(5173..5182); foreach ($port in $ports) { try { $lines = netstat -ano 2>$null | Select-String ''127\.0\.0\.1:'' | Select-String ('':'' + $port + ''\s'') | Select-String ''LISTENING''; $pids = @(); foreach ($l in $lines) { if ($l -match ''\s(\d+)\s*$'') { $pids += $Matches[1] } }; $pids = $pids | Select-Object -Unique; foreach ($pid in $pids) { try { $proc = Get-CimInstance Win32_Process -Filter (''ProcessId = '' + $pid) -ErrorAction SilentlyContinue; if ($proc -and ((($proc.ExecutablePath) -and $proc.ExecutablePath.StartsWith($app, [System.StringComparison]::OrdinalIgnoreCase)) -or (($proc.CommandLine) -and ($proc.CommandLine.IndexOf($app, [System.StringComparison]::OrdinalIgnoreCase) -ge 0)))) { taskkill /F /T /PID $pid 2>$null } } catch {} } } catch {} }"',
+      '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  except
+  end;
+
+  Sleep(1000);
 end;
 
 function InitializeSetup: Boolean;
 var
-  PrevUninstall: String;
-  ResultCode: Integer;
-  QuoteEnd: Integer;
+  PrevDir: String;
 begin
   Result := True;
-  PrevUninstall := GetPreviousUninstallString;
-  if PrevUninstall <> '' then begin
-    // Extract the executable path: handle quoted paths like '"C:\path\unins000.exe" /SILENT'
-    if (Length(PrevUninstall) > 1) and (PrevUninstall[1] = '"') then begin
-      QuoteEnd := Pos('"', Copy(PrevUninstall, 2, Length(PrevUninstall) - 1));
-      if QuoteEnd > 0 then
-        PrevUninstall := Copy(PrevUninstall, 2, QuoteEnd - 1)
-      else
-        PrevUninstall := Copy(PrevUninstall, 2, Length(PrevUninstall) - 1);
-    end else begin
-      // Unquoted: take everything up to the first space (if any)
-      QuoteEnd := Pos(' ', PrevUninstall);
-      if QuoteEnd > 0 then
-        PrevUninstall := Copy(PrevUninstall, 1, QuoteEnd - 1);
-    end;
-    if FileExists(PrevUninstall) then begin
-      // Run the old uninstaller silently, keeping user data
-      Exec(PrevUninstall, '/VERYSILENT /NORESTART /SUPPRESSMSGBOXES', '',
-           SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    end;
+  PrevDir := GetPreviousInstallDir;
+  if PrevDir <> '' then begin
+    // Previous installation detected — stop running app processes.
+    // No uninstall is needed: Inno will overwrite files in-place and
+    // install.ps1 runs incrementally (skips venv, npm, model if current).
+    StopRunningApp(PrevDir);
   end;
 end;
 
