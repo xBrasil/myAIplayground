@@ -131,7 +131,7 @@
   "modelSelector.fallback": "Revirtiendo al modelo anterior ({{model}})…",
   "modelSelector.e2b.capabilities": ["Velocidad de inferencia más rápida", "Multimodal: texto e imágenes", "Ventana de contexto de 128K tokens", "Bajo uso de VRAM (~4 GB)", "Ideal para tareas simples y rápidas"],
   "modelSelector.e2b.limitations": ["Razonamiento complejo limitado", "Menos preciso en textos largos", "Puede tener dificultades con instrucciones sutiles"],
-  "modelSelector.e4b.capabilities": ["Buen equilibrio entre velocidad y calidad", "Multimodal: texto e imágenes", "Ventana de contexto de 128K tokens", "Uso moderado de VRAM (~6 GB)", "Adecuado para tareas complejas"],
+  "modelSelector.e4b.capabilities": ["Buen equilibrio entre velocidad y calidad", "Multimodal: texto e imágenes", "Ventana de contexto de 128K tokens", "Uso moderado de VRAM (~7 GB)", "Adecuado para tareas complejas"],
   "modelSelector.e4b.limitations": ["Más lento que E2B", "Puede requerir más VRAM que modelos más simples"],
   "modelSelector.26b.capabilities": ["Respuestas de mayor calidad (arquitectura MoE)", "Multimodal: texto e imágenes", "Ventana de contexto de 256K tokens", "Mejor razonamiento y comprensión", "Ideal para análisis avanzados y documentos largos"],
   "modelSelector.26b.limitations": ["Velocidad de inferencia más lenta", "Alto uso de VRAM (~14 GB)", "Tiempo de carga inicial más largo"],

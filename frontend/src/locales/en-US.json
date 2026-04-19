@@ -131,7 +131,7 @@
   "modelSelector.fallback": "Reverting to previous model ({{model}})…",
   "modelSelector.e2b.capabilities": ["Fastest inference speed", "Multimodal: text and images", "128K token context window", "Low VRAM usage (~4 GB)", "Ideal for simple and quick tasks"],
   "modelSelector.e2b.limitations": ["Limited complex reasoning", "Less accurate on long texts", "May struggle with nuanced instructions"],
-  "modelSelector.e4b.capabilities": ["Good balance of speed and quality", "Multimodal: text and images", "128K token context window", "Moderate VRAM usage (~6 GB)", "Well-suited for complex tasks"],
+  "modelSelector.e4b.capabilities": ["Good balance of speed and quality", "Multimodal: text and images", "128K token context window", "Moderate VRAM usage (~7 GB)", "Well-suited for complex tasks"],
   "modelSelector.e4b.limitations": ["Slower than E2B", "May require more VRAM than simpler models"],
   "modelSelector.26b.capabilities": ["Highest quality responses (MoE architecture)", "Multimodal: text and images", "256K token context window", "Best reasoning and comprehension", "Ideal for advanced analysis and long documents"],
   "modelSelector.26b.limitations": ["Slowest inference speed", "High VRAM usage (~14 GB)", "Longer initial loading time"],

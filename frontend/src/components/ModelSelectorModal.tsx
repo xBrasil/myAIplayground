@@ -32,7 +32,7 @@ const MODEL_META: ModelMeta[] = [
   {
     key: 'e4b',
     contextWindow: '~128K tokens',
-    vramEstimate: '~6 GB',
+    vramEstimate: '~7 GB',
     capabilitiesKey: 'modelSelector.e4b.capabilities',
     limitationsKey: 'modelSelector.e4b.limitations',
     requiresGpu: true,
