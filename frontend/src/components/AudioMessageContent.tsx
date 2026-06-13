@@ -3,10 +3,10 @@ import { useI18n } from '../lib/i18n';
 
 interface AudioMessageContentProps {
   src: string;
-  transcript: string;
+  text: string;
 }
 
-export default function AudioMessageContent({ src, transcript }: AudioMessageContentProps) {
+export default function AudioMessageContent({ src, text }: AudioMessageContentProps) {
   const { t } = useI18n();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -64,7 +64,7 @@ export default function AudioMessageContent({ src, transcript }: AudioMessageCon
           </svg>
         )}
       </button>
-      <p>{transcript || t('messages.audioSentFallback')}</p>
+      <p>{text || t('messages.audioSentFallback')}</p>
       <audio ref={audioRef} preload="metadata" src={src} />
     </div>
   );

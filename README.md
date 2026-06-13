@@ -5,7 +5,7 @@
 <h1 align="center">My AI Playground</h1>
 
 <p align="center">
-  Aplicação desktop-local para conversas com modelos <a href="https://ai.google.dev/gemma">Gemma</a> rodando inteiramente na sua máquina.<br/>
+  Aplicação desktop-local para conversas com modelos <a href="https://ai.google.dev/gemma/docs/core/model_card_4">Gemma 4</a> rodando inteiramente na sua máquina.<br/>
   Interface web moderna, entrada multimodal (texto, imagens, áudio, arquivos) e histórico salvo apenas localmente.
 </p>
 
@@ -19,33 +19,33 @@
 
 ## Funcionalidades
 
-| Categoria | Descrição |
-|---|---|
-| **Chat multimodal** | Texto, imagens, áudio e arquivos em uma única conversa — envio simultâneo de múltiplos arquivos; imagens em PNG, JPEG, WebP, GIF, SVG, HEIC/HEIF, AVIF, BMP, ICO e TIFF |
-| **Modelos Gemma** | Gemma 4 E2B, E4B e 26B-A4B via GGUF — troque de modelo a qualquer momento pela interface |
-| **Arquivos de texto** | 60+ extensões de código e dados (`.py`, `.ts`, `.json`, `.csv`, `.xml`, `.yaml`, `.sql`, `.rs`, `.go`…) lidos como texto |
-| **Documentos** | PDF, Word (`.docx`), Excel (`.xlsx`) e PowerPoint (`.pptx`) — extração de texto automática |
-| **Pesquisa na web** | Busca via DuckDuckGo e leitura de páginas — o modelo cita fontes com referências numeradas `[1]`, `[2]`… |
-| **Acesso a arquivos locais** | O modelo pode listar e ler arquivos de pastas permitidas pelo usuário (somente leitura) |
-| **Visão de imagens locais** | Em modelos com visão (Gemma 4 E2B/E4B), o modelo pode ver e descrever imagens de pastas permitidas |
-| **Tool calling** | O modelo pode chamar ferramentas (web, filesystem, visão) automaticamente; chamadas ficam salvas no histórico e são exibidas de forma auditável |
-| **Instruções personalizadas** | System prompt customizável pelo usuário nos Ajustes — aplicado a todas as conversas |
-| **Inferência local** | llama.cpp server com aceleração GPU (NVIDIA CUDA, AMD HIP/ROCm, Apple Metal) ou CPU, flash attention, contexto por modelo (128K–256K tokens) |
-| **Streaming** | Respostas exibidas token a token em tempo real |
-| **Auto-continuação** | Respostas longas continuam automaticamente quando o limite de tokens é atingido (até 5 rodadas) |
-| **Gravação de voz** | Gravar, pausar, retomar e parar antes de enviar; áudio convertido para WAV 16 kHz; timer com contagem regressiva |
-| **Transcrição** | Whisper (faster-whisper) converte áudio em texto localmente |
-| **Leitura de respostas** | Text-to-Speech via Web Speech API com preferência para vozes Microsoft |
-| **Markdown rico** | Renderização com GFM, blocos de código com syntax highlight, matemática KaTeX |
-| **Edição de mensagens** | Editar mensagens enviadas e regenerar respostas |
-| **Pesquisa de mensagens** | Busque conversas por título ou conteúdo — destaque automático dos termos encontrados |
-| **Localização** | Compartilhamento opcional de geolocalização para respostas mais contextualizadas (desativado por padrão) |
-| **Avaliação de risco** | Instruções personalizadas são avaliadas automaticamente pelo LLM; alerta exibido apenas quando o risco é significativo |
-| **i18n** | Português (BR), English (US), Español e Français — detecta automaticamente o idioma do navegador |
-| **Tema escuro** | UI minimalista e responsiva com design dark-mode |
-| **Janela deslizante** | Gestão automática de contexto: truncamento de conteúdo longo, descarte de mensagens antigas e retry em estouro |
-| **Privacidade total** | Conversas e arquivos ficam em `data/user/` no seu disco. Nada é enviado para a nuvem. |
-| **Ícone na bandeja** | Em vez de uma janela de console, a aplicação roda como ícone na bandeja do sistema (system tray) com menu para abrir, reiniciar, ver logs e encerrar |
+| Categoria                             | Descrição                                                                                                                                                                  |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Chat multimodal**             | Texto, imagens, áudio e arquivos em uma única conversa — envio simultâneo de múltiplos arquivos; arquivos de áudio enviados manualmente entram como anexos de contexto, com extração automática da faixa em contêineres como MP4; imagens em PNG, JPEG, WebP, GIF, SVG, HEIC/HEIF, AVIF, BMP, ICO e TIFF |
+| **Modelos Gemma 4**             | E2B, E4B, 12B Unified e 26B-A4B via GGUF — troque de modelo a qualquer momento pela interface                                                                                |
+| **Arquivos de texto**           | 60+ extensões de código e dados (`.py`, `.ts`, `.json`, `.csv`, `.xml`, `.yaml`, `.sql`, `.rs`, `.go`…) lidos como texto                                |
+| **Documentos**                  | PDF, Word (`.docx`), Excel (`.xlsx`) e PowerPoint (`.pptx`) — extração de texto automática                                                                         |
+| **Pesquisa na web**             | Busca via DuckDuckGo e leitura de páginas — o modelo cita fontes com referências numeradas `[1]`, `[2]`…                                                             |
+| **Acesso a arquivos locais**    | O modelo pode listar e ler arquivos de pastas permitidas pelo usuário (somente leitura)                                                                                     |
+| **Visão de imagens locais**    | Em modelos com visão (todos os modelos Gemma 4 disponíveis), o modelo pode ver e descrever imagens de pastas permitidas                                                     |
+| **Tool calling**                | O modelo pode chamar ferramentas (web, filesystem, visão) automaticamente; chamadas ficam salvas no histórico e são exibidas de forma auditável                          |
+| **Instruções personalizadas** | System prompt customizável pelo usuário nos Ajustes — aplicado a todas as conversas                                                                                       |
+| **Inferência local**           | llama.cpp server com aceleração GPU (NVIDIA CUDA, AMD HIP/ROCm, Apple Metal) ou CPU, flash attention, contexto por modelo (128K–256K tokens)                              |
+| **Streaming**                   | Respostas exibidas token a token em tempo real                                                                                                                               |
+| **Auto-continuação**          | Respostas longas continuam automaticamente quando o limite de tokens é atingido (até 5 rodadas)                                                                            |
+| **Gravação de voz**           | Gravar, pausar, retomar e parar antes de enviar; áudio convertido para WAV 16 kHz; timer com contagem regressiva                                                            |
+| **Transcrição**               | Whisper (faster-whisper) converte áudio em texto localmente quando o modelo ativo não oferece áudio nativo ou quando o engine não suporta essa entrada                      |
+| **Leitura de respostas**        | Text-to-Speech via Web Speech API com preferência para vozes Microsoft                                                                                                      |
+| **Markdown rico**               | Renderização com GFM, blocos de código com syntax highlight, matemática KaTeX                                                                                            |
+| **Edição de mensagens**       | Editar mensagens enviadas e regenerar respostas                                                                                                                              |
+| **Pesquisa de mensagens**       | Busque conversas por título ou conteúdo — destaque automático dos termos encontrados                                                                                     |
+| **Localização**               | Compartilhamento opcional de geolocalização para respostas mais contextualizadas (desativado por padrão)                                                                  |
+| **Avaliação de risco**        | Instruções personalizadas são avaliadas automaticamente pelo LLM; alerta exibido apenas quando o risco é significativo                                                   |
+| **i18n**                        | Português (BR), English (US), Español e Français — detecta automaticamente o idioma do navegador                                                                         |
+| **Tema escuro**                 | UI minimalista e responsiva com design dark-mode                                                                                                                             |
+| **Janela deslizante**           | Gestão automática de contexto: truncamento de conteúdo longo, descarte de mensagens antigas e retry em estouro                                                            |
+| **Privacidade total**           | Conversas e arquivos ficam em `data/user/` no seu disco. Nada é enviado para a nuvem.                                                                                     |
+| **Ícone na bandeja**           | Em vez de uma janela de console, a aplicação roda como ícone na bandeja do sistema (system tray) com menu para abrir, reiniciar, ver logs e encerrar                      |
 
 ---
 
@@ -89,29 +89,37 @@ O My AI Playground roda modelos de IA localmente no seu hardware. Os requisitos 
 
 ### Mínimos (modelo Gemma 4 E2B — 2B parâmetros)
 
-| Componente | Requisito |
-|---|---|
-| **SO** | Windows 10/11 (64 bits) |
-| **RAM** | 8 GB |
+| Componente           | Requisito                                                   |
+| -------------------- | ----------------------------------------------------------- |
+| **SO**         | Windows 10/11 (64 bits)                                     |
+| **RAM**        | 8 GB                                                        |
 | **VRAM (GPU)** | 4 GB (NVIDIA CUDA, AMD HIP/ROCm ou Apple Metal) ou modo CPU |
-| **Disco** | ~3 GB para o modelo + ~1 GB para dependências |
-| **CPU** | Qualquer x86-64 com suporte AVX2 (ou Apple Silicon arm64) |
+| **Disco**      | ~10 GB para o modelo + 2 GB para dependências              |
+| **CPU**        | Qualquer x86-64 com suporte AVX2 (ou Apple Silicon arm64)   |
 
-### Recomendados (modelo Gemma 4 E4B — 4B parâmetros)
+### Intermediário (modelo padrão Gemma 4 E4B — 4B parâmetros)
 
-| Componente | Requisito |
-|---|---|
-| **RAM** | 16 GB |
-| **VRAM (GPU)** | 6 GB (NVIDIA CUDA, AMD HIP/ROCm ou Apple Metal) |
-| **Disco** | ~5 GB para o modelo |
+| Componente           | Requisito                                       |
+| -------------------- | ----------------------------------------------- |
+| **RAM**        | 16 GB                                           |
+| **VRAM (GPU)** | 7 GB (NVIDIA CUDA, AMD HIP/ROCm ou Apple Metal) |
+| **Disco**      | ~10 GB para o modelo + 2 GB para dependências  |
+
+### Recomendados (modelo Gemma 4 12B Unified — 12B parâmetros)
+
+| Componente           | Requisito                                        |
+| -------------------- | ------------------------------------------------ |
+| **RAM**        | 24 GB                                            |
+| **VRAM (GPU)** | 12 GB (NVIDIA CUDA, AMD HIP/ROCm ou Apple Metal) |
+| **Disco**      | ~10 GB para o modelo + 2 GB para dependências     |
 
 ### Para o modelo maior (Gemma 4 26B-A4B — 26B parâmetros, MoE)
 
-| Componente | Requisito |
-|---|---|
-| **RAM** | 32 GB |
+| Componente           | Requisito                                         |
+| -------------------- | ------------------------------------------------- |
+| **RAM**        | 32 GB                                             |
 | **VRAM (GPU)** | 16 GB+ (NVIDIA CUDA, AMD HIP/ROCm ou Apple Metal) |
-| **Disco** | ~15 GB para o modelo |
+| **Disco**      | ~26 GB para o modelo + 2 GB para dependências    |
 
 > **Nota:** sem VRAM suficiente, o llama.cpp fará offloading para a RAM do sistema (modo CPU/parcial), resultando em inferência significativamente mais lenta. Se você receber erros de **Out of Memory (OOM)**, experimente um modelo menor ou reduza `N_CTX` no arquivo `data/system/.env`.
 
@@ -122,8 +130,6 @@ O My AI Playground roda modelos de IA localmente no seu hardware. Os requisitos 
 ### Opção A — Instalador gráfico
 
 Na [página de releases](https://github.com/xBrasil/myAIplayground/releases) está disponível um instalador `.exe` para Windows (criado com [Inno Setup](https://jrsoftware.org/isinfo.php)). O assistente de instalação copia os arquivos, cria atalhos no Menu Iniciar e na Área de Trabalho, e opcionalmente executa a configuração de dependências ao final.
-
-> **Nota:** Python 3.11+ e Node.js 20+ são instalados automaticamente via `winget` quando estiverem faltando. Se você escolher a instalação per-user (sem rodar o instalador como Administrador), um prompt do UAC aparecerá no momento certo para elevar apenas essa etapa — o restante do setup continua rodando no seu usuário. Requer `winget` (App Installer) disponível no Windows; caso contrário, instale Python/Node manualmente antes.
 
 ### Opção B — Via scripts
 
@@ -141,6 +147,7 @@ install.cmd
 ```
 
 O instalador:
+
 - Detecta e instala Python e Node.js automaticamente via `winget` (solicitando elevação UAC se necessário)
 - Cria o ambiente virtual `.venv` e instala dependências do backend
 - Instala dependências npm do frontend
@@ -154,6 +161,7 @@ tray.cmd
 ```
 
 O launcher:
+
 - Inicia backend (FastAPI na porta 8000) e frontend (Vite na porta 5173) em segundo plano
 - Exibe um ícone na bandeja do sistema (system tray) com menu: **Abrir no Navegador**, **Ver Logs**, **Reiniciar**, **Sair**
 - Aguarda os serviços ficarem prontos e abre a interface no navegador automaticamente
@@ -199,25 +207,30 @@ Inicia os serviços em segundo plano e exibe um ícone na bandeja do sistema com
 
 ## Modelos disponíveis
 
-| Modelo | Arquivo GGUF | Quantização | Contexto | Uso típico |
-|---|---|---|---|---|
-| **Gemma 4 E2B** | `gemma-4-E2B-it-Q8_0.gguf` | Q8_0 | 128K | Rápido, ideal para testes |
-| **Gemma 4 E4B** | `gemma-4-E4B-it-Q4_K_M.gguf` | Q4_K_M | 128K | Equilíbrio entre qualidade e velocidade |
-| **Gemma 4 26B-A4B** | `gemma-4-26B-A4B-it-UD-IQ4_XS.gguf` | IQ4_XS | 256K | Maior qualidade, requer mais VRAM |
+| Modelo                    | Arquivo GGUF                          | Quantização | Contexto | Uso típico                              |
+| ------------------------- | ------------------------------------- | ------------- | -------- | ---------------------------------------- |
+| **Gemma 4 E2B**     | `gemma-4-E2B-it-Q8_0.gguf`          | Q8_0          | 128K     | Rápido, ideal para testes               |
+| **Gemma 4 E4B**     | `gemma-4-E4B-it-Q4_K_M.gguf`        | Q4_K_M        | 128K     | Equilíbrio entre qualidade e velocidade |
+| **Gemma 4 12B Unified** | `gemma-4-12b-it-qat-q4_0.gguf`  | QAT Q4_0      | 256K     | Alta capacidade, áudio nativo           |
+| **Gemma 4 26B-A4B** | `gemma-4-26B-A4B-it-UD-IQ4_XS.gguf` | IQ4_XS        | 256K     | Maior qualidade, requer mais VRAM        |
 
-O modelo E4B é o padrão. Todos são executados pelo llama.cpp via GGUF, sem PyTorch em runtime.
+O modelo E2B é selecionado por padrão caso o usuário não disponha de uma GPU, e o E4B caso disponha. E2B, E4B e 12B Unified processam áudio nativamente; no GGUF do 12B, o llama.cpp habilita mídia com o `mmproj-gemma-4-12b-it-qat-q4_0.gguf`. O 26B-A4B não tem áudio nativo e usa fallback por transcrição Whisper. Todos são executados pelo llama.cpp via GGUF, sem PyTorch em runtime.
+
+> **Nota:** o `mmproj` do 12B Unified usa o projector `gemma4uv`, suportado pelo `llama-server` b9616 ou mais recente. Execute `install.cmd`/`install.sh` novamente se o app tiver sido instalado com uma build anterior.
 
 ---
 
 ## Stack técnica
 
 ### Frontend
+
 - **React 19** + **TypeScript** + **Vite**
 - `react-markdown` + `remark-gfm` + `remark-math` + `rehype-katex`
 - Web Speech API (TTS)
 - MediaRecorder API (gravação de áudio)
 
 ### Backend
+
 - **FastAPI** + **Uvicorn**
 - **SQLAlchemy** (SQLite)
 - **faster-whisper** (transcrição de áudio)
@@ -231,6 +244,7 @@ O modelo E4B é o padrão. Todos são executados pelo llama.cpp via GGUF, sem Py
 - **pystray** (ícone na bandeja do sistema — system tray)
 
 ### Inferência
+
 - **llama.cpp server** (binário pré-compilado — NVIDIA CUDA, AMD HIP/ROCm, Apple Metal ou CPU)
 - Detecção automática de GPU (NVIDIA, AMD, Apple Silicon) com fallback para CPU
 - Gerenciado automaticamente pelo backend — download, inicialização e fallback
@@ -284,11 +298,11 @@ myAIplayground/
 
 ---
 
-## Modelos de IA (Gemma)
+## Modelos de IA (Gemma 4)
 
-> **Aviso:** Este projeto **não é afiliado, patrocinado nem endossado pelo Google ou pela Alphabet Inc.** "Gemma" é uma marca do Google. Os modelos Gemma são utilizados sob os termos de licenciamento disponibilizados pelo Google.
+> **Aviso:** Este projeto **não é afiliado, patrocinado nem endossado pelo Google ou pela Alphabet Inc.** "Gemma 4" é uma marca do Google. Os modelos Gemma 4 são utilizados sob os termos de licenciamento disponibilizados pelo Google.
 
-Os modelos de IA utilizados por esta aplicação (família **Google Gemma**) **não são distribuídos** com este repositório. Eles são baixados diretamente do [Hugging Face](https://huggingface.co/) mediante solicitação do usuário e estão sujeitos aos [Termos de Uso do Gemma](https://ai.google.dev/gemma/terms) do Google.
+Os modelos de IA utilizados por esta aplicação (família **Google Gemma 4**) **não são distribuídos** com este repositório. Eles são baixados diretamente do [Hugging Face](https://huggingface.co/) mediante solicitação do usuário e estão sujeitos aos [Termos de Uso do Gemma 4 - Apache 2.0](https://ai.google.dev/gemma/apache_2) do Google.
 
 Ao baixar e usar esses modelos, você concorda em cumprir os termos do Google, que incluem restrições à geração de conteúdo prejudicial, ilegal ou enganoso.
 
@@ -306,57 +320,57 @@ Criado por [Rodolfo Motta Saraiva](https://rmsaraiva.com/) como projeto pessoal 
 
 ### Componentes de terceiros
 
-| Componente | Licença |
-|---|---|
-| [llama.cpp](https://github.com/ggml-org/llama.cpp) | MIT |
-| [FastAPI](https://github.com/tiangolo/fastapi) | MIT |
-| [Uvicorn](https://github.com/encode/uvicorn) | BSD-3-Clause |
-| [SQLAlchemy](https://github.com/sqlalchemy/sqlalchemy) | MIT |
-| [Pydantic](https://github.com/pydantic/pydantic) | MIT |
-| [React](https://github.com/facebook/react) | MIT |
-| [Vite](https://github.com/vitejs/vite) | MIT |
-| [react-markdown](https://github.com/remarkjs/react-markdown) | MIT |
-| [KaTeX](https://github.com/KaTeX/KaTeX) (via rehype-katex) | MIT |
-| [Hugging Face Hub](https://github.com/huggingface/huggingface_hub) | Apache 2.0 |
-| [faster-whisper](https://github.com/SYSTRAN/faster-whisper) | MIT |
-| [Pillow](https://github.com/python-pillow/Pillow) | HPND |
-| [pillow-heif](https://github.com/bigcat88/pillow_heif) | BSD-3-Clause |
-| [PyMuPDF](https://github.com/pymupdf/PyMuPDF) | AGPL-3.0 |
-| [python-docx](https://github.com/python-openxml/python-docx) | MIT |
-| [openpyxl](https://foss.heptapod.net/openpyxl/openpyxl) | MIT |
-| [python-pptx](https://github.com/scanny/python-pptx) | MIT |
-| [duckduckgo-search](https://github.com/deedy5/duckduckgo_search) | MIT |
-| [beautifulsoup4](https://www.crummy.com/software/BeautifulSoup/) | MIT |
-| [svglib](https://github.com/deeplook/svglib) | LGPL-3.0 |
-| [reportlab](https://www.reportlab.com/dev/opensource/) | BSD-3-Clause |
-| [pystray](https://github.com/moses-palmer/pystray) | LGPL-3.0 |
-| [Inno Setup](https://jrsoftware.org/isinfo.php) (instalador Windows) | [Inno Setup License](https://jrsoftware.org/files/is/license.txt) |
-| [Google Gemma 4](https://ai.google.dev/gemma) (modelos de IA — não distribuídos) | [Gemma Terms of Use](https://ai.google.dev/gemma/terms) |
+| Componente                                                                                              | Licença                                                               |
+| ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| [llama.cpp](https://github.com/ggml-org/llama.cpp)                                                         | MIT                                                                    |
+| [FastAPI](https://github.com/tiangolo/fastapi)                                                             | MIT                                                                    |
+| [Uvicorn](https://github.com/encode/uvicorn)                                                               | BSD-3-Clause                                                           |
+| [SQLAlchemy](https://github.com/sqlalchemy/sqlalchemy)                                                     | MIT                                                                    |
+| [Pydantic](https://github.com/pydantic/pydantic)                                                           | MIT                                                                    |
+| [React](https://github.com/facebook/react)                                                                 | MIT                                                                    |
+| [Vite](https://github.com/vitejs/vite)                                                                     | MIT                                                                    |
+| [react-markdown](https://github.com/remarkjs/react-markdown)                                               | MIT                                                                    |
+| [KaTeX](https://github.com/KaTeX/KaTeX) (via rehype-katex)                                                 | MIT                                                                    |
+| [Hugging Face Hub](https://github.com/huggingface/huggingface_hub)                                         | Apache 2.0                                                             |
+| [faster-whisper](https://github.com/SYSTRAN/faster-whisper)                                                | MIT                                                                    |
+| [Pillow](https://github.com/python-pillow/Pillow)                                                          | HPND                                                                   |
+| [pillow-heif](https://github.com/bigcat88/pillow_heif)                                                     | BSD-3-Clause                                                           |
+| [PyMuPDF](https://github.com/pymupdf/PyMuPDF)                                                              | AGPL-3.0                                                               |
+| [python-docx](https://github.com/python-openxml/python-docx)                                               | MIT                                                                    |
+| [openpyxl](https://foss.heptapod.net/openpyxl/openpyxl)                                                    | MIT                                                                    |
+| [python-pptx](https://github.com/scanny/python-pptx)                                                       | MIT                                                                    |
+| [duckduckgo-search](https://github.com/deedy5/duckduckgo_search)                                           | MIT                                                                    |
+| [beautifulsoup4](https://www.crummy.com/software/BeautifulSoup/)                                           | MIT                                                                    |
+| [svglib](https://github.com/deeplook/svglib)                                                               | LGPL-3.0                                                               |
+| [reportlab](https://www.reportlab.com/dev/opensource/)                                                     | BSD-3-Clause                                                           |
+| [pystray](https://github.com/moses-palmer/pystray)                                                         | LGPL-3.0                                                               |
+| [Inno Setup](https://jrsoftware.org/isinfo.php) (instalador Windows)                                       | [Inno Setup License](https://jrsoftware.org/files/is/license.txt)         |
+| [Google Gemma 4](https://ai.google.dev/gemma/docs/core/model_card_4) (modelos de IA — não distribuídos) | [Gemma 4 Terms of Use - Apache 2.0](https://ai.google.dev/gemma/apache_2) |
 
 ---
 
 ## English Summary
 
-**My AI Playground** is an open-source, desktop-local application for chatting with [Google Gemma](https://ai.google.dev/gemma) AI models running entirely on your machine. It features a modern web UI, multimodal input (text, images, audio, files), and conversation history stored only locally.
+**My AI Playground** is an open-source, desktop-local application for chatting with [Google Gemma 4](https://ai.google.dev/gemma/docs/core/model_card_4) AI models running entirely on your machine. It features a modern web UI, multimodal input (text, images, audio, files), and conversation history stored only locally.
 
-> **Disclaimer:** This project is **not affiliated with, sponsored by, or endorsed by Google or Alphabet Inc.** "Gemma" is a trademark of Google. The Gemma models are used under the licensing terms provided by Google.
+> **Disclaimer:** This project is **not affiliated with, sponsored by, or endorsed by Google or Alphabet Inc.** "Gemma 4" is a trademark of Google. The Gemma 4 models are used under the licensing terms provided by Google [Gemma 4 Terms of Use - Apache 2.0](https://ai.google.dev/gemma/apache_2).
 
 ### Features
 
-- **Multimodal chat** — text, images, audio and files in a single conversation; multiple attachments per message. Image formats: PNG, JPEG, WebP, GIF, SVG, HEIC/HEIF, AVIF, BMP, ICO, TIFF.
-- **Gemma models** — Gemma 4 E2B, E4B and 26B-A4B via GGUF; switch models at any time from the UI.
+- **Multimodal chat** — text, images, audio and files in a single conversation; multiple attachments per message. Uploaded audio files are treated as conversation attachments, with automatic audio-track extraction from containers such as MP4. Image formats: PNG, JPEG, WebP, GIF, SVG, HEIC/HEIF, AVIF, BMP, ICO, TIFF.
+- **Gemma models** — Gemma 4 E2B, E4B, 12B Unified and 26B-A4B via GGUF; switch models at any time from the UI.
 - **Text files** — 60+ code and data extensions (`.py`, `.ts`, `.json`, `.csv`, `.xml`, `.yaml`, `.sql`, `.rs`, `.go`…) read as plain text.
 - **Documents** — PDF, Word (`.docx`), Excel (`.xlsx`) and PowerPoint (`.pptx`) with automatic text extraction.
 - **Web search** — DuckDuckGo search and page reading; the model cites sources with numbered references (`[1]`, `[2]`…).
 - **Local filesystem access** — the model can list and read files from folders you explicitly allow (read-only, directory-traversal protected).
-- **Local image vision** — on vision-capable models (Gemma 4 E2B/E4B), the model can see and describe images from allowed folders.
+- **Local image vision** — on vision-capable models (all available Gemma 4 models), the model can see and describe images from allowed folders.
 - **Tool calling** — the model calls tools (web, filesystem, vision) automatically; calls are persisted and rendered auditably in the history.
 - **Custom instructions** — user-defined system prompt applied to all conversations.
 - **Local inference** — llama.cpp server with CUDA, flash attention, per-model context (128K–256K tokens).
 - **Streaming** — responses rendered token by token in real time.
 - **Auto-continuation** — long responses continue automatically when the token limit is reached (up to 5 rounds).
 - **Voice recording** — record, pause, resume and stop before sending; audio converted to 16 kHz WAV with a countdown timer.
-- **Transcription** — Whisper (faster-whisper) converts audio to text locally.
+- **Transcription** — Whisper (faster-whisper) converts audio to text locally when the active model or engine cannot process native audio.
 - **Text-to-Speech** — Web Speech API with preference for Microsoft voices.
 - **Rich Markdown** — GFM rendering, syntax-highlighted code blocks, KaTeX math.
 - **Message editing** — edit sent messages and regenerate responses.
@@ -369,11 +383,12 @@ Criado por [Rodolfo Motta Saraiva](https://rmsaraiva.com/) como projeto pessoal 
 
 ### System Requirements
 
-| Model | RAM | VRAM (GPU) | Disk |
-|---|---|---|---|
-| Gemma 4 E2B (2B) | 8 GB | 4 GB (NVIDIA CUDA, AMD HIP/ROCm or Apple Metal — or CPU-only) | ~3 GB |
-| Gemma 4 E4B (4B) | 16 GB | 6 GB | ~5 GB |
-| Gemma 4 26B-A4B (26B MoE) | 32 GB | 16 GB+ | ~15 GB |
+| Model                     | RAM   | VRAM (GPU)                                                     | Disk   |
+| ------------------------- | ----- | -------------------------------------------------------------- | ------ |
+| Gemma 4 E2B (2B)          | 8 GB  | 4 GB (NVIDIA CUDA, AMD HIP/ROCm or Apple Metal — or CPU-only) | ~3 GB  |
+| Gemma 4 E4B (4B)          | 16 GB | 7 GB                                                           | ~5 GB  |
+| Gemma 4 12B Unified (12B) | 24 GB | 10 GB                                                          | ~8 GB  |
+| Gemma 4 26B-A4B (26B MoE) | 32 GB | 16 GB+                                                         | ~15 GB |
 
 > Without sufficient VRAM, llama.cpp will offload layers to system RAM (CPU mode), resulting in significantly slower inference. If you encounter **OOM errors**, try a smaller model or reduce `N_CTX` in `data/system/.env`.
 
@@ -400,6 +415,7 @@ install.cmd
 ```
 
 The installer:
+
 - Detects and installs Python and Node.js automatically via `winget` (prompting for UAC elevation if needed)
 - Creates the `.venv` virtual environment and installs backend dependencies
 - Installs frontend npm dependencies
@@ -445,36 +461,35 @@ The installer performs the same steps as the Windows version: creates `.venv`, i
 ### Key points
 
 - **100% local inference** — all AI processing runs on your hardware via [llama.cpp](https://github.com/ggml-org/llama.cpp) (GGUF format). No data is sent to cloud services during normal chat use.
-- **Gemma models are not included** — they are downloaded from [Hugging Face](https://huggingface.co/) at the user's request and are subject to [Google's Gemma Terms of Use](https://ai.google.dev/gemma/terms).
+- **Gemma 4 models are not included** — they are downloaded from [Hugging Face](https://huggingface.co/) at the user's request and are subject to [Gemma 4 Terms of Use - Apache 2.0](https://ai.google.dev/gemma/apache_2).
 - **Stack**: React 19 + TypeScript + Vite (frontend), FastAPI + SQLAlchemy (backend), llama.cpp server (inference), faster-whisper (speech-to-text).
 - **License**: [Apache License 2.0](LICENSE) — Copyright 2026 Rodolfo Motta Saraiva.
 
 ### Third-party components
 
-| Component | License |
-|---|---|
-| [llama.cpp](https://github.com/ggml-org/llama.cpp) | MIT |
-| [FastAPI](https://github.com/tiangolo/fastapi) | MIT |
-| [Uvicorn](https://github.com/encode/uvicorn) | BSD-3-Clause |
-| [SQLAlchemy](https://github.com/sqlalchemy/sqlalchemy) | MIT |
-| [Pydantic](https://github.com/pydantic/pydantic) | MIT |
-| [React](https://github.com/facebook/react) | MIT |
-| [Vite](https://github.com/vitejs/vite) | MIT |
-| [react-markdown](https://github.com/remarkjs/react-markdown) | MIT |
-| [KaTeX](https://github.com/KaTeX/KaTeX) (via rehype-katex) | MIT |
-| [Hugging Face Hub](https://github.com/huggingface/huggingface_hub) | Apache 2.0 |
-| [faster-whisper](https://github.com/SYSTRAN/faster-whisper) | MIT |
-| [Pillow](https://github.com/python-pillow/Pillow) | HPND |
-| [pillow-heif](https://github.com/bigcat88/pillow_heif) | BSD-3-Clause |
-| [PyMuPDF](https://github.com/pymupdf/PyMuPDF) | AGPL-3.0 |
-| [python-docx](https://github.com/python-openxml/python-docx) | MIT |
-| [openpyxl](https://foss.heptapod.net/openpyxl/openpyxl) | MIT |
-| [python-pptx](https://github.com/scanny/python-pptx) | MIT |
-| [duckduckgo-search](https://github.com/deedy5/duckduckgo_search) | MIT |
-| [beautifulsoup4](https://www.crummy.com/software/BeautifulSoup/) | MIT |
-| [svglib](https://github.com/deeplook/svglib) | LGPL-3.0 |
-| [reportlab](https://www.reportlab.com/dev/opensource/) | BSD-3-Clause |
-| [pystray](https://github.com/moses-palmer/pystray) | LGPL-3.0 |
-| [Inno Setup](https://jrsoftware.org/isinfo.php) (Windows installer) | [Inno Setup License](https://jrsoftware.org/files/is/license.txt) |
-| [Google Gemma 4](https://ai.google.dev/gemma) (AI models — not distributed) | [Gemma Terms of Use](https://ai.google.dev/gemma/terms) |
-
+| Component                                                                 | License                                                                |
+| ------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| [llama.cpp](https://github.com/ggml-org/llama.cpp)                           | MIT                                                                    |
+| [FastAPI](https://github.com/tiangolo/fastapi)                               | MIT                                                                    |
+| [Uvicorn](https://github.com/encode/uvicorn)                                 | BSD-3-Clause                                                           |
+| [SQLAlchemy](https://github.com/sqlalchemy/sqlalchemy)                       | MIT                                                                    |
+| [Pydantic](https://github.com/pydantic/pydantic)                             | MIT                                                                    |
+| [React](https://github.com/facebook/react)                                   | MIT                                                                    |
+| [Vite](https://github.com/vitejs/vite)                                       | MIT                                                                    |
+| [react-markdown](https://github.com/remarkjs/react-markdown)                 | MIT                                                                    |
+| [KaTeX](https://github.com/KaTeX/KaTeX) (via rehype-katex)                   | MIT                                                                    |
+| [Hugging Face Hub](https://github.com/huggingface/huggingface_hub)           | Apache 2.0                                                             |
+| [faster-whisper](https://github.com/SYSTRAN/faster-whisper)                  | MIT                                                                    |
+| [Pillow](https://github.com/python-pillow/Pillow)                            | HPND                                                                   |
+| [pillow-heif](https://github.com/bigcat88/pillow_heif)                       | BSD-3-Clause                                                           |
+| [PyMuPDF](https://github.com/pymupdf/PyMuPDF)                                | AGPL-3.0                                                               |
+| [python-docx](https://github.com/python-openxml/python-docx)                 | MIT                                                                    |
+| [openpyxl](https://foss.heptapod.net/openpyxl/openpyxl)                      | MIT                                                                    |
+| [python-pptx](https://github.com/scanny/python-pptx)                         | MIT                                                                    |
+| [duckduckgo-search](https://github.com/deedy5/duckduckgo_search)             | MIT                                                                    |
+| [beautifulsoup4](https://www.crummy.com/software/BeautifulSoup/)             | MIT                                                                    |
+| [svglib](https://github.com/deeplook/svglib)                                 | LGPL-3.0                                                               |
+| [reportlab](https://www.reportlab.com/dev/opensource/)                       | BSD-3-Clause                                                           |
+| [pystray](https://github.com/moses-palmer/pystray)                           | LGPL-3.0                                                               |
+| [Inno Setup](https://jrsoftware.org/isinfo.php) (Windows installer)          | [Inno Setup License](https://jrsoftware.org/files/is/license.txt)         |
+| [Google Gemma 4](https://ai.google.dev/gemma) (AI models — not distributed) | [Gemma 4 Terms of Use - Apache 2.0](https://ai.google.dev/gemma/apache_2) |

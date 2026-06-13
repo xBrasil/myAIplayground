@@ -43,6 +43,9 @@ class ModelProfile:
     gguf_repo: str
     gguf_file: str
     mmproj_file: str = ""
+    vision_capable: bool = True
+    requires_mmproj: bool = True
+    min_mmproj_build: int | None = None
     kv_cache_quant: bool = False
     n_ctx: int = 32768
     audio_capable: bool = False
@@ -73,6 +76,17 @@ class ModelService:
                 gguf_file=self._settings.gguf_file_e4b,
                 mmproj_file=self._settings.mmproj_file_e4b,
                 n_ctx=131072,
+                audio_capable=True,
+            ),
+            "12b": ModelProfile(
+                key="12b",
+                label="Gemma 4 12B Unified",
+                summary="Gemma412BUnified",
+                gguf_repo=self._settings.gguf_repo_12b,
+                gguf_file=self._settings.gguf_file_12b,
+                mmproj_file=self._settings.mmproj_file_12b,
+                min_mmproj_build=9616,
+                n_ctx=262144,
                 audio_capable=True,
             ),
             "26b": ModelProfile(
@@ -284,27 +298,33 @@ class ModelService:
     # Minimum llama-server build for native audio (Gemma 4 conformer, PR #21421)
     _MIN_AUDIO_BUILD = 8827
 
-    def _check_audio_support(self) -> None:
-        """Disable native audio if the server build predates audio support."""
-        if not self._has_audio:
-            return
+    def _server_build(self) -> int | None:
+        """Return installed llama-server build number from version.txt, if known."""
         version_file = self._server_dir() / "version.txt"
         try:
             version = version_file.read_text(encoding="utf-8-sig").strip()
             match = re.match(r"b(\d+)", version)
             if match:
-                build = int(match.group(1))
-                if build < self._MIN_AUDIO_BUILD:
-                    logger.warning(
-                        "llama-server %s does not support native audio (requires >= b%d) — using Whisper transcription.",
-                        version, self._MIN_AUDIO_BUILD,
-                    )
-                    self._has_audio = False
-                    return
-                logger.info("Native audio support: OK (build %s)", version)
-                return
+                return int(match.group(1))
         except Exception:
             pass
+        return None
+
+    def _check_audio_support(self) -> None:
+        """Disable native audio if the server build predates audio support."""
+        if not self._has_audio:
+            return
+        build = self._server_build()
+        if build is not None:
+            if build < self._MIN_AUDIO_BUILD:
+                logger.warning(
+                    "llama-server b%d does not support native audio (requires >= b%d) — using Whisper transcription.",
+                    build, self._MIN_AUDIO_BUILD,
+                )
+                self._has_audio = False
+                return
+            logger.info("Native audio support: OK (build b%d)", build)
+            return
         # version.txt missing or unparseable — assume audio is supported
         # (custom/source builds that include the conformer code)
         logger.info("Native audio support: OK (unknown version)")
@@ -362,16 +382,32 @@ class ModelService:
         if self._settings.flash_attn and server_backend in ("cuda", "metal", "hip", "rocm"):
             base_cmd.extend(["--flash-attn", "on"])
 
-        has_vision = False
+        has_vision = profile.vision_capable and not profile.requires_mmproj
         if profile.mmproj_file:
-            try:
-                mmproj_path = self._download_gguf(profile.gguf_repo, profile.mmproj_file)
-                base_cmd.extend(["--mmproj", mmproj_path])
-                base_cmd.extend(["--image-min-tokens", str(self._settings.image_min_tokens)])
-                base_cmd.extend(["--image-max-tokens", str(self._settings.image_max_tokens)])
-                has_vision = True
-            except Exception as exc:
-                logger.warning("mmproj not found for %s, vision disabled: %s", model_key, exc)
+            build = self._server_build()
+            if (
+                profile.min_mmproj_build is not None
+                and build is not None
+                and build < profile.min_mmproj_build
+            ):
+                logger.warning(
+                    "%s mmproj requires llama-server >= b%d (installed b%d); "
+                    "starting without image/audio input. Run install.cmd/install.sh to upgrade llama-server.",
+                    profile.label,
+                    profile.min_mmproj_build,
+                    build,
+                )
+            else:
+                try:
+                    mmproj_path = self._download_gguf(profile.gguf_repo, profile.mmproj_file)
+                    base_cmd.extend(["--mmproj", mmproj_path])
+                    has_vision = True
+                except Exception as exc:
+                    logger.warning("mmproj not found for %s, vision disabled: %s", model_key, exc)
+
+        if has_vision:
+            base_cmd.extend(["--image-min-tokens", str(self._settings.image_min_tokens)])
+            base_cmd.extend(["--image-max-tokens", str(self._settings.image_max_tokens)])
 
         if profile.kv_cache_quant:
             base_cmd.extend(["--cache-type-k", "q8_0", "--cache-type-v", "q8_0"])
@@ -407,7 +443,7 @@ class ModelService:
                 daemon=True,
             ).start()
             self._has_vision = has_vision
-            self._has_audio = has_vision and profile.audio_capable
+            self._has_audio = self._has_vision and profile.audio_capable
 
             if self._wait_for_server_health():
                 if ctx_value != ctx_attempts[0]:

@@ -157,8 +157,8 @@ fi
 
 SERVER_BIN="$LLAMA_DIR/llama-server"
 
-# Minimum build required for Gemma 4 native audio support (PR #21421)
-MIN_VERSION="b8827"
+# Minimum build required for Gemma 4 12B Unified mmproj support (`gemma4uv`).
+MIN_VERSION="b9616"
 NEEDS_UPGRADE=false
 if [ -n "$CURRENT_VERSION" ]; then
   cur_build="${CURRENT_VERSION#b}"

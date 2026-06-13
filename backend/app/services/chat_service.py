@@ -1,11 +1,22 @@
 import base64
+import io
 import json
 import logging
+import wave
 from datetime import date
 from pathlib import Path
 from typing import Any
 
 from sqlalchemy.orm import Session
+
+try:
+    import av
+    from av.audio.frame import AudioFrame
+    from av.audio.resampler import AudioResampler
+except ImportError:  # pragma: no cover
+    av = None
+    AudioFrame = None
+    AudioResampler = None
 
 from app.core.config import get_settings
 from app.models import Conversation, Message
@@ -80,6 +91,17 @@ class ChatService:
             return "Analyze the image sent and respond based on the visual content."
         return "Analyze the content sent and respond."
 
+    def _build_audio_instruction(self, user_text: str, attachment_name: str | None) -> str:
+        file_context = "The user uploaded an audio file for analysis"
+        if attachment_name:
+            file_context += f" named '{attachment_name}'"
+        file_context += ". Treat it as an attached file in the conversation, not as the user's live voice message to you."
+
+        trimmed = user_text.strip()
+        if trimmed:
+            return f"{file_context}\n\nUser request about this audio file:\n{trimmed}"
+        return f"{file_context}\n\n{self._default_multimodal_instruction('audio')}"
+
     def _transcribe_audio(self, attachment_path: str) -> str:
         try:
             result = whisper_service.transcribe(attachment_path)
@@ -134,12 +156,52 @@ class ChatService:
             return combined + f"\n\n{user_text}"
         return combined
 
+    def _transcode_audio_to_wav_bytes(self, file_path: str) -> bytes:
+        if av is None or AudioResampler is None:
+            raise RuntimeError("PyAV is not installed in the backend Python environment.")
+
+        pcm_chunks: list[bytes] = []
+        with av.open(file_path) as container:
+            stream = next((item for item in container.streams if item.type == "audio"), None)
+            if stream is None:
+                raise ValueError(f"No audio stream found in: {file_path}")
+
+            resampler = AudioResampler(format="s16", layout="mono", rate=16000)
+            for frame in container.decode(stream):
+                if AudioFrame is not None and not isinstance(frame, AudioFrame):
+                    continue
+                audio_frame: Any = frame
+                resampled = resampler.resample(audio_frame)
+                if resampled is None:
+                    continue
+                if not isinstance(resampled, list):
+                    resampled = [resampled]
+                for output in resampled:
+                    pcm_chunks.append(output.to_ndarray().tobytes())
+
+        if not pcm_chunks:
+            raise ValueError(f"No audio samples decoded from: {file_path}")
+
+        buffer = io.BytesIO()
+        with wave.open(buffer, "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(16000)
+            for chunk in pcm_chunks:
+                wav_file.writeframes(chunk)
+        return buffer.getvalue()
+
     def _load_audio_base64(self, file_path: str) -> tuple[str, str]:
         """Return (base64_data, audio_format) for native audio models."""
-        raw = Path(file_path).read_bytes()
-        b64 = base64.b64encode(raw).decode("utf-8")
         ext = Path(file_path).suffix.lower().lstrip(".")
-        audio_fmt = {"wav": "wav", "mp3": "mp3", "webm": "webm", "ogg": "ogg", "m4a": "m4a"}.get(ext, "wav")
+        if ext in {"wav", "mp3"}:
+            raw = Path(file_path).read_bytes()
+            audio_fmt = ext
+        else:
+            raw = self._transcode_audio_to_wav_bytes(file_path)
+            audio_fmt = "wav"
+
+        b64 = base64.b64encode(raw).decode("utf-8")
         return b64, audio_fmt
 
     def _conversation_seed_for_upload(
@@ -419,12 +481,12 @@ class ChatService:
             ):
                 try:
                     b64_data, audio_fmt = self._load_audio_base64(message.attachment_path)
-                    text_content = self._default_multimodal_instruction("audio")
+                    text_content = self._build_audio_instruction(message.content, message.attachment_name)
                     messages.append({
                         "role": "user",
                         "content": [
-                            {"type": "input_audio", "input_audio": {"data": b64_data, "format": audio_fmt}},
                             {"type": "text", "text": text_content},
+                            {"type": "input_audio", "input_audio": {"data": b64_data, "format": audio_fmt}},
                         ],
                     })
                     continue

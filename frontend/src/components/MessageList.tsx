@@ -13,6 +13,7 @@ const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 's
 const MODEL_LABELS: Record<string, string> = {
   e2b: 'Gemma 4 E2B',
   e4b: 'Gemma 4 E4B',
+  '12b': 'Gemma 4 12B',
   '26b': 'Gemma 4 26B',
 };
 
@@ -344,7 +345,36 @@ export default function MessageList({
                 (() => {
                   const audioUrl = getUploadAssetUrl(message.attachment_path);
                   if (!audioUrl) return <p>{message.content || t('messages.audioSent')}</p>;
-                  return <AudioMessageContent src={audioUrl} transcript={message.content} />;
+                  return (
+                    <>
+                      {message.attachment_name ? (
+                        <div className="attachment-pill-wrapper">
+                          <div
+                            className="attachment-pill attachment-pill--clickable"
+                            onClick={(e) => { e.stopPropagation(); handleAttachmentClick(message); }}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => { if (e.key === 'Enter') handleAttachmentClick(message); }}
+                          >
+                            {message.attachment_name}
+                          </div>
+                          {fileMenuId === message.id && message.attachment_path ? (
+                            <div className="file-action-menu" onClick={(e) => e.stopPropagation()}>
+                              <button type="button" onClick={() => handleOpenFile(message.attachment_path!)}>
+                                <svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" /></svg>
+                                {t('messages.openFile')}
+                              </button>
+                              <button type="button" onClick={() => handleRevealFile(message.attachment_path!)}>
+                                <svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" /></svg>
+                                {t('messages.revealInExplorer')}
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      <AudioMessageContent src={audioUrl} text={message.content} />
+                    </>
+                  );
                 })()
               ) : isUser ? (
                 <>

@@ -46,17 +46,21 @@ class Settings(BaseSettings):
     # GGUF model repos
     gguf_repo_e2b: str = Field(default="unsloth/gemma-4-E2B-it-GGUF", alias="GGUF_REPO_E2B")
     gguf_repo_e4b: str = Field(default="unsloth/gemma-4-E4B-it-GGUF", alias="GGUF_REPO_E4B")
+    gguf_repo_12b: str = Field(default="google/gemma-4-12B-it-qat-q4_0-gguf", alias="GGUF_REPO_12B")
     gguf_repo_26b: str = Field(default="unsloth/gemma-4-26B-A4B-it-GGUF", alias="GGUF_REPO_26B")
 
     # GGUF model filenames
     gguf_file_e2b: str = Field(default="gemma-4-E2B-it-Q8_0.gguf", alias="GGUF_FILE_E2B")
     gguf_file_e4b: str = Field(default="gemma-4-E4B-it-Q4_K_M.gguf", alias="GGUF_FILE_E4B")
+    gguf_file_12b: str = Field(default="gemma-4-12b-it-qat-q4_0.gguf", alias="GGUF_FILE_12B")
     gguf_file_26b: str = Field(default="gemma-4-26B-A4B-it-UD-IQ4_XS.gguf", alias="GGUF_FILE_26B")
 
-    # Multimodal projector (mmproj) files — empty disables vision/audio for that model
-    # BF16 recommended for native audio quality (llama.cpp PR #21421)
+    # Multimodal projector (mmproj) files. The 12B Unified GGUF also ships a
+    # companion mmproj; llama.cpp uses it to enable image/audio inputs.
+    # BF16 recommended for native audio quality on projector-based models.
     mmproj_file_e2b: str = Field(default="mmproj-BF16.gguf", alias="MMPROJ_FILE_E2B")
     mmproj_file_e4b: str = Field(default="mmproj-BF16.gguf", alias="MMPROJ_FILE_E4B")
+    mmproj_file_12b: str = Field(default="mmproj-gemma-4-12b-it-qat-q4_0.gguf", alias="MMPROJ_FILE_12B")
     mmproj_file_26b: str = Field(default="mmproj-BF16.gguf", alias="MMPROJ_FILE_26B")
 
     # llama.cpp engine settings

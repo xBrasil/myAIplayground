@@ -51,7 +51,7 @@ export default function Composer({ busy, modelLoading, enterToSend, activeModelK
   const sendOnFinalizeRef = useRef(false);
 
   function getMaxRecordingSeconds(): number {
-    if (activeModelKey === 'e2b' || activeModelKey === 'e4b') return 30;
+    if (activeModelKey === 'e2b' || activeModelKey === 'e4b' || activeModelKey === '12b') return 30;
     return 120;
   }
 
