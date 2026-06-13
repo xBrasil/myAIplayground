@@ -36,6 +36,7 @@
 
   "model.summary.Gemma4E2B": "Faster",
   "model.summary.Gemma4E4B": "Balanced",
+  "model.summary.Gemma412BUnified": "Advanced",
   "model.summary.Gemma426BA4B": "Smarter",
 
   "sidebar.newConversation": "New conversation",
@@ -97,8 +98,8 @@
   "messages.editPrompt": "Edit message:",
   "messages.regenerate": "Regenerate response",
   "messages.confirmRegenerate": "Regenerate the last response? The current response will be deleted.",
-  "messages.audioSent": "Audio sent.",
-  "messages.audioSentFallback": "Audio message sent.",
+  "messages.audioSent": "Audio file sent.",
+  "messages.audioSentFallback": "Attached audio file.",
   "messages.preview": "Preview",
 
   "topbar.gpuReady": "{{name}} ({{backend}})",
@@ -129,12 +130,14 @@
   "modelSelector.errorTitle": "Failed to load model",
   "modelSelector.errorUnexpected": "An unexpected error occurred while loading the model.",
   "modelSelector.fallback": "Reverting to previous model ({{model}})…",
-  "modelSelector.e2b.capabilities": ["Fastest inference speed", "Multimodal: text and images", "128K token context window", "Low VRAM usage (~4 GB)", "Ideal for simple and quick tasks"],
+  "modelSelector.e2b.capabilities": ["Fastest inference speed", "Multimodal: text, images and native audio", "128K token context window", "Low VRAM usage (~4 GB)", "Ideal for simple and quick tasks"],
   "modelSelector.e2b.limitations": ["Limited complex reasoning", "Less accurate on long texts", "May struggle with nuanced instructions"],
-  "modelSelector.e4b.capabilities": ["Good balance of speed and quality", "Multimodal: text and images", "128K token context window", "Moderate VRAM usage (~6 GB)", "Well-suited for complex tasks"],
+  "modelSelector.e4b.capabilities": ["Good balance of speed and quality", "Multimodal: text, images and native audio", "128K token context window", "Moderate VRAM usage (~7 GB)", "Well-suited for complex tasks"],
   "modelSelector.e4b.limitations": ["Slower than E2B", "May require more VRAM than simpler models"],
+  "modelSelector.12b.capabilities": ["Higher-capacity upgrade for GPU systems", "Unified multimodal model: text, images and native audio", "256K token context window", "Stronger coding and reasoning than E4B", "Uses the official companion mmproj for GGUF media input"],
+  "modelSelector.12b.limitations": ["Slower than E4B and E2B", "Requires more VRAM (~10 GB)", "Longer initial download than smaller models"],
   "modelSelector.26b.capabilities": ["Highest quality responses (MoE architecture)", "Multimodal: text and images", "256K token context window", "Best reasoning and comprehension", "Ideal for advanced analysis and long documents"],
-  "modelSelector.26b.limitations": ["Slowest inference speed", "High VRAM usage (~14 GB)", "Longer initial loading time"],
+  "modelSelector.26b.limitations": ["No native audio input; audio uses Whisper transcription fallback", "Slowest inference speed", "High VRAM usage (~14 GB)", "Longer initial loading time"],
   "modelSelector.gpuRequired": "Requires GPU",
   "modelSelector.gpuWarning": "This model requires a GPU with hardware acceleration (NVIDIA CUDA, AMD ROCm/HIP, or Apple Metal). No compatible GPU was detected.",
 

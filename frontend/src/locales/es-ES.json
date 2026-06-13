@@ -36,6 +36,7 @@
 
   "model.summary.Gemma4E2B": "Más rápido",
   "model.summary.Gemma4E4B": "Equilibrado",
+  "model.summary.Gemma412BUnified": "Avanzado",
   "model.summary.Gemma426BA4B": "Más inteligente",
 
   "sidebar.newConversation": "Nueva conversación",
@@ -97,8 +98,8 @@
   "messages.editPrompt": "Editar mensaje:",
   "messages.regenerate": "Regenerar respuesta",
   "messages.confirmRegenerate": "¿Regenerar la última respuesta? La respuesta actual será eliminada.",
-  "messages.audioSent": "Audio enviado.",
-  "messages.audioSentFallback": "Mensaje de audio enviado.",
+  "messages.audioSent": "Archivo de audio enviado.",
+  "messages.audioSentFallback": "Archivo de audio adjunto.",
   "messages.preview": "Vista previa",
 
   "topbar.gpuReady": "{{name}} ({{backend}})",
@@ -129,12 +130,14 @@
   "modelSelector.errorTitle": "Error al cargar el modelo",
   "modelSelector.errorUnexpected": "Ocurrió un error inesperado al cargar el modelo.",
   "modelSelector.fallback": "Revirtiendo al modelo anterior ({{model}})…",
-  "modelSelector.e2b.capabilities": ["Velocidad de inferencia más rápida", "Multimodal: texto e imágenes", "Ventana de contexto de 128K tokens", "Bajo uso de VRAM (~4 GB)", "Ideal para tareas simples y rápidas"],
+  "modelSelector.e2b.capabilities": ["Velocidad de inferencia más rápida", "Multimodal: texto, imágenes y audio nativo", "Ventana de contexto de 128K tokens", "Bajo uso de VRAM (~4 GB)", "Ideal para tareas simples y rápidas"],
   "modelSelector.e2b.limitations": ["Razonamiento complejo limitado", "Menos preciso en textos largos", "Puede tener dificultades con instrucciones sutiles"],
-  "modelSelector.e4b.capabilities": ["Buen equilibrio entre velocidad y calidad", "Multimodal: texto e imágenes", "Ventana de contexto de 128K tokens", "Uso moderado de VRAM (~6 GB)", "Adecuado para tareas complejas"],
+  "modelSelector.e4b.capabilities": ["Buen equilibrio entre velocidad y calidad", "Multimodal: texto, imágenes y audio nativo", "Ventana de contexto de 128K tokens", "Uso moderado de VRAM (~7 GB)", "Adecuado para tareas complejas"],
   "modelSelector.e4b.limitations": ["Más lento que E2B", "Puede requerir más VRAM que modelos más simples"],
+  "modelSelector.12b.capabilities": ["Mejora de mayor capacidad para sistemas con GPU", "Modelo multimodal unificado: texto, imágenes y audio nativo", "Ventana de contexto de 256K tokens", "Mejor programación y razonamiento que E4B", "Usa el mmproj oficial complementario para medios en GGUF"],
+  "modelSelector.12b.limitations": ["Más lento que E4B y E2B", "Requiere más VRAM (~10 GB)", "Descarga inicial mayor que en los modelos pequeños"],
   "modelSelector.26b.capabilities": ["Respuestas de mayor calidad (arquitectura MoE)", "Multimodal: texto e imágenes", "Ventana de contexto de 256K tokens", "Mejor razonamiento y comprensión", "Ideal para análisis avanzados y documentos largos"],
-  "modelSelector.26b.limitations": ["Velocidad de inferencia más lenta", "Alto uso de VRAM (~14 GB)", "Tiempo de carga inicial más largo"],
+  "modelSelector.26b.limitations": ["Sin audio nativo; el audio usa transcripción Whisper como fallback", "Velocidad de inferencia más lenta", "Alto uso de VRAM (~14 GB)", "Tiempo de carga inicial más largo"],
   "modelSelector.gpuRequired": "Requiere GPU",
   "modelSelector.gpuWarning": "Este modelo requiere una GPU con aceleración de hardware (NVIDIA CUDA, AMD ROCm/HIP o Apple Metal). No se detectó ninguna GPU compatible.",
 

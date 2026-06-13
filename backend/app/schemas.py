@@ -63,7 +63,7 @@ class ConversationRead(BaseModel):
 
 
 class ModelOption(BaseModel):
-    key: Literal["e2b", "e4b", "26b"]
+    key: Literal["e2b", "e4b", "12b", "26b"]
     label: str
     summary: str
     model_id: str
@@ -80,7 +80,7 @@ class HealthResponse(BaseModel):
     app_name: str
     environment: str
     model_id: str
-    active_model_key: Literal["e2b", "e4b", "26b"]
+    active_model_key: Literal["e2b", "e4b", "12b", "26b"]
     model_status: Literal["idle", "loading", "loaded", "error"]
     model_loaded: bool
     cuda_available: bool
@@ -130,11 +130,11 @@ class RiskEvaluationResponse(BaseModel):
 
 
 class ModelSelectionRequest(BaseModel):
-    model_key: Literal["e2b", "e4b", "26b"]
+    model_key: Literal["e2b", "e4b", "12b", "26b"]
 
 
 class ModelSelectionResponse(BaseModel):
-    active_model_key: Literal["e2b", "e4b", "26b"]
+    active_model_key: Literal["e2b", "e4b", "12b", "26b"]
     model_id: str
     model_status: Literal["idle", "loading", "loaded", "error"]
     model_loaded: bool

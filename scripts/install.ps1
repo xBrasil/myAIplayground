@@ -307,8 +307,8 @@ $currentVersion = if (Test-Path $llamaVersionFile) {
 
 $serverExe = Join-Path $llamaServerDir "llama-server.exe"
 
-# Minimum build required for Gemma 4 native audio support (PR #21421)
-$minVersion = "b8827"
+# Minimum build required for Gemma 4 12B Unified mmproj support (`gemma4uv`).
+$minVersion = "b9616"
 $needsUpgrade = $false
 if ($currentVersion -and $currentVersion -match '^b(\d+)$') {
     $currentBuild = [int]$Matches[1]
